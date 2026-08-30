@@ -1,16 +1,36 @@
 <?php
 $tituloPagina = 'Peticiones';
 require __DIR__ . '/../parciales/encabezado.php';
+
+$flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>';
 ?>
 
     <div class="tarjeta">
-        <div class="cabecera-modulo">
-            <h1>Peticiones recibidas</h1>
-            <div class="grupo-acciones-encabezado">
-                <a href="index.php?ruta=consolidado-autogestion" class="boton-accion boton-accion-ver">Autogestión y perfil de proyectos</a>
-            </div>
-        </div>
-        <p>Todo lo que ya fue enviado o registrado, listo para revisión.</p>
+        <?php
+        $barraTitulo = $bandeja !== null ? 'Peticiones — ' . $bandejas[$bandeja]['etiqueta'] : 'Peticiones recibidas';
+        $barraBotonesSecundarios = [
+            [
+                'id' => null,
+                'icono' => 'exportar',
+                'etiqueta' => 'Autogestión y perfil de proyectos',
+                'tipo' => 'a',
+                'href' => 'index.php?ruta=consolidado-autogestion',
+            ],
+        ];
+        if ($bandeja !== null) {
+            $barraBotonesSecundarios[] = [
+                'id' => null,
+                'icono' => 'historial',
+                'etiqueta' => 'Historial',
+                'tipo' => 'a',
+                'href' => 'index.php?ruta=peticiones-historial&bandeja=' . urlencode($bandeja),
+            ];
+        }
+        $barraBotonPrincipal = null;
+        $barraEstado = $bandeja !== null ? 'consulta' : 'creacion';
+        $barraRutaVolver = $bandeja !== null ? 'index.php?ruta=peticiones' : null;
+        require __DIR__ . '/../parciales/barra-modulo.php';
+        ?>
 
         <?php if (!empty($error)): ?>
             <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
@@ -20,11 +40,27 @@ require __DIR__ . '/../parciales/encabezado.php';
             <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
         <?php endif; ?>
 
+        <?php if ($bandeja === null): ?>
+        <p>Elige una bandeja para revisar lo que ya fue enviado o registrado.</p>
+        <div class="box-items-config">
+            <?php foreach ($bandejas as $claveBandeja => $infoBandeja): ?>
+            <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($claveBandeja) ?>" class="tarjeta-modulo">
+                <div class="tarjeta-modulo-cabecera">
+                    <h2><?= htmlspecialchars($infoBandeja['etiqueta']) ?></h2>
+                    <?= $flechaModulo ?>
+                </div>
+                <p class="texto-atenuado"><?= (int) ($conteosBandejas[$claveBandeja] ?? 0) ?> pendiente(s) por revisar</p>
+            </a>
+            <?php endforeach; ?>
+        </div>
+        <?php else: ?>
+
         <div class="cabecera-modulo">
             <div class="pestanas">
-                <a href="index.php?ruta=peticiones&vista=pendientes" class="pestana<?= $vista === 'pendientes' ? ' activa' : '' ?>">Pendientes</a>
-                <a href="index.php?ruta=peticiones&vista=consolidado" class="pestana<?= $vista === 'consolidado' ? ' activa' : '' ?>">Consolidado por tipo</a>
-                <a href="index.php?ruta=peticiones&vista=archivar" class="pestana<?= $vista === 'archivar' ? ' activa' : '' ?>">Archivados</a>
+                <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=pendientes" class="pestana<?= $vista === 'pendientes' ? ' activa' : '' ?>">Pendientes</a>
+                <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=consolidado" class="pestana<?= $vista === 'consolidado' ? ' activa' : '' ?>">Consolidado por tipo</a>
+                <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=archivar" class="pestana<?= $vista === 'archivar' ? ' activa' : '' ?>">Archivados</a>
+                <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=enviadas" class="pestana<?= $vista === 'enviadas' ? ' activa' : '' ?>">Enviadas</a>
             </div>
             <?php if ($vista === 'consolidado'): ?>
             <div class="grupo-acciones-encabezado" id="barra-acciones-consolidado">
@@ -39,9 +75,9 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php if ($esSuperAdminRaiz && ($vista === 'pendientes' || $vista === 'consolidado')): ?>
         <div class="enlace-modo-jerarquia">
             <?php if ($modoJerarquia): ?>
-            <a href="index.php?ruta=peticiones&vista=<?= htmlspecialchars($vista) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>">← Volver a mis pendientes por aceptar (por defecto)</a>
+            <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=<?= htmlspecialchars($vista) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>">← Volver a mis pendientes por aceptar (por defecto)</a>
             <?php else: ?>
-            <a href="index.php?ruta=peticiones&vista=<?= htmlspecialchars($vista) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&modo=jerarquia">Ver todo lo que tienes por debajo</a>
+            <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=<?= htmlspecialchars($vista) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&modo=jerarquia">Ver todo lo que tienes por debajo</a>
             <?php endif; ?>
         </div>
         <?php endif; ?>
@@ -53,6 +89,7 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php if (count($aniosActivos) >= 2): ?>
             <form method="GET" action="index.php" class="form-filtro-anio">
                 <input type="hidden" name="ruta" value="peticiones">
+                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                 <input type="hidden" name="vista" value="<?= htmlspecialchars($vista) ?>">
                 <label for="anio_id_filtro">Año presupuestal</label>
                 <select id="anio_id_filtro" name="anio_id" onchange="this.form.submit()">
@@ -104,6 +141,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     <input type="hidden" name="accion" value="aprobar">
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                                     <input type="hidden" name="modo" value="jerarquia">
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
@@ -119,6 +157,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     <input type="hidden" name="accion" value="archivar">
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                                     <input type="hidden" name="modo" value="jerarquia">
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
@@ -173,6 +212,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     <input type="hidden" name="accion" value="aprobar">
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
                                     <input type="hidden" name="tipo" value="<?= htmlspecialchars($item['tipo']) ?>">
@@ -188,6 +228,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     <input type="hidden" name="accion" value="rechazar_redireccion">
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
                                     <button type="submit" class="boton-accion boton-accion-eliminar"><?= htmlspecialchars($item['accion_rechazar']) ?></button>
@@ -199,6 +240,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     <input type="hidden" name="accion" value="archivar">
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
                                     <input type="hidden" name="tipo" value="<?= htmlspecialchars($item['tipo']) ?>">
@@ -212,6 +254,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     <input type="hidden" name="accion" value="eliminar_pendiente">
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
                                     <button type="submit" class="boton-accion boton-accion-eliminar">Eliminar</button>
@@ -299,7 +342,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 </tbody>
             </table>
         </div>
-        <?php else: ?>
+        <?php elseif ($vista === 'archivar'): ?>
         <div class="tabla-scroll">
             <table class="tabla-usuarios">
                 <thead>
@@ -327,6 +370,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     <input type="hidden" name="accion" value="restaurar">
                                     <input type="hidden" name="vista" value="archivar">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                                     <input type="hidden" name="id" value="<?= (int) $item['id'] ?>">
                                     <button type="submit" class="boton-accion boton-accion-editar">Restaurar</button>
                                 </form>
@@ -342,6 +386,42 @@ require __DIR__ . '/../parciales/encabezado.php';
                 </tbody>
             </table>
         </div>
+        <?php else: ?>
+        <p class="texto-atenuado">Lo que tu dependencia (o sus hijas) ya envió, con su estado actual. Vista de solo lectura.</p>
+        <div class="tabla-scroll">
+            <table class="tabla-usuarios">
+                <thead>
+                    <tr>
+                        <th>Tipo</th>
+                        <th>Enviado a</th>
+                        <th>Estado</th>
+                        <th>Cantidad</th>
+                        <th>Valor</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($enviadas as $item): ?>
+                    <tr>
+                        <td><?= htmlspecialchars($item['tipo']) ?></td>
+                        <td><?= htmlspecialchars($item['detalle']) ?></td>
+                        <td><?= htmlspecialchars($item['estado_enviada']) ?></td>
+                        <td><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
+                        <td><?= $item['valor'] !== null ? '$ ' . number_format((float) $item['valor'], 2) : '—' ?></td>
+                        <td class="celda-acciones">
+                            <a href="<?= htmlspecialchars($item['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($enviadas)): ?>
+                    <tr>
+                        <td colspan="6">No has enviado nada todavía.</td>
+                    </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
         <?php endif; ?>
     </div>
 
@@ -386,6 +466,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <input type="hidden" name="accion" value="editar_consolidado_grupo">
                 <input type="hidden" name="vista" value="consolidado">
                 <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
 
                 <div class="tabla-scroll">
                     <table class="tabla-usuarios">
@@ -428,6 +509,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <input type="hidden" name="accion" value="redireccionar_consolidado">
                 <input type="hidden" name="vista" value="consolidado">
                 <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                 <div id="redireccionar-consolidado-campos-items"></div>
 
                 <div class="campo">
@@ -496,6 +578,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <input type="hidden" name="accion" value="duplicar_consolidado">
                 <input type="hidden" name="vista" value="consolidado">
                 <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                 <div id="duplicar-consolidado-campos-items"></div>
 
                 <button type="submit" class="boton-enviar">Duplicar</button>

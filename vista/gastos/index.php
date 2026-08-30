@@ -15,21 +15,48 @@ require __DIR__ . '/../parciales/encabezado.php';
 ?>
 
     <div class="tarjeta">
-        <div class="cabecera-modulo">
-            <h1>Gastos</h1>
-            <div class="grupo-acciones-encabezado">
-                <button
-                    type="button"
-                    id="boton-abrir-modal-enviar-todo-gasto"
-                    class="boton-accion boton-accion-enviar"
-                    <?= $puedeEnviarTodo ? '' : 'disabled' ?>
-                    title="<?= $puedeEnviarTodo ? 'Enviar todos los gastos en borrador' : 'Disponible cuando se haya ejecutado el 100% del presupuesto' ?>"
-                >Enviar todo</button>
-                <?php if ($catalogosListos): ?>
-                <button type="button" id="boton-abrir-modal-gasto" class="boton-agregar">+ Agregar gasto</button>
-                <?php endif; ?>
-            </div>
-        </div>
+        <?php
+        $barraTitulo = 'Gastos';
+        $barraBotonesSecundarios = [
+            [
+                'id' => 'boton-seleccionar-gastos',
+                'icono' => 'seleccionar',
+                'etiqueta' => 'Seleccionar elementos',
+            ],
+            [
+                'id' => 'boton-editar-gastos',
+                'icono' => 'editar',
+                'etiqueta' => 'Editar seleccionado',
+                'disabled' => true,
+                'titulo_disabled' => 'Selecciona exactamente un elemento',
+            ],
+            [
+                'id' => 'boton-duplicar-gastos',
+                'icono' => 'duplicar',
+                'etiqueta' => 'Duplicar seleccionados',
+                'disabled' => true,
+                'titulo_disabled' => 'Selecciona uno o más elementos',
+            ],
+            [
+                'id' => 'boton-eliminar-gastos',
+                'icono' => 'eliminar',
+                'etiqueta' => 'Eliminar seleccionados',
+                'disabled' => true,
+                'titulo_disabled' => 'Selecciona uno o más elementos',
+            ],
+            [
+                'id' => 'boton-abrir-modal-enviar-todo-gasto',
+                'icono' => 'enviar',
+                'etiqueta' => 'Enviar todos los gastos en borrador',
+                'disabled' => !$puedeEnviarTodo,
+                'titulo_disabled' => 'Disponible cuando se haya ejecutado el 100% del presupuesto',
+            ],
+        ];
+        $barraBotonPrincipal = $catalogosListos
+            ? ['id' => 'boton-abrir-modal-gasto', 'etiqueta' => '+ Agregar gasto']
+            : null;
+        require __DIR__ . '/../parciales/barra-modulo.php';
+        ?>
 
         <?php if (!empty($error)): ?>
             <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
@@ -94,10 +121,20 @@ require __DIR__ . '/../parciales/encabezado.php';
             </div>
         <?php endif; ?>
 
-        <div class="tabla-scroll">
+        <div
+            class="tabla-scroll tabla-bulk-seleccionable"
+            data-boton-seleccionar="boton-seleccionar-gastos"
+            data-boton-editar="boton-editar-gastos"
+            data-boton-duplicar="boton-duplicar-gastos"
+            data-boton-eliminar="boton-eliminar-gastos"
+            data-accion-form="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>"
+            data-accion-eliminar="eliminar_seleccionados"
+            data-accion-duplicar="duplicar_seleccionados"
+        >
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
                         <th>Acciones</th>
                         <th>Estado</th>
                         <th>Sede</th>
@@ -123,12 +160,17 @@ require __DIR__ . '/../parciales/encabezado.php';
                         : [];
                     ?>
                     <tr>
+                        <td class="columna-seleccion">
+                            <?php if ($gasto['estado'] === 'borrador'): ?>
+                            <input type="checkbox" class="checkbox-bulk-fila" data-id="<?= (int) $gasto['id'] ?>">
+                            <?php endif; ?>
+                        </td>
                         <td class="celda-acciones">
                             <?php if ($gasto['estado'] === 'borrador'): ?>
                             <div class="acciones-fila">
                                 <button
                                     type="button"
-                                    class="boton-accion boton-accion-editar boton-editar-gasto"
+                                    class="boton-accion boton-accion-editar boton-editar-gasto boton-editar-fila-generico"
                                     data-gasto="<?= htmlspecialchars(json_encode($gasto)) ?>"
                                 >Editar</button>
                                 <form method="POST" action="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-eliminar-gasto">
@@ -159,7 +201,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <?php endforeach; ?>
                     <?php if (empty($gastos)): ?>
                     <tr>
-                        <td colspan="15">No hay gastos registrados.</td>
+                        <td colspan="16">No hay gastos registrados.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>

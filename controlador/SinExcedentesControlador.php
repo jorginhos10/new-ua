@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../modelo/GastoSinExcedentes.php';
 require_once __DIR__ . '/../modelo/IngresoSinExcedentes.php';
+require_once __DIR__ . '/../modelo/DuplicadorFilas.php';
 require_once __DIR__ . '/../modelo/Linea.php';
 require_once __DIR__ . '/../modelo/Motor.php';
 require_once __DIR__ . '/../modelo/Proyecto.php';
@@ -108,6 +109,10 @@ class SinExcedentesControlador
                 [$error, $exito] = $this->actualizarIngreso();
             } elseif ($tab === 'ingresos' && $accion === 'eliminar') {
                 [$error, $exito] = $this->eliminarIngreso();
+            } elseif ($accion === 'eliminar_seleccionados') {
+                [$error, $exito] = $this->eliminarSeleccionados($tab);
+            } elseif ($accion === 'duplicar_seleccionados') {
+                [$error, $exito] = $this->duplicarSeleccionados($tab);
             } else {
                 [$error, $exito] = $tab === 'ingresos' ? $this->guardarIngreso() : $this->guardarEgreso();
             }
@@ -321,9 +326,14 @@ class SinExcedentesControlador
         $anioId = (int) ($_POST['anio_presupuestal_id'] ?? 0);
         $dependenciaDestinoNombre = trim($_POST['dependencia_destino'] ?? '');
         $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
+        $categoriaPeticion = trim($_POST['categoria_peticion'] ?? '');
 
         if ($anioId <= 0 || $dependenciaDestinoNombre === '' || $rolDestinatarioId <= 0) {
             return ['Selecciona a quién se enviará y el rol al que se enviarán los ingresos y egresos.', ''];
+        }
+
+        if (!in_array($categoriaPeticion, ['extension', 'postgrado'], true)) {
+            return ['Selecciona a qué categoría de Peticiones pertenece este envío: Convenios y Asesorías o Convenios Postgrados.', ''];
         }
 
         $rol = $this->modeloRol->obtenerPorId($rolDestinatarioId);
@@ -356,8 +366,8 @@ class SinExcedentesControlador
             return ['Solo puedes enviar cuando el total de egresos sea igual al total de ingresos de este año.', ''];
         }
 
-        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId);
-        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId);
+        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId, $categoriaPeticion);
+        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId, $categoriaPeticion);
 
         if ($enviadosIngresos === 0 && $enviadosEgresos === 0) {
             return ['No hay ingresos ni egresos en borrador para enviar.', ''];
@@ -577,6 +587,88 @@ class SinExcedentesControlador
         );
 
         return ['', 'Ingreso eliminado correctamente.'];
+    }
+
+    private function eliminarSeleccionados(string $tab): array
+    {
+        $ids = array_map('intval', $_POST['id'] ?? []);
+        $eliminados = 0;
+
+        foreach ($ids as $id) {
+            if ($id <= 0) {
+                continue;
+            }
+
+            if ($tab === 'egresos') {
+                $existente = $this->modeloGasto->obtenerPorId($id);
+
+                if ($existente !== null && $existente['tipo_automatico'] === null) {
+                    $this->modeloGasto->eliminar($id);
+                    $eliminados++;
+                }
+            } else {
+                $existente = $this->modeloIngreso->obtenerPorId($id);
+
+                if ($existente !== null) {
+                    $this->modeloIngreso->eliminar($id);
+                    $this->generarEgresosAutomaticos(
+                        null,
+                        (int) $existente['anio_presupuestal_id'],
+                        (string) $existente['dependencia']
+                    );
+                    $eliminados++;
+                }
+            }
+        }
+
+        if ($eliminados === 0) {
+            return ['No se eliminó ningún elemento.', ''];
+        }
+
+        return ['', 'Se eliminaron ' . $eliminados . ' elemento(s).'];
+    }
+
+    private function duplicarSeleccionados(string $tab): array
+    {
+        $ids = array_map('intval', $_POST['id'] ?? []);
+        $db = Conexion::obtener();
+        $duplicados = 0;
+
+        foreach ($ids as $id) {
+            if ($id <= 0) {
+                continue;
+            }
+
+            if ($tab === 'egresos') {
+                $existente = $this->modeloGasto->obtenerPorId($id);
+
+                if ($existente !== null && $existente['tipo_automatico'] === null && DuplicadorFilas::duplicarFila($db, 'gastos_sin_excedentes', $id) !== null) {
+                    $duplicados++;
+                }
+            } else {
+                $nuevoId = DuplicadorFilas::duplicarFila($db, 'ingresos_sin_excedentes', $id);
+
+                if ($nuevoId !== null) {
+                    DuplicadorFilas::duplicarFilasHijo($db, 'ingresos_sin_excedentes_conceptos', 'ingreso_id', $id, $nuevoId);
+                    $duplicados++;
+
+                    $nuevo = $this->modeloIngreso->obtenerPorId($nuevoId);
+                    if ($nuevo !== null) {
+                        $this->generarEgresosAutomaticos(
+                            null,
+                            (int) $nuevo['anio_presupuestal_id'],
+                            (string) $nuevo['dependencia']
+                        );
+                    }
+                }
+            }
+        }
+
+        if ($duplicados === 0) {
+            return ['No se duplicó ningún elemento.', ''];
+        }
+
+        return ['', 'Se duplicaron ' . $duplicados . ' elemento(s).'];
     }
 
     private function generarEgresosAutomaticos(?int $ingresoId, int $anioPresupuestalId, string $dependencia): void

@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../config/conexion.php';
+require_once __DIR__ . '/CsvConfiguracion.php';
 
 class Estamento
 {
@@ -59,5 +60,61 @@ class Estamento
         $consulta = $this->db->prepare('DELETE FROM estamentos WHERE id = :id');
 
         return $consulta->execute(['id' => $id]);
+    }
+
+    /**
+     * Sincroniza el catálogo con el contenido de un CSV importado: crea los que faltan, y borra
+     * los que ya no aparecen en el archivo — salvo que sigan en uso en otra parte del sistema
+     * (ej. usuarios, necesidades), en cuyo caso se dejan tal cual para no romper esa referencia.
+     */
+    public function sincronizarDesdeCsv(array $filas): array
+    {
+        $nombresCsv = [];
+        $creados = 0;
+
+        foreach ($filas as $fila) {
+            $nombre = trim($fila['nombre'] ?? '');
+
+            if ($nombre === '') {
+                continue;
+            }
+
+            $nombresCsv[] = $nombre;
+
+            if (!$this->existeEstamento($nombre)) {
+                $this->crear($nombre);
+                $creados++;
+            }
+        }
+
+        $eliminados = 0;
+        $omitidos = 0;
+
+        foreach ($this->obtenerTodos() as $existente) {
+            if (in_array($existente['nombre'], $nombresCsv, true)) {
+                continue;
+            }
+
+            $id = (int) $existente['id'];
+
+            if ($this->estaEnUso($id)) {
+                $omitidos++;
+                continue;
+            }
+
+            try {
+                $this->eliminar($id);
+                $eliminados++;
+            } catch (PDOException $excepcion) {
+                $omitidos++;
+            }
+        }
+
+        return ['creados' => $creados, 'eliminados' => $eliminados, 'omitidos' => $omitidos];
+    }
+
+    private function estaEnUso(int $id): bool
+    {
+        return CsvConfiguracion::tieneReferencias($this->db, 'estamentos', $id);
     }
 }

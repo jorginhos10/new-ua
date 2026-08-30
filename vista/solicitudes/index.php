@@ -6,18 +6,60 @@ require __DIR__ . '/../parciales/encabezado.php';
 ?>
 
     <div class="tarjeta">
-        <div class="cabecera-modulo">
-            <h1>2.2 Solicitudes</h1>
-            <?php if ($catalogosListos && $tab === 'arl'): ?>
-            <button type="button" id="boton-abrir-modal-solicitud" class="boton-agregar">+ Agregar solicitud</button>
-            <?php elseif ($catalogosListos && $tab === 'monitores'): ?>
-            <button type="button" id="boton-abrir-modal-monitor" class="boton-agregar">+ Agregar solicitud</button>
-            <?php elseif ($tab === 'ops' && !empty($sedes) && !empty($lineas) && !empty($motores) && !empty($proyectos) && !empty($rubros) && !empty($aniosActivos)): ?>
-            <button type="button" id="boton-abrir-modal-ops" class="boton-agregar">+ Agregar solicitud</button>
-            <?php elseif ($catalogosListos && $tab === 'otros'): ?>
-            <button type="button" id="boton-abrir-modal-peticion" class="boton-agregar">+ Agregar solicitud</button>
-            <?php endif; ?>
-        </div>
+        <?php
+        $barraTitulo = '2.2 Solicitudes';
+
+        $mapaAccionesSeleccion = [
+            'arl' => ['sufijo' => 'arl', 'accion_eliminar' => 'eliminar_seleccionados', 'accion_duplicar' => 'duplicar_seleccionados'],
+            'monitores' => ['sufijo' => 'monitores', 'accion_eliminar' => 'eliminar_monitor_seleccionados', 'accion_duplicar' => 'duplicar_monitor_seleccionados'],
+            'ops' => ['sufijo' => 'ops', 'accion_eliminar' => 'eliminar_ops_seleccionados', 'accion_duplicar' => 'duplicar_ops_seleccionados'],
+            'otros' => ['sufijo' => 'otros', 'accion_eliminar' => 'eliminar_peticion_seleccionados', 'accion_duplicar' => 'duplicar_peticion_seleccionados'],
+        ];
+        $accionesTab = $mapaAccionesSeleccion[$tab] ?? $mapaAccionesSeleccion['arl'];
+        $sufijoTab = $accionesTab['sufijo'];
+
+        $barraBotonesSecundarios = [
+            [
+                'id' => "boton-seleccionar-{$sufijoTab}",
+                'icono' => 'seleccionar',
+                'etiqueta' => 'Seleccionar elementos',
+            ],
+            [
+                'id' => "boton-editar-{$sufijoTab}",
+                'icono' => 'editar',
+                'etiqueta' => 'Editar seleccionado',
+                'disabled' => true,
+                'titulo_disabled' => 'Selecciona exactamente un elemento',
+            ],
+            [
+                'id' => "boton-duplicar-{$sufijoTab}",
+                'icono' => 'duplicar',
+                'etiqueta' => 'Duplicar seleccionados',
+                'disabled' => true,
+                'titulo_disabled' => 'Selecciona uno o más elementos',
+            ],
+            [
+                'id' => "boton-eliminar-{$sufijoTab}",
+                'icono' => 'eliminar',
+                'etiqueta' => 'Eliminar seleccionados',
+                'disabled' => true,
+                'titulo_disabled' => 'Selecciona uno o más elementos',
+            ],
+        ];
+        $barraBotonPrincipal = null;
+
+        if ($tab === 'arl' && $catalogosListos) {
+            $barraBotonPrincipal = ['id' => 'boton-abrir-modal-solicitud', 'etiqueta' => '+ Agregar solicitud'];
+        } elseif ($tab === 'monitores' && $catalogosListos) {
+            $barraBotonPrincipal = ['id' => 'boton-abrir-modal-monitor', 'etiqueta' => '+ Agregar solicitud'];
+        } elseif ($tab === 'ops' && !empty($sedes) && !empty($lineas) && !empty($motores) && !empty($proyectos) && !empty($rubros) && !empty($aniosActivos)) {
+            $barraBotonPrincipal = ['id' => 'boton-abrir-modal-ops', 'etiqueta' => '+ Agregar solicitud'];
+        } elseif ($tab === 'otros' && $catalogosListos) {
+            $barraBotonPrincipal = ['id' => 'boton-abrir-modal-peticion', 'etiqueta' => '+ Agregar solicitud'];
+        }
+
+        require __DIR__ . '/../parciales/barra-modulo.php';
+        ?>
         <p>Son de carácter informativo.</p>
 
         <div class="pestanas">
@@ -59,10 +101,21 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php endif; ?>
 
         <?php if ($tab === 'arl'): ?>
-        <div class="tabla-scroll">
+        <div
+            class="tabla-scroll tabla-bulk-seleccionable"
+            data-boton-seleccionar="boton-seleccionar-arl"
+            data-boton-editar="boton-editar-arl"
+            data-boton-duplicar="boton-duplicar-arl"
+            data-boton-eliminar="boton-eliminar-arl"
+            data-accion-form="index.php?ruta=solicitudes&anio_id=<?= (int) $anioSeleccionadoId ?>"
+            data-accion-eliminar="eliminar_seleccionados"
+            data-accion-duplicar="duplicar_seleccionados"
+            data-tab="arl"
+        >
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
                         <th>Facultad</th>
                         <th>Estado</th>
                         <th>Total de practicantes</th>
@@ -81,6 +134,11 @@ require __DIR__ . '/../parciales/encabezado.php';
                         + (float) $solicitud['riesgo5_valor'];
                     ?>
                     <tr>
+                        <td class="columna-seleccion">
+                            <?php if ($solicitud['estado'] === 'borrador'): ?>
+                            <input type="checkbox" class="checkbox-bulk-fila" data-id="<?= (int) $solicitud['id'] ?>">
+                            <?php endif; ?>
+                        </td>
                         <td><?= htmlspecialchars($solicitud['facultad']) ?></td>
                         <td><span class="badge-rol badge-<?= htmlspecialchars($solicitud['estado']) ?>" <?= !empty($solicitud['enviada_a']) ? 'title="Enviada a: ' . htmlspecialchars($solicitud['enviada_a']) . '"' : '' ?>><?= $solicitud['estado'] === 'enviada' ? 'Enviada' : 'Borrador' ?></span></td>
                         <td><?= $totalPracticantes ?></td>
@@ -94,7 +152,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                 <?php if ($solicitud['estado'] === 'borrador'): ?>
                                 <button
                                     type="button"
-                                    class="boton-accion boton-accion-editar fila-menu-editar-solicitud"
+                                    class="boton-accion boton-accion-editar fila-menu-editar-solicitud boton-editar-fila-generico"
                                     data-solicitud="<?= htmlspecialchars(json_encode($solicitud, JSON_UNESCAPED_UNICODE)) ?>"
                                 >Editar</button>
                                 <form
@@ -123,17 +181,28 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <?php endforeach; ?>
                     <?php if (empty($solicitudes)): ?>
                     <tr>
-                        <td colspan="5">No hay solicitudes registradas para este año.</td>
+                        <td colspan="6">No hay solicitudes registradas para este año.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
             </table>
         </div>
         <?php elseif ($tab === 'monitores'): ?>
-        <div class="tabla-scroll">
+        <div
+            class="tabla-scroll tabla-bulk-seleccionable"
+            data-boton-seleccionar="boton-seleccionar-monitores"
+            data-boton-editar="boton-editar-monitores"
+            data-boton-duplicar="boton-duplicar-monitores"
+            data-boton-eliminar="boton-eliminar-monitores"
+            data-accion-form="index.php?ruta=solicitudes&tab=monitores&anio_id=<?= (int) $anioSeleccionadoId ?>"
+            data-accion-eliminar="eliminar_monitor_seleccionados"
+            data-accion-duplicar="duplicar_monitor_seleccionados"
+            data-tab="monitores"
+        >
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
                         <th>Dependencia</th>
                         <th>Tipo</th>
                         <th>Estado</th>
@@ -147,6 +216,11 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <?php foreach ($solicitudesMonitores as $solicitudMonitor): ?>
                     <?php $totalMonitores = (int) $solicitudMonitor['monitores_semestre1'] + (int) $solicitudMonitor['monitores_semestre2']; ?>
                     <tr>
+                        <td class="columna-seleccion">
+                            <?php if ($solicitudMonitor['estado'] === 'borrador'): ?>
+                            <input type="checkbox" class="checkbox-bulk-fila" data-id="<?= (int) $solicitudMonitor['id'] ?>">
+                            <?php endif; ?>
+                        </td>
                         <td><?= htmlspecialchars($solicitudMonitor['dependencia']) ?></td>
                         <td><?= htmlspecialchars($tiposMonitor[$solicitudMonitor['tipo']] ?? $solicitudMonitor['tipo']) ?></td>
                         <td><span class="badge-rol badge-<?= htmlspecialchars($solicitudMonitor['estado']) ?>" <?= !empty($solicitudMonitor['enviada_a']) ? 'title="Enviada a: ' . htmlspecialchars($solicitudMonitor['enviada_a']) . '"' : '' ?>><?= $solicitudMonitor['estado'] === 'enviada' ? 'Enviada' : 'Borrador' ?></span></td>
@@ -162,7 +236,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                 <?php if ($solicitudMonitor['estado'] === 'borrador'): ?>
                                 <button
                                     type="button"
-                                    class="boton-accion boton-accion-editar fila-menu-editar-monitor"
+                                    class="boton-accion boton-accion-editar fila-menu-editar-monitor boton-editar-fila-generico"
                                     data-monitor="<?= htmlspecialchars(json_encode($solicitudMonitor, JSON_UNESCAPED_UNICODE)) ?>"
                                 >Editar</button>
                                 <form
@@ -191,17 +265,28 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <?php endforeach; ?>
                     <?php if (empty($solicitudesMonitores)): ?>
                     <tr>
-                        <td colspan="7">No hay solicitudes de monitores registradas para este año.</td>
+                        <td colspan="8">No hay solicitudes de monitores registradas para este año.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
             </table>
         </div>
         <?php elseif ($tab === 'ops'): ?>
-        <div class="tabla-scroll">
+        <div
+            class="tabla-scroll tabla-bulk-seleccionable"
+            data-boton-seleccionar="boton-seleccionar-ops"
+            data-boton-editar="boton-editar-ops"
+            data-boton-duplicar="boton-duplicar-ops"
+            data-boton-eliminar="boton-eliminar-ops"
+            data-accion-form="index.php?ruta=solicitudes&tab=ops&anio_id=<?= (int) $anioSeleccionadoId ?>"
+            data-accion-eliminar="eliminar_ops_seleccionados"
+            data-accion-duplicar="duplicar_ops_seleccionados"
+            data-tab="ops"
+        >
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
                         <th>Sede</th>
                         <th>Dependencia</th>
                         <th>Rubro</th>
@@ -217,6 +302,11 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <?php foreach ($solicitudesOps as $solicitudOps): ?>
                     <?php $totalOps = (float) $solicitudOps['valor'] * (int) $solicitudOps['cantidad']; ?>
                     <tr>
+                        <td class="columna-seleccion">
+                            <?php if ($solicitudOps['estado'] === 'borrador'): ?>
+                            <input type="checkbox" class="checkbox-bulk-fila" data-id="<?= (int) $solicitudOps['id'] ?>">
+                            <?php endif; ?>
+                        </td>
                         <td><?= htmlspecialchars($solicitudOps['sede_codigo'] . ' - ' . $solicitudOps['sede_nombre']) ?></td>
                         <td><?= htmlspecialchars($solicitudOps['dependencia']) ?></td>
                         <td><?= htmlspecialchars($solicitudOps['rubro_codigo'] . ' - ' . $solicitudOps['rubro_descripcion']) ?></td>
@@ -234,7 +324,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                 <?php if ($solicitudOps['estado'] === 'borrador'): ?>
                                 <button
                                     type="button"
-                                    class="boton-accion boton-accion-editar fila-menu-editar-ops"
+                                    class="boton-accion boton-accion-editar fila-menu-editar-ops boton-editar-fila-generico"
                                     data-ops="<?= htmlspecialchars(json_encode($solicitudOps, JSON_UNESCAPED_UNICODE)) ?>"
                                 >Editar</button>
                                 <form
@@ -263,17 +353,28 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <?php endforeach; ?>
                     <?php if (empty($solicitudesOps)): ?>
                     <tr>
-                        <td colspan="9">No hay solicitudes OPS registradas para este año.</td>
+                        <td colspan="10">No hay solicitudes OPS registradas para este año.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
             </table>
         </div>
         <?php else: ?>
-        <div class="tabla-scroll">
+        <div
+            class="tabla-scroll tabla-bulk-seleccionable"
+            data-boton-seleccionar="boton-seleccionar-otros"
+            data-boton-editar="boton-editar-otros"
+            data-boton-duplicar="boton-duplicar-otros"
+            data-boton-eliminar="boton-eliminar-otros"
+            data-accion-form="index.php?ruta=solicitudes&tab=otros&anio_id=<?= (int) $anioSeleccionadoId ?>"
+            data-accion-eliminar="eliminar_peticion_seleccionados"
+            data-accion-duplicar="duplicar_peticion_seleccionados"
+            data-tab="otros"
+        >
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
                         <th>Concepto</th>
                         <th>Estado</th>
                         <th>Semestre 1</th>
@@ -286,6 +387,11 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <tbody>
                     <?php foreach ($solicitudesPeticiones as $solicitudPeticion): ?>
                     <tr>
+                        <td class="columna-seleccion">
+                            <?php if ($solicitudPeticion['estado'] === 'borrador'): ?>
+                            <input type="checkbox" class="checkbox-bulk-fila" data-id="<?= (int) $solicitudPeticion['id'] ?>">
+                            <?php endif; ?>
+                        </td>
                         <td><?= htmlspecialchars($solicitudPeticion['concepto']) ?></td>
                         <td><span class="badge-rol badge-<?= htmlspecialchars($solicitudPeticion['estado']) ?>" <?= !empty($solicitudPeticion['enviada_a']) ? 'title="Enviada a: ' . htmlspecialchars($solicitudPeticion['enviada_a']) . '"' : '' ?>><?= $solicitudPeticion['estado'] === 'enviada' ? 'Enviada' : 'Borrador' ?></span></td>
                         <td><?= (int) $solicitudPeticion['semestre1'] ?></td>
@@ -301,7 +407,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                 <?php if ($solicitudPeticion['estado'] === 'borrador'): ?>
                                 <button
                                     type="button"
-                                    class="boton-accion boton-accion-editar fila-menu-editar-peticion"
+                                    class="boton-accion boton-accion-editar fila-menu-editar-peticion boton-editar-fila-generico"
                                     data-peticion="<?= htmlspecialchars(json_encode($solicitudPeticion, JSON_UNESCAPED_UNICODE)) ?>"
                                 >Editar</button>
                                 <form method="POST" action="index.php?ruta=solicitudes" class="form-enviar-solicitud">
@@ -323,7 +429,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <?php endforeach; ?>
                     <?php if (empty($solicitudesPeticiones)): ?>
                     <tr>
-                        <td colspan="7">No hay peticiones registradas para este año.</td>
+                        <td colspan="8">No hay peticiones registradas para este año.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>

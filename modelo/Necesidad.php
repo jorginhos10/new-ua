@@ -163,7 +163,7 @@ class Necesidad
     {
         $consulta = $this->db->prepare(
             "UPDATE necesidades_academicas
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia = :dependencia
+             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia_destino = :dependencia
              WHERE estado = 'borrador'"
         );
         $consulta->execute([

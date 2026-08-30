@@ -1,20 +1,46 @@
 <?php $tituloPagina = 'Perfil de proyectos'; require __DIR__ . '/../parciales/encabezado.php'; ?>
 
     <div class="tarjeta">
-        <div class="cabecera-modulo">
-            <h1>Perfil de proyectos</h1>
-            <div class="grupo-acciones-encabezado">
-                <button type="button" id="boton-abrir-modal-crear-proyecto" class="boton-agregar">Crear proyecto</button>
-                <button
-                    type="button"
-                    id="boton-abrir-modal-enviar-todo-perfil-proyectos"
-                    class="boton-accion boton-accion-enviar"
-                    <?= $puedeEnviarTodo ? '' : 'disabled' ?>
-                    title="<?= $puedeEnviarTodo ? 'Enviar todos los proyectos en borrador' : 'No hay proyectos en borrador para enviar' ?>"
-                >Enviar todo</button>
-                <a href="index.php?ruta=perfil-proyectos-exportar" class="boton-agregar">Exportar lista</a>
-            </div>
-        </div>
+        <?php
+        $barraTitulo = 'Perfil de proyectos';
+        $barraBotonesSecundarios = [
+            [
+                'id' => 'boton-seleccionar-perfil-proyectos',
+                'icono' => 'seleccionar',
+                'etiqueta' => 'Seleccionar elementos',
+            ],
+            [
+                'id' => 'boton-duplicar-perfil-proyectos',
+                'icono' => 'duplicar',
+                'etiqueta' => 'Duplicar seleccionados',
+                'disabled' => true,
+                'titulo_disabled' => 'Selecciona uno o más elementos',
+            ],
+            [
+                'id' => 'boton-eliminar-perfil-proyectos',
+                'icono' => 'eliminar',
+                'etiqueta' => 'Eliminar seleccionados',
+                'disabled' => true,
+                'titulo_disabled' => 'Selecciona uno o más elementos',
+            ],
+            [
+                'id' => 'boton-abrir-modal-enviar-todo-perfil-proyectos',
+                'icono' => 'enviar',
+                'etiqueta' => 'Enviar todos los proyectos en borrador',
+                'disabled' => !$puedeEnviarTodo,
+                'titulo_disabled' => 'No hay proyectos en borrador para enviar',
+            ],
+            [
+                'id' => null,
+                'icono' => 'exportar',
+                'etiqueta' => 'Exportar lista',
+                'tipo' => 'a',
+                'href' => 'index.php?ruta=perfil-proyectos-exportar',
+            ],
+        ];
+        $barraBotonPrincipal = ['id' => 'boton-abrir-modal-crear-proyecto', 'etiqueta' => 'Crear proyecto'];
+        require __DIR__ . '/../parciales/barra-modulo.php';
+        ?>
 
         <?php if (!empty($error)): ?>
             <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
@@ -26,10 +52,19 @@
 
         <p>Formularios de necesidades diligenciados por los usuarios invitados. Haz clic en una fila para ver el detalle.</p>
 
-        <div class="tabla-scroll">
+        <div
+            class="tabla-scroll tabla-bulk-seleccionable"
+            data-boton-seleccionar="boton-seleccionar-perfil-proyectos"
+            data-boton-duplicar="boton-duplicar-perfil-proyectos"
+            data-boton-eliminar="boton-eliminar-perfil-proyectos"
+            data-accion-form="index.php?ruta=perfil-proyectos"
+            data-accion-eliminar="eliminar_seleccionados"
+            data-accion-duplicar="duplicar_seleccionados"
+        >
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
                         <th>Estado</th>
                         <th>Solicitante</th>
                         <th>Vigencia</th>
@@ -50,6 +85,11 @@
                 <tbody>
                     <?php foreach ($necesidades as $necesidad): ?>
                     <tr class="fila-clickeable" data-necesidad="<?= htmlspecialchars(json_encode($necesidad, JSON_UNESCAPED_UNICODE)) ?>" tabindex="0">
+                        <td class="columna-seleccion">
+                            <?php if ($necesidad['estado'] === 'borrador'): ?>
+                            <input type="checkbox" class="checkbox-bulk-fila" data-id="<?= (int) $necesidad['id'] ?>">
+                            <?php endif; ?>
+                        </td>
                         <td><span class="badge-rol badge-<?= htmlspecialchars($necesidad['estado']) ?>"><?= $necesidad['estado'] === 'enviado' ? 'Enviado' : 'Borrador' ?></span></td>
                         <td><?= htmlspecialchars($necesidad['nombre_solicitante']) ?></td>
                         <td><?= $necesidad['vigencia'] !== null ? (int) $necesidad['vigencia'] : '—' ?></td>
@@ -69,7 +109,7 @@
                     <?php endforeach; ?>
                     <?php if (empty($necesidades)): ?>
                     <tr>
-                        <td colspan="15">Aún no hay formularios registrados por invitados.</td>
+                        <td colspan="16">Aún no hay formularios registrados por invitados.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>

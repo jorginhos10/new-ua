@@ -1,7 +1,10 @@
 <?php $tituloPagina = 'Sublíneas de inversión'; require __DIR__ . '/../parciales/encabezado.php'; ?>
 
     <div class="tarjeta">
-        <h1>Sublíneas de inversión</h1>
+        <div class="tarjeta-encabezado">
+            <h1>Sublíneas de inversión</h1>
+            <?php $csvRuta = 'sublineas-inversion'; $csvEtiqueta = 'Sublíneas de inversión'; require __DIR__ . '/../parciales/csv-configuracion.php'; ?>
+        </div>
         <p class="texto-atenuado">Catálogo de sublíneas de inversión, condicionadas a una línea de inversión, que se pueden elegir al registrar un proyecto en Perfil de proyectos.</p>
 
         <?php if (!empty($error)): ?>

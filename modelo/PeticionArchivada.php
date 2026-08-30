@@ -87,6 +87,15 @@ class PeticionArchivada
         ]);
     }
 
+    public function obtenerPorId(int $id): ?array
+    {
+        $consulta = $this->db->prepare('SELECT * FROM peticiones_archivadas WHERE id = :id');
+        $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
     public function restaurar(int $id): bool
     {
         $consulta = $this->db->prepare('DELETE FROM peticiones_archivadas WHERE id = :id');

@@ -71,7 +71,7 @@ class IngresoPostgrado
     {
         $consulta = $this->db->prepare(
             "UPDATE ingresos_postgrado
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia = :dependencia
+             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia_destino = :dependencia
              WHERE anio_presupuestal_id = :anio_presupuestal_id
                 AND estado = 'borrador'"
         );

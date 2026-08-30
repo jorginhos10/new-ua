@@ -141,7 +141,7 @@ class Gasto
 
         $consulta = $this->db->prepare(
             "UPDATE gastos
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia = :dependencia_final
+             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia_destino = :dependencia_final
              WHERE anio_presupuestal_id = :anio_presupuestal_id
                 AND dependencia IN (" . implode(', ', $marcadores) . ")
                 AND estado = 'borrador'

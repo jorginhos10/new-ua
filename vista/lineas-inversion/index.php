@@ -1,7 +1,10 @@
 <?php $tituloPagina = 'Líneas de inversión'; require __DIR__ . '/../parciales/encabezado.php'; ?>
 
     <div class="tarjeta">
-        <h1>Líneas de inversión</h1>
+        <div class="tarjeta-encabezado">
+            <h1>Líneas de inversión</h1>
+            <?php $csvRuta = 'lineas-inversion'; $csvEtiqueta = 'Líneas de inversión'; require __DIR__ . '/../parciales/csv-configuracion.php'; ?>
+        </div>
         <p class="texto-atenuado">Catálogo de líneas de inversión que se pueden elegir al registrar un proyecto en Perfil de proyectos.</p>
 
         <?php if (!empty($error)): ?>

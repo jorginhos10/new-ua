@@ -1,7 +1,10 @@
 <?php $tituloPagina = 'Categorías de rubros'; require __DIR__ . '/../parciales/encabezado.php'; ?>
 
     <div class="tarjeta">
-        <h1>Categorías de rubros</h1>
+        <div class="tarjeta-encabezado">
+            <h1>Categorías de rubros</h1>
+            <?php $csvRuta = 'rubro-categorias'; $csvEtiqueta = 'Categorías de rubros'; require __DIR__ . '/../parciales/csv-configuracion.php'; ?>
+        </div>
         <p class="texto-atenuado">Cada rubro empieza con capítulo.sección (ej. "2.01..."). Marca en qué categorías de la barra lateral debe aparecer cada combinación — así el selector de rubro de cada módulo solo muestra los que le corresponden.</p>
 
         <?php if (!empty($error)): ?>

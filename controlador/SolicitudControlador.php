@@ -4,6 +4,7 @@ require_once __DIR__ . '/../modelo/SolicitudArl.php';
 require_once __DIR__ . '/../modelo/SolicitudMonitor.php';
 require_once __DIR__ . '/../modelo/SolicitudOps.php';
 require_once __DIR__ . '/../modelo/SolicitudPeticion.php';
+require_once __DIR__ . '/../modelo/DuplicadorFilas.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/VariableMacroeconomica.php';
 require_once __DIR__ . '/../modelo/Sede.php';
@@ -107,6 +108,22 @@ class SolicitudControlador
 
             if ($accion === 'eliminar') {
                 $this->eliminar();
+            } elseif ($accion === 'eliminar_seleccionados') {
+                $this->eliminarSeleccionados();
+            } elseif ($accion === 'duplicar_seleccionados') {
+                $this->duplicarSeleccionados();
+            } elseif ($accion === 'eliminar_monitor_seleccionados') {
+                $this->eliminarMonitorSeleccionados();
+            } elseif ($accion === 'duplicar_monitor_seleccionados') {
+                $this->duplicarMonitorSeleccionados();
+            } elseif ($accion === 'eliminar_ops_seleccionados') {
+                $this->eliminarOpsSeleccionados();
+            } elseif ($accion === 'duplicar_ops_seleccionados') {
+                $this->duplicarOpsSeleccionados();
+            } elseif ($accion === 'eliminar_peticion_seleccionados') {
+                $this->eliminarPeticionSeleccionados();
+            } elseif ($accion === 'duplicar_peticion_seleccionados') {
+                $this->duplicarPeticionSeleccionados();
             } elseif ($accion === 'enviar') {
                 [$error, $exito] = $this->enviar();
             } elseif ($accion === 'actualizar') {
@@ -344,6 +361,32 @@ class SolicitudControlador
         exit;
     }
 
+    private function eliminarSeleccionados(): void
+    {
+        foreach (array_map('intval', $_POST['id'] ?? []) as $id) {
+            if ($id > 0 && $this->modeloSolicitud->obtenerPorId($id) !== null) {
+                $this->modeloSolicitud->eliminar($id);
+            }
+        }
+
+        header('Location: index.php?ruta=solicitudes&tab=arl');
+        exit;
+    }
+
+    private function duplicarSeleccionados(): void
+    {
+        $db = Conexion::obtener();
+
+        foreach (array_map('intval', $_POST['id'] ?? []) as $id) {
+            if ($id > 0) {
+                DuplicadorFilas::duplicarFila($db, 'solicitudes_arl', $id);
+            }
+        }
+
+        header('Location: index.php?ruta=solicitudes&tab=arl');
+        exit;
+    }
+
     private function notificarYMarcarEnviada(
         object $modelo,
         int $id,
@@ -521,6 +564,32 @@ class SolicitudControlador
         exit;
     }
 
+    private function eliminarMonitorSeleccionados(): void
+    {
+        foreach (array_map('intval', $_POST['id'] ?? []) as $id) {
+            if ($id > 0 && $this->modeloMonitor->obtenerPorId($id) !== null) {
+                $this->modeloMonitor->eliminar($id);
+            }
+        }
+
+        header('Location: index.php?ruta=solicitudes&tab=monitores');
+        exit;
+    }
+
+    private function duplicarMonitorSeleccionados(): void
+    {
+        $db = Conexion::obtener();
+
+        foreach (array_map('intval', $_POST['id'] ?? []) as $id) {
+            if ($id > 0) {
+                DuplicadorFilas::duplicarFila($db, 'solicitudes_monitores', $id);
+            }
+        }
+
+        header('Location: index.php?ruta=solicitudes&tab=monitores');
+        exit;
+    }
+
     private function enviarMonitor(): array
     {
         $id = (int) ($_POST['id'] ?? 0);
@@ -653,6 +722,32 @@ class SolicitudControlador
         exit;
     }
 
+    private function eliminarOpsSeleccionados(): void
+    {
+        foreach (array_map('intval', $_POST['id'] ?? []) as $id) {
+            if ($id > 0 && $this->modeloOps->obtenerPorId($id) !== null) {
+                $this->modeloOps->eliminar($id);
+            }
+        }
+
+        header('Location: index.php?ruta=solicitudes&tab=ops');
+        exit;
+    }
+
+    private function duplicarOpsSeleccionados(): void
+    {
+        $db = Conexion::obtener();
+
+        foreach (array_map('intval', $_POST['id'] ?? []) as $id) {
+            if ($id > 0) {
+                DuplicadorFilas::duplicarFila($db, 'solicitudes_ops', $id);
+            }
+        }
+
+        header('Location: index.php?ruta=solicitudes&tab=ops');
+        exit;
+    }
+
     private function enviarOps(): array
     {
         $id = (int) ($_POST['id'] ?? 0);
@@ -769,6 +864,32 @@ class SolicitudControlador
 
         if ($id > 0) {
             $this->modeloPeticion->eliminar($id);
+        }
+
+        header('Location: index.php?ruta=solicitudes&tab=otros');
+        exit;
+    }
+
+    private function eliminarPeticionSeleccionados(): void
+    {
+        foreach (array_map('intval', $_POST['id'] ?? []) as $id) {
+            if ($id > 0 && $this->modeloPeticion->obtenerPorId($id) !== null) {
+                $this->modeloPeticion->eliminar($id);
+            }
+        }
+
+        header('Location: index.php?ruta=solicitudes&tab=otros');
+        exit;
+    }
+
+    private function duplicarPeticionSeleccionados(): void
+    {
+        $db = Conexion::obtener();
+
+        foreach (array_map('intval', $_POST['id'] ?? []) as $id) {
+            if ($id > 0) {
+                DuplicadorFilas::duplicarFila($db, 'solicitudes_peticiones', $id);
+            }
         }
 
         header('Location: index.php?ruta=solicitudes&tab=otros');

@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../modelo/Gasto.php';
+require_once __DIR__ . '/../modelo/DuplicadorFilas.php';
 require_once __DIR__ . '/../modelo/Linea.php';
 require_once __DIR__ . '/../modelo/Motor.php';
 require_once __DIR__ . '/../modelo/Proyecto.php';
@@ -88,6 +89,10 @@ class GastoControlador
                 [$error, $exito] = $this->actualizar();
             } elseif ($accion === 'eliminar') {
                 [$error, $exito] = $this->eliminar();
+            } elseif ($accion === 'eliminar_seleccionados') {
+                [$error, $exito] = $this->eliminarSeleccionados();
+            } elseif ($accion === 'duplicar_seleccionados') {
+                [$error, $exito] = $this->duplicarSeleccionados();
             } elseif ($accion === 'enviar_todo') {
                 [$error, $exito] = $this->enviarTodo();
             } else {
@@ -313,7 +318,7 @@ class GastoControlador
             return $item['estado'] === 'enviado'
                 && $rolUsuarioId !== null
                 && (int) ($item['rol_destinatario_id'] ?? 0) === $rolUsuarioId
-                && $item['dependencia'] === $dependenciaUsuarioNombre;
+                && $item['dependencia_destino'] === $dependenciaUsuarioNombre;
         }));
     }
 
@@ -393,6 +398,44 @@ class GastoControlador
         $this->modeloGasto->eliminar($id);
 
         return ['', 'Gasto eliminado correctamente.'];
+    }
+
+    private function eliminarSeleccionados(): array
+    {
+        $ids = array_map('intval', $_POST['id'] ?? []);
+        $eliminados = 0;
+
+        foreach ($ids as $id) {
+            if ($id > 0 && $this->modeloGasto->obtenerPorId($id) !== null) {
+                $this->modeloGasto->eliminar($id);
+                $eliminados++;
+            }
+        }
+
+        if ($eliminados === 0) {
+            return ['No se eliminó ningún gasto.', ''];
+        }
+
+        return ['', 'Se eliminaron ' . $eliminados . ' gasto(s).'];
+    }
+
+    private function duplicarSeleccionados(): array
+    {
+        $ids = array_map('intval', $_POST['id'] ?? []);
+        $db = Conexion::obtener();
+        $duplicados = 0;
+
+        foreach ($ids as $id) {
+            if ($id > 0 && DuplicadorFilas::duplicarFila($db, 'gastos', $id) !== null) {
+                $duplicados++;
+            }
+        }
+
+        if ($duplicados === 0) {
+            return ['No se duplicó ningún gasto.', ''];
+        }
+
+        return ['', 'Se duplicaron ' . $duplicados . ' gasto(s).'];
     }
 
     private function enviarTodo(): array

@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../modelo/Necesidad.php';
+require_once __DIR__ . '/../modelo/DuplicadorFilas.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/Usuario.php';
 require_once __DIR__ . '/../modelo/Rol.php';
@@ -77,6 +78,10 @@ class PerfilProyectosControlador
             [$error, $exito] = $this->enviarTodo();
         } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_proyecto') {
             [$error, $exito] = $this->crearProyecto();
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'eliminar_seleccionados') {
+            [$error, $exito] = $this->eliminarSeleccionados();
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'duplicar_seleccionados') {
+            [$error, $exito] = $this->duplicarSeleccionados();
         }
 
         $necesidades = $this->modeloNecesidad->obtenerTodas();
@@ -246,6 +251,57 @@ class PerfilProyectosControlador
         $this->modeloNecesidad->crear($datos, (int) ($_SESSION['usuario_id'] ?? 0));
 
         return ['', 'Proyecto registrado correctamente.'];
+    }
+
+    private function eliminarSeleccionados(): array
+    {
+        $ids = array_map('intval', $_POST['id'] ?? []);
+        $eliminados = 0;
+
+        foreach ($ids as $id) {
+            if ($id <= 0) {
+                continue;
+            }
+
+            $existente = $this->modeloNecesidad->obtenerPorId($id);
+
+            if ($existente !== null && ($existente['estado'] ?? 'borrador') === 'borrador') {
+                $this->modeloNecesidad->eliminar($id);
+                $eliminados++;
+            }
+        }
+
+        if ($eliminados === 0) {
+            return ['No se eliminó ningún proyecto.', ''];
+        }
+
+        return ['', 'Se eliminaron ' . $eliminados . ' proyecto(s).'];
+    }
+
+    private function duplicarSeleccionados(): array
+    {
+        $ids = array_map('intval', $_POST['id'] ?? []);
+        $db = Conexion::obtener();
+        $duplicados = 0;
+
+        foreach ($ids as $id) {
+            if ($id <= 0) {
+                continue;
+            }
+
+            $nuevoId = DuplicadorFilas::duplicarFila($db, 'necesidades_academicas', $id);
+
+            if ($nuevoId !== null) {
+                DuplicadorFilas::duplicarFilasHijo($db, 'necesidad_beneficiarios_estamentos', 'necesidad_id', $id, $nuevoId);
+                $duplicados++;
+            }
+        }
+
+        if ($duplicados === 0) {
+            return ['No se duplicó ningún proyecto.', ''];
+        }
+
+        return ['', 'Se duplicaron ' . $duplicados . ' proyecto(s).'];
     }
 
     private function enviarTodo(): array

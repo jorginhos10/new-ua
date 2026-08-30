@@ -1,7 +1,10 @@
 <?php $tituloPagina = 'Contratos comunes'; require __DIR__ . '/../parciales/encabezado.php'; ?>
 
     <div class="tarjeta">
-        <h1>Contratos comunes</h1>
+        <div class="tarjeta-encabezado">
+            <h1>Contratos comunes</h1>
+            <?php $csvRuta = 'contratos-comunes'; $csvEtiqueta = 'Contratos comunes'; require __DIR__ . '/../parciales/csv-configuracion.php'; ?>
+        </div>
         <p class="texto-atenuado">Catálogo de contratos comunes (BCC) que se pueden elegir en el campo "Contratos comunes" al registrar un gasto.</p>
 
         <?php if (!empty($error)): ?>

@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../modelo/Rol.php';
+require_once __DIR__ . '/../modelo/CsvConfiguracion.php';
 
 class RolControlador
 {
@@ -23,6 +24,10 @@ class RolControlador
             exit;
         }
 
+        if (($_GET['accion_csv'] ?? '') === 'plantilla') {
+            $this->exportarCsv();
+        }
+
         $error = '';
         $exito = '';
 
@@ -33,6 +38,8 @@ class RolControlador
                 $this->eliminar();
             } elseif ($accion === 'actualizar') {
                 [$error, $exito] = $this->actualizar();
+            } elseif ($accion === 'importar_csv') {
+                [$error, $exito] = $this->importarCsv();
             } else {
                 [$error, $exito] = $this->guardar();
             }
@@ -41,6 +48,36 @@ class RolControlador
         $roles = $this->modeloRol->obtenerTodos();
 
         require __DIR__ . '/../vista/roles/index.php';
+    }
+
+    private function exportarCsv(): void
+    {
+        $filas = array_map(
+            static fn (array $r): array => [$r['nombre'], $r['orden']],
+            $this->modeloRol->obtenerTodos()
+        );
+
+        CsvConfiguracion::exportar('roles.csv', ['nombre', 'orden'], $filas);
+    }
+
+    private function importarCsv(): array
+    {
+        $filas = CsvConfiguracion::leerArchivoSubido($_FILES['archivo_csv'] ?? []);
+
+        if ($filas === null) {
+            return ['No se pudo leer el archivo CSV. Verifica que el archivo tenga el formato correcto.', ''];
+        }
+
+        $resultado = $this->modeloRol->sincronizarDesdeCsv($filas);
+
+        $mensaje = 'Se crearon ' . $resultado['creados'] . ', se actualizaron ' . $resultado['actualizados']
+            . ' y se eliminaron ' . $resultado['eliminados'] . ' rol(es).';
+
+        if ($resultado['omitidos'] > 0) {
+            $mensaje .= ' ' . $resultado['omitidos'] . ' no se pudieron eliminar porque siguen en uso en otra parte del sistema.';
+        }
+
+        return ['', $mensaje];
     }
 
     private function eliminar(): void

@@ -16,6 +16,7 @@ require_once __DIR__ . '/../modelo/IngresoSinExcedentes.php';
 require_once __DIR__ . '/../modelo/Necesidad.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/PeticionArchivada.php';
+require_once __DIR__ . '/../modelo/PeticionHistorial.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/Usuario.php';
 require_once __DIR__ . '/../modelo/Rol.php';
@@ -49,6 +50,7 @@ class PeticionesControlador
     private Necesidad $modeloNecesidad;
     private AnioPresupuestal $modeloAnio;
     private PeticionArchivada $modeloArchivada;
+    private PeticionHistorial $modeloHistorial;
     private Dependencia $modeloDependencia;
     private Usuario $modeloUsuario;
     private Rol $modeloRol;
@@ -61,7 +63,23 @@ class PeticionesControlador
     private Motor $modeloMotor;
     private Proyecto $modeloProyecto;
 
-    private const VISTAS = ['pendientes', 'consolidado', 'archivar'];
+    private const VISTAS = ['pendientes', 'consolidado', 'archivar', 'enviadas'];
+
+    /**
+     * Agrupación de los 13 "origen" en bandejas por módulo (spec: navegación por bandejas en
+     * Peticiones). "gasto_sin_excedentes"/"ingreso_sin_excedentes" NO tienen bandeja propia — se
+     * reparten dinámicamente entre "extension" ("Convenios y Asesorías") y "postgrado" ("Convenios
+     * Postgrados") según la categoría elegida al enviar (ver `categoria_peticion`, columna nueva en
+     * esas 2 tablas); ese reparto lo resuelve `filtrarPorOrigenes()`, no esta lista estática.
+     */
+    private const BANDEJAS = [
+        'gastos' => ['etiqueta' => 'Gastos', 'origenes' => ['gasto_principal']],
+        'extension' => ['etiqueta' => 'Extensión', 'origenes' => ['gasto_extension', 'ingreso_extension']],
+        'postgrado' => ['etiqueta' => 'Postgrado', 'origenes' => ['gasto_postgrado', 'ingreso_postgrado']],
+        'unisalud' => ['etiqueta' => 'Unidad de Salud', 'origenes' => ['gasto_unisalud', 'ingreso_unisalud']],
+        'perfil-proyectos' => ['etiqueta' => 'Perfil de Proyectos', 'origenes' => ['necesidad', 'necesidad_grupo']],
+        'solicitudes' => ['etiqueta' => 'Solicitudes', 'origenes' => ['arl', 'monitores', 'ops', 'otros']],
+    ];
 
     private const ORIGENES_GASTO = ['gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes'];
 
@@ -110,6 +128,7 @@ class PeticionesControlador
         $this->modeloNecesidad = new Necesidad();
         $this->modeloAnio = new AnioPresupuestal();
         $this->modeloArchivada = new PeticionArchivada();
+        $this->modeloHistorial = new PeticionHistorial();
         $this->modeloDependencia = new Dependencia();
         $this->modeloUsuario = new Usuario();
         $this->modeloRol = new Rol();
@@ -143,9 +162,11 @@ class PeticionesControlador
                     $accion === 'aprobar' ? 'aprobada' : 'archivada'
                 );
             } elseif ($accion === 'archivar' || $accion === 'aprobar') {
+                $origenAccion = $_POST['origen'] ?? '';
+                $origenIdAccion = (int) ($_POST['origen_id'] ?? 0);
                 $this->modeloArchivada->archivar([
-                    'origen' => $_POST['origen'] ?? '',
-                    'origen_id' => (int) ($_POST['origen_id'] ?? 0),
+                    'origen' => $origenAccion,
+                    'origen_id' => $origenIdAccion,
                     'accion' => $accion === 'aprobar' ? 'aprobada' : 'archivada',
                     'tipo' => $_POST['tipo'] ?? '',
                     'detalle' => $_POST['detalle'] ?? '',
@@ -154,8 +175,19 @@ class PeticionesControlador
                     'ruta_ver' => $_POST['ruta_ver'] ?? 'index.php?ruta=peticiones',
                     'ruta_origen' => $_POST['ruta_origen'] ?? null,
                 ]);
+                $this->modeloHistorial->registrar(
+                    $origenAccion,
+                    $origenIdAccion,
+                    $accion === 'aprobar' ? 'aprobada' : 'archivada',
+                    $accion === 'aprobar' ? 'Consolidado' : 'Archivado'
+                );
             } elseif ($accion === 'restaurar') {
-                $this->modeloArchivada->restaurar((int) ($_POST['id'] ?? 0));
+                $archivadaId = (int) ($_POST['id'] ?? 0);
+                $archivadaRestaurar = $this->modeloArchivada->obtenerPorId($archivadaId);
+                $this->modeloArchivada->restaurar($archivadaId);
+                if ($archivadaRestaurar !== null) {
+                    $this->modeloHistorial->registrar($archivadaRestaurar['origen'], (int) $archivadaRestaurar['origen_id'], 'restaurada', 'Restaurado desde Archivados');
+                }
             } elseif ($accion === 'redireccionar_consolidado') {
                 [$errorRedireccion, $exitoRedireccion] = $this->redireccionarConsolidado();
                 $_SESSION['peticiones_flash_error'] = $errorRedireccion;
@@ -180,6 +212,9 @@ class PeticionesControlador
 
             $vistaDestino = $_POST['vista'] ?? 'pendientes';
             $destino = 'index.php?ruta=peticiones&vista=' . urlencode($vistaDestino);
+            if (!empty($_POST['bandeja']) && isset(self::BANDEJAS[$_POST['bandeja']])) {
+                $destino .= '&bandeja=' . urlencode($_POST['bandeja']);
+            }
             if (!empty($_POST['anio_id'])) {
                 $destino .= '&anio_id=' . (int) $_POST['anio_id'];
             }
@@ -196,6 +231,9 @@ class PeticionesControlador
 
         $vistaSolicitada = $_GET['vista'] ?? 'pendientes';
         $vista = in_array($vistaSolicitada, self::VISTAS, true) ? $vistaSolicitada : 'pendientes';
+
+        $bandejaSolicitada = $_GET['bandeja'] ?? null;
+        $bandeja = isset(self::BANDEJAS[$bandejaSolicitada]) ? $bandejaSolicitada : null;
 
         $aniosActivos = $this->modeloAnio->obtenerActivos();
 
@@ -223,17 +261,29 @@ class PeticionesControlador
             $pendientes = $this->construirPendientes($anioSeleccionadoId, $dependenciasPermitidas);
         }
 
-        $aprobados = $vista === 'consolidado' ? $this->modeloArchivada->obtenerPorAccion('aprobada') : [];
+        $conteosBandejas = [];
+        if ($bandeja === null) {
+            foreach (self::BANDEJAS as $claveBandeja => $infoBandeja) {
+                $conteosBandejas[$claveBandeja] = count($this->filtrarPorOrigenes($pendientes, $infoBandeja['origenes'], $claveBandeja));
+            }
+        } else {
+            $pendientes = $this->filtrarPorOrigenes($pendientes, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
+        }
+
+        $aprobados = ($bandeja !== null && $vista === 'consolidado') ? $this->modeloArchivada->obtenerPorAccion('aprobada') : [];
         $aprobados = $this->filtrarPorDependencia($aprobados, $dependenciasPermitidas);
+        if ($bandeja !== null) {
+            $aprobados = $this->filtrarPorOrigenes($aprobados, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
+        }
 
         $tiposRedireccionados = [];
-        if ($vista === 'consolidado') {
+        if ($bandeja !== null && $vista === 'consolidado') {
             foreach ($this->modeloArchivada->obtenerRedireccionadas() as $redirigida) {
                 $tiposRedireccionados[$redirigida['tipo']] = true;
             }
         }
 
-        $filasDetalladasConsolidado = $vista === 'consolidado' ? $this->construirFilasDetalleCompleto($aprobados, $anioSeleccionadoId) : [];
+        $filasDetalladasConsolidado = ($bandeja !== null && $vista === 'consolidado') ? $this->construirFilasDetalleCompleto($aprobados, $anioSeleccionadoId) : [];
 
         $consolidado = [];
         foreach ($aprobados as $indice => $item) {
@@ -270,17 +320,28 @@ class PeticionesControlador
         }
         $consolidado = array_values($consolidado);
 
-        $consolidadoUnificado = ($vista === 'consolidado' && $modoJerarquia)
+        $consolidadoUnificado = ($bandeja !== null && $vista === 'consolidado' && $modoJerarquia)
             ? $this->construirConsolidadoUnificado($aprobados, $anioSeleccionadoId)
             : [];
 
-        $archivados = $vista === 'archivar' ? $this->modeloArchivada->obtenerPorAccion('archivada') : [];
+        $archivados = ($bandeja !== null && $vista === 'archivar') ? $this->modeloArchivada->obtenerPorAccion('archivada') : [];
         $archivados = $this->filtrarPorDependencia($archivados, $dependenciasPermitidas);
+        if ($bandeja !== null) {
+            $archivados = $this->filtrarPorOrigenes($archivados, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
+        }
+
+        $enviadas = ($bandeja !== null && $vista === 'enviadas' && $anioSeleccionadoId > 0)
+            ? $this->construirEnviadas($anioSeleccionadoId, $dependenciasPermitidas)
+            : [];
+        if ($bandeja !== null) {
+            $enviadas = $this->filtrarPorOrigenes($enviadas, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
+        }
 
         $dependenciasSugeridas = $this->modeloDependencia->obtenerActivasParaEnvio();
         $roles = $this->modeloRol->obtenerTodos();
         $rolesPorTipo = $this->modeloTipoDependenciaRol->obtenerMapaCompleto();
         $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
+        $bandejas = self::BANDEJAS;
 
         require __DIR__ . '/../vista/peticiones/index.php';
     }
@@ -479,6 +540,44 @@ class PeticionesControlador
         require __DIR__ . '/../vista/peticiones/autogestion-consolidado.php';
     }
 
+    /**
+     * Log de auditoría (solo lectura) de una bandeja: todo lo que le pasó a sus ítems desde que
+     * llegaron a Peticiones (aprobar/archivar/editar/redireccionar/rechazar/duplicar/eliminar). No
+     * incluye el momento "Enviado" (eso ocurre en el módulo de origen, fuera de este controlador).
+     */
+    public function historial(): void
+    {
+        if (empty($_SESSION['usuario_id'])) {
+            header('Location: index.php?ruta=login');
+            exit;
+        }
+
+        if ($_SESSION['usuario_rol'] !== 'administrador') {
+            header('Location: index.php?ruta=dashboard');
+            exit;
+        }
+
+        $bandejaSolicitada = $_GET['bandeja'] ?? '';
+
+        if (!isset(self::BANDEJAS[$bandejaSolicitada])) {
+            header('Location: index.php?ruta=peticiones');
+            exit;
+        }
+
+        $bandeja = $bandejaSolicitada;
+        $bandejas = self::BANDEJAS;
+
+        $origenesConsulta = array_unique(array_merge(
+            self::BANDEJAS[$bandeja]['origenes'],
+            ['gasto_sin_excedentes', 'ingreso_sin_excedentes']
+        ));
+
+        $eventos = $this->modeloHistorial->obtenerPorOrigenes($origenesConsulta);
+        $eventos = $this->filtrarPorOrigenes($eventos, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
+
+        require __DIR__ . '/../vista/peticiones/historial.php';
+    }
+
     private function construirFilasDetalleCompleto(array $aprobados, int $anioPresupuestalId): array
     {
         $sedesPorId = [];
@@ -528,7 +627,7 @@ class PeticionesControlador
             // Si el registro original todavía existe, se prefiere su dependencia actual sobre la
             // guardada en el archivo aprobado — esta última es una foto fija que puede quedar
             // desactualizada (ej. reaprobaciones, sustitución de dependencias tipo Dumi al enviar).
-            $dependenciaNombre = $gastoOriginal['dependencia'] ?? $item['detalle'];
+            $dependenciaNombre = $gastoOriginal['dependencia_destino'] ?? $gastoOriginal['dependencia'] ?? $item['detalle'];
 
             $dependenciaOrigen = $dependenciaNombre !== null && $dependenciaNombre !== ''
                 ? $this->modeloDependencia->obtenerPorNombre($dependenciaNombre)
@@ -750,7 +849,7 @@ class PeticionesControlador
 
             // Se prefiere la dependencia actual del registro original (si todavía existe) sobre
             // la guardada en el archivo aprobado, que es una foto fija y puede quedar desactualizada.
-            $dependenciaNombre = $gastoOriginal['dependencia'] ?? $item['detalle'];
+            $dependenciaNombre = $gastoOriginal['dependencia_destino'] ?? $gastoOriginal['dependencia'] ?? $item['detalle'];
 
             $techo = null;
             $dependenciaOrigen = $dependenciaNombre !== null ? $this->modeloDependencia->obtenerPorNombre($dependenciaNombre) : null;
@@ -858,16 +957,16 @@ class PeticionesControlador
             'arl' => [$this->modeloSolicitud, 'facultad'],
             'monitores' => [$this->modeloMonitor, 'dependencia'],
             'ops' => [$this->modeloOps, 'dependencia'],
-            'necesidad' => [$this->modeloNecesidad, 'dependencia'],
-            'gasto_principal' => [$this->modeloGasto, 'dependencia'],
-            'gasto_extension' => [$this->modeloGastoExtension, 'dependencia'],
-            'gasto_postgrado' => [$this->modeloGastoPostgrado, 'dependencia'],
-            'gasto_unisalud' => [$this->modeloGastoUnisalud, 'dependencia'],
-            'gasto_sin_excedentes' => [$this->modeloGastoSinExcedentes, 'dependencia'],
-            'ingreso_extension' => [$this->modeloIngresoExtension, 'dependencia'],
-            'ingreso_postgrado' => [$this->modeloIngresoPostgrado, 'dependencia'],
-            'ingreso_unisalud' => [$this->modeloIngresoUnisalud, 'dependencia'],
-            'ingreso_sin_excedentes' => [$this->modeloIngresoSinExcedentes, 'dependencia'],
+            'necesidad' => [$this->modeloNecesidad, 'dependencia_destino'],
+            'gasto_principal' => [$this->modeloGasto, 'dependencia_destino'],
+            'gasto_extension' => [$this->modeloGastoExtension, 'dependencia_destino'],
+            'gasto_postgrado' => [$this->modeloGastoPostgrado, 'dependencia_destino'],
+            'gasto_unisalud' => [$this->modeloGastoUnisalud, 'dependencia_destino'],
+            'gasto_sin_excedentes' => [$this->modeloGastoSinExcedentes, 'dependencia_destino'],
+            'ingreso_extension' => [$this->modeloIngresoExtension, 'dependencia_destino'],
+            'ingreso_postgrado' => [$this->modeloIngresoPostgrado, 'dependencia_destino'],
+            'ingreso_unisalud' => [$this->modeloIngresoUnisalud, 'dependencia_destino'],
+            'ingreso_sin_excedentes' => [$this->modeloIngresoSinExcedentes, 'dependencia_destino'],
         ];
 
         if (!isset($modelosConDependencia[$item['origen']])) {
@@ -927,11 +1026,18 @@ class PeticionesControlador
                 return ['Todos los valores deben ser números válidos.', ''];
             }
 
-            $cambios[] = ['origen' => $origen, 'origen_id' => $origenId, 'valor' => (float) $valorTexto];
+            $valorAnterior = $aprobadosPorClave[$clave]['valor'] !== null ? (float) $aprobadosPorClave[$clave]['valor'] : null;
+            $cambios[] = ['origen' => $origen, 'origen_id' => $origenId, 'valor' => (float) $valorTexto, 'valor_anterior' => $valorAnterior];
         }
 
         foreach ($cambios as $cambio) {
             $this->modeloArchivada->actualizarValor($cambio['origen'], $cambio['origen_id'], $cambio['valor']);
+            $this->modeloHistorial->registrar(
+                $cambio['origen'],
+                $cambio['origen_id'],
+                'editada',
+                'Valor cambiado de $' . number_format($cambio['valor_anterior'] ?? 0, 2) . ' a $' . number_format($cambio['valor'], 2)
+            );
         }
 
         return ['', 'Se actualizaron ' . count($cambios) . ' ítem(s).'];
@@ -990,6 +1096,10 @@ class PeticionesControlador
 
         if ($cantidadItems === 0) {
             return ['No hay ítems seleccionados para redireccionar.', ''];
+        }
+
+        foreach ($pares as $par) {
+            $this->modeloHistorial->registrar($par['origen'], $par['origen_id'], 'redireccionada', 'Redireccionado a ' . $dependenciaNombre);
         }
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
@@ -1057,6 +1167,8 @@ class PeticionesControlador
                 'ruta_ver' => $this->construirRutaVer($item['origen'], $nuevoId),
                 'ruta_origen' => $this->construirRutaOrigen($item['origen']),
             ]);
+
+            $this->modeloHistorial->registrar($item['origen'], (int) $item['origen_id'], 'duplicada', 'Se duplicó, nuevo id ' . $nuevoId);
 
             $duplicados++;
         }
@@ -1207,6 +1319,8 @@ class PeticionesControlador
             return ['No se pudo rechazar la redirección.', ''];
         }
 
+        $this->modeloHistorial->registrar($origen, $origenId, 'rechazada_redireccion', 'Se rechazó la redirección, vuelve a la dependencia de origen');
+
         return ['', 'Se rechazó la redirección y se devolvió a la dependencia de origen.'];
     }
 
@@ -1241,6 +1355,7 @@ class PeticionesControlador
             return ['No se pudo eliminar el elemento.', ''];
         }
 
+        $this->modeloHistorial->registrar($origen, $origenId, 'eliminada', 'Eliminado permanentemente desde Pendientes');
         $this->modeloArchivada->eliminarPorOrigen($origen, $origenId);
 
         return ['', 'Elemento eliminado correctamente.'];
@@ -1278,6 +1393,39 @@ class PeticionesControlador
     }
 
     /**
+     * Filtra una lista de items (pendientes/aprobados/archivados/enviadas) a solo los que
+     * pertenecen a la bandeja seleccionada, según su campo 'origen' (cada fila ya lo trae).
+     *
+     * Caso especial: "gasto_sin_excedentes"/"ingreso_sin_excedentes" no tienen bandeja propia en
+     * `self::BANDEJAS` — pertenecen dinámicamente a "extension" o "postgrado" según la categoría
+     * elegida al enviar (columna `categoria_peticion`, no una dependencia real). Se resuelve
+     * consultando el registro vivo; `NULL` (ítems enviados antes de que existiera esta categoría)
+     * se trata como "extension" para que no desaparezcan de Peticiones.
+     */
+    private function filtrarPorOrigenes(array $items, array $origenesPermitidos, ?string $bandeja = null): array
+    {
+        $modelosSinExcedentes = [
+            'gasto_sin_excedentes' => $this->modeloGastoSinExcedentes,
+            'ingreso_sin_excedentes' => $this->modeloIngresoSinExcedentes,
+        ];
+
+        return array_values(array_filter($items, function (array $item) use ($origenesPermitidos, $bandeja, $modelosSinExcedentes): bool {
+            if (in_array($item['origen'], $origenesPermitidos, true)) {
+                return true;
+            }
+
+            if ($bandeja === null || !in_array($bandeja, ['extension', 'postgrado'], true) || !isset($modelosSinExcedentes[$item['origen']])) {
+                return false;
+            }
+
+            $registro = $modelosSinExcedentes[$item['origen']]->obtenerPorId((int) $item['origen_id']);
+            $categoria = $registro['categoria_peticion'] ?? 'extension';
+
+            return $categoria === $bandeja;
+        }));
+    }
+
+    /**
      * Necesidades (Perfil de proyectos) enviadas, visibles solo para quien coincide exactamente
      * con el rol y la dependencia a los que fueron enviadas — igual que ARL/Monitores/OPS — y que
      * todavía no fueron archivadas/aprobadas.
@@ -1292,7 +1440,7 @@ class PeticionesControlador
                 continue;
             }
 
-            if ($this->visibilidadSolicitud($fila['dependencia'], $fila['rol_destinatario_id'])) {
+            if ($this->visibilidadSolicitud($fila['dependencia_destino'] ?? $fila['dependencia'], $fila['rol_destinatario_id'])) {
                 $visibles[] = $fila;
             }
         }
@@ -1325,6 +1473,12 @@ class PeticionesControlador
                 'ruta_ver' => 'index.php?ruta=perfil-proyectos',
                 'ruta_origen' => 'index.php?ruta=perfil-proyectos',
             ]);
+            $this->modeloHistorial->registrar(
+                'necesidad',
+                (int) $fila['id'],
+                $accionArchivada,
+                $accionArchivada === 'aprobada' ? 'Consolidado (aceptar todos)' : 'Archivado (archivar todos)'
+            );
         }
 
         $verbo = $accionArchivada === 'aprobada' ? 'aceptaron' : 'archivaron';
@@ -1396,7 +1550,7 @@ class PeticionesControlador
             ];
         } else {
             foreach ($necesidadesVisibles as $fila) {
-                $pendientes[] = $this->fila('necesidad', (int) $fila['id'], 'Perfil de proyectos', $fila['dependencia'], null, (float) $fila['valor'], 'gasto', 'index.php?ruta=perfil-proyectos', 'index.php?ruta=perfil-proyectos');
+                $pendientes[] = $this->fila('necesidad', (int) $fila['id'], 'Perfil de proyectos', $fila['dependencia_destino'] ?? $fila['dependencia'], null, (float) $fila['valor'], 'gasto', 'index.php?ruta=perfil-proyectos', 'index.php?ruta=perfil-proyectos');
             }
         }
 
@@ -1485,6 +1639,113 @@ class PeticionesControlador
     }
 
     /**
+     * Construye la vista "Peticiones Enviadas": todo lo que la dependencia del usuario actual (o
+     * alguna de sus hijas) ya envió, sin importar el estado en el que se encuentre ahora (pendiente,
+     * consolidado, archivado o redireccionado) — es de solo lectura para el emisor, complementaria a
+     * "Pendientes" (que muestra lo que le enviaron a él). Reutiliza los mismos métodos de modelo que
+     * construirPendientes(), con el gate invertido (emisor en vez de receptor).
+     */
+    private function construirEnviadas(int $anioPresupuestalId, array $dependenciasPermitidas): array
+    {
+        $acciones = $this->modeloArchivada->obtenerAccionesPorClave();
+        $redireccionadas = [];
+        foreach ($this->modeloArchivada->obtenerRedireccionadas() as $redirigida) {
+            $redireccionadas[$redirigida['origen'] . ':' . $redirigida['origen_id']] = $redirigida['redireccionado_a_dependencia'];
+        }
+
+        $usuarioActualId = (int) ($_SESSION['usuario_id'] ?? 0);
+        $enviadas = [];
+
+        $agregar = function (string $origen, int $origenId, string $tipo, string $destino, ?string $cantidad, ?float $valor, string $rutaVer) use (&$enviadas, $acciones, $redireccionadas): void {
+            $clave = $origen . ':' . $origenId;
+            $accion = $acciones[$clave] ?? null;
+
+            $estado = match ($accion) {
+                'aprobada' => 'Consolidado',
+                'archivada' => 'Archivado',
+                'redireccionada' => 'Redireccionado a ' . ($redireccionadas[$clave] ?? '—'),
+                default => 'Pendiente de revisión',
+            };
+
+            $enviadas[] = [
+                'origen' => $origen,
+                'origen_id' => $origenId,
+                'tipo' => $tipo,
+                'detalle' => $destino,
+                'cantidad' => $cantidad,
+                'valor' => $valor,
+                'ruta_ver' => $rutaVer,
+                'estado_enviada' => $estado,
+            ];
+        };
+
+        foreach ($this->modeloSolicitud->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
+            if (!empty($fila['rol_destinatario_id']) && in_array($fila['facultad'], $dependenciasPermitidas, true)) {
+                $totalPracticantes = (int) $fila['riesgo1_estudiantes'] + (int) $fila['riesgo2_estudiantes']
+                    + (int) $fila['riesgo3_estudiantes'] + (int) $fila['riesgo4_estudiantes'] + (int) $fila['riesgo5_estudiantes'];
+                $totalValor = (float) $fila['riesgo1_valor'] + (float) $fila['riesgo2_valor']
+                    + (float) $fila['riesgo3_valor'] + (float) $fila['riesgo4_valor'] + (float) $fila['riesgo5_valor'];
+                $agregar('arl', (int) $fila['id'], 'ARL', $fila['enviada_a'] ?? $fila['facultad'], $totalPracticantes . ' practicantes', $totalValor, 'index.php?ruta=solicitud-detalle&tipo=arl&id=' . (int) $fila['id']);
+            }
+        }
+
+        foreach ($this->modeloMonitor->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
+            if (!empty($fila['rol_destinatario_id']) && in_array($fila['dependencia'], $dependenciasPermitidas, true)) {
+                $totalMonitores = (int) $fila['monitores_semestre1'] + (int) $fila['monitores_semestre2'];
+                $agregar('monitores', (int) $fila['id'], 'Monitores', $fila['enviada_a'] ?? $fila['dependencia'], $totalMonitores . ' monitores', null, 'index.php?ruta=solicitud-detalle&tipo=monitores&id=' . (int) $fila['id']);
+            }
+        }
+
+        foreach ($this->modeloOps->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
+            if (!empty($fila['rol_destinatario_id']) && in_array($fila['dependencia'], $dependenciasPermitidas, true)) {
+                $totalOps = (float) $fila['valor'] * (int) $fila['cantidad'];
+                $agregar('ops', (int) $fila['id'], 'OPS', $fila['enviada_a'] ?? $fila['dependencia'], $fila['cantidad'] . ' und.', $totalOps, 'index.php?ruta=solicitud-detalle&tipo=ops&id=' . (int) $fila['id']);
+            }
+        }
+
+        foreach ($this->modeloPeticion->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
+            if (!empty($fila['rol_destinatario_id']) && (int) ($fila['usuario_id'] ?? 0) === $usuarioActualId) {
+                $totalValor = (float) $fila['valor_s1'] + (float) $fila['valor_s2'];
+                $agregar('otros', (int) $fila['id'], 'Petición', $fila['enviada_a'] ?? '—', null, $totalValor, 'index.php?ruta=solicitud-detalle&tipo=otros&id=' . (int) $fila['id']);
+            }
+        }
+
+        foreach ($this->modeloNecesidad->obtenerEnviadas() as $fila) {
+            if (!empty($fila['rol_destinatario_id']) && in_array($fila['dependencia'], $dependenciasPermitidas, true)) {
+                $agregar('necesidad', (int) $fila['id'], 'Perfil de proyectos', $fila['dependencia_destino'] ?? $fila['dependencia'], null, (float) $fila['valor'], 'index.php?ruta=perfil-proyectos');
+            }
+        }
+
+        $mapaGasto = [
+            ['modelo' => $this->modeloGasto, 'origen' => 'gasto_principal', 'tipo' => 'Gasto', 'metodo' => 'obtenerEnviadosPorAnio'],
+            ['modelo' => $this->modeloGastoExtension, 'origen' => 'gasto_extension', 'tipo' => 'Extensión', 'metodo' => 'obtenerPorAnio'],
+            ['modelo' => $this->modeloGastoPostgrado, 'origen' => 'gasto_postgrado', 'tipo' => 'Postgrado', 'metodo' => 'obtenerPorAnio'],
+            ['modelo' => $this->modeloGastoUnisalud, 'origen' => 'gasto_unisalud', 'tipo' => 'Unisalud', 'metodo' => 'obtenerPorAnio'],
+            ['modelo' => $this->modeloGastoSinExcedentes, 'origen' => 'gasto_sin_excedentes', 'tipo' => 'Sin excedentes', 'metodo' => 'obtenerPorAnio'],
+            ['modelo' => $this->modeloIngresoExtension, 'origen' => 'ingreso_extension', 'tipo' => 'Ingreso Extensión', 'metodo' => 'obtenerPorAnio'],
+            ['modelo' => $this->modeloIngresoPostgrado, 'origen' => 'ingreso_postgrado', 'tipo' => 'Ingreso Postgrado', 'metodo' => 'obtenerPorAnio'],
+            ['modelo' => $this->modeloIngresoUnisalud, 'origen' => 'ingreso_unisalud', 'tipo' => 'Ingreso Unisalud', 'metodo' => 'obtenerPorAnio'],
+            ['modelo' => $this->modeloIngresoSinExcedentes, 'origen' => 'ingreso_sin_excedentes', 'tipo' => 'Ingreso Sin excedentes', 'metodo' => 'obtenerPorAnio'],
+        ];
+
+        foreach ($mapaGasto as $fuente) {
+            foreach ($fuente['modelo']->{$fuente['metodo']}($anioPresupuestalId) as $fila) {
+                if (empty($fila['rol_destinatario_id']) || !in_array($fila['dependencia'], $dependenciasPermitidas, true)) {
+                    continue;
+                }
+
+                $rutaVer = $fuente['origen'] === 'gasto_principal'
+                    ? 'index.php?ruta=gastos'
+                    : 'index.php?ruta=gasto-detalle&origen=' . $fuente['origen'] . '&id=' . (int) $fila['id'];
+                $cantidad = isset($fila['cantidad']) ? $fila['cantidad'] . ' und.' : null;
+                $agregar($fuente['origen'], (int) $fila['id'], $fuente['tipo'], $fila['dependencia_destino'] ?? $fila['dependencia'], $cantidad, (float) $fila['valor_total'], $rutaVer);
+            }
+        }
+
+        return $enviadas;
+    }
+
+    /**
      * Una solicitud (ARL/Monitores/OPS/Otros) solo debe ser visible en Peticiones para el usuario
      * que coincide exactamente con la dependencia y el rol al que fue enviada — nadie más la ve.
      */
@@ -1524,12 +1785,13 @@ class PeticionesControlador
     private function filaGasto(string $origen, array $fila, string $tipo, string $rutaOrigen, string $rutaVer): ?array
     {
         $rolDestinatarioId = !empty($fila['rol_destinatario_id']) ? (int) $fila['rol_destinatario_id'] : null;
+        $dependenciaDestino = $fila['dependencia_destino'] ?? $fila['dependencia'];
 
-        if (!$this->visibilidadSolicitud($fila['dependencia'], $rolDestinatarioId)) {
+        if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId)) {
             return null;
         }
 
-        return $this->fila($origen, (int) $fila['id'], $tipo, $fila['dependencia'], $fila['cantidad'] . ' und.', (float) $fila['valor_total'], 'gasto', $rutaOrigen, $rutaVer);
+        return $this->fila($origen, (int) $fila['id'], $tipo, $dependenciaDestino, $fila['cantidad'] . ' und.', (float) $fila['valor_total'], 'gasto', $rutaOrigen, $rutaVer);
     }
 
     /**
@@ -1540,12 +1802,13 @@ class PeticionesControlador
     private function filaIngreso(string $origen, array $fila, string $tipo, string $rutaOrigen, string $rutaVer): ?array
     {
         $rolDestinatarioId = !empty($fila['rol_destinatario_id']) ? (int) $fila['rol_destinatario_id'] : null;
+        $dependenciaDestino = $fila['dependencia_destino'] ?? $fila['dependencia'];
 
-        if (!$this->visibilidadSolicitud($fila['dependencia'], $rolDestinatarioId)) {
+        if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId)) {
             return null;
         }
 
-        return $this->fila($origen, (int) $fila['id'], $tipo, $fila['dependencia'], null, (float) $fila['valor_total'], 'gasto', $rutaOrigen, $rutaVer);
+        return $this->fila($origen, (int) $fila['id'], $tipo, $dependenciaDestino, null, (float) $fila['valor_total'], 'gasto', $rutaOrigen, $rutaVer);
     }
 
     private function filaRedireccionada(array $redirigida): array

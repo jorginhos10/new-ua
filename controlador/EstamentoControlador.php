@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../modelo/Estamento.php';
+require_once __DIR__ . '/../modelo/CsvConfiguracion.php';
 
 class EstamentoControlador
 {
@@ -23,6 +24,10 @@ class EstamentoControlador
             exit;
         }
 
+        if (($_GET['accion_csv'] ?? '') === 'plantilla') {
+            $this->exportarCsv();
+        }
+
         $error = '';
         $exito = '';
 
@@ -33,6 +38,8 @@ class EstamentoControlador
                 $this->eliminar();
             } elseif ($accion === 'actualizar') {
                 [$error, $exito] = $this->actualizar();
+            } elseif ($accion === 'importar_csv') {
+                [$error, $exito] = $this->importarCsv();
             } else {
                 [$error, $exito] = $this->guardar();
             }
@@ -41,6 +48,35 @@ class EstamentoControlador
         $estamentos = $this->modeloEstamento->obtenerTodos();
 
         require __DIR__ . '/../vista/estamentos/index.php';
+    }
+
+    private function exportarCsv(): void
+    {
+        $filas = array_map(
+            static fn (array $e): array => [$e['nombre']],
+            $this->modeloEstamento->obtenerTodos()
+        );
+
+        CsvConfiguracion::exportar('estamentos.csv', ['nombre'], $filas);
+    }
+
+    private function importarCsv(): array
+    {
+        $filas = CsvConfiguracion::leerArchivoSubido($_FILES['archivo_csv'] ?? []);
+
+        if ($filas === null) {
+            return ['No se pudo leer el archivo CSV. Verifica que el archivo tenga el formato correcto.', ''];
+        }
+
+        $resultado = $this->modeloEstamento->sincronizarDesdeCsv($filas);
+
+        $mensaje = 'Se crearon ' . $resultado['creados'] . ' y se eliminaron ' . $resultado['eliminados'] . ' estamento(s).';
+
+        if ($resultado['omitidos'] > 0) {
+            $mensaje .= ' ' . $resultado['omitidos'] . ' no se pudieron eliminar porque siguen en uso en otra parte del sistema.';
+        }
+
+        return ['', $mensaje];
     }
 
     private function eliminar(): void

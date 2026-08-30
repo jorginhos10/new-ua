@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../config/conexion.php';
+require_once __DIR__ . '/CsvConfiguracion.php';
 
 class Rol
 {
@@ -66,5 +67,68 @@ class Rol
         $consulta = $this->db->prepare('DELETE FROM roles WHERE id = :id');
 
         return $consulta->execute(['id' => $id]);
+    }
+
+    public function sincronizarDesdeCsv(array $filas): array
+    {
+        $nombresCsv = [];
+        $creados = 0;
+        $actualizados = 0;
+
+        foreach ($filas as $fila) {
+            $nombre = trim($fila['nombre'] ?? '');
+
+            if ($nombre === '') {
+                continue;
+            }
+
+            $nombresCsv[] = $nombre;
+            $ordenTexto = trim($fila['orden'] ?? '');
+            $orden = $ordenTexto !== '' ? (int) $ordenTexto : $this->obtenerSiguienteOrden();
+
+            $existente = $this->buscarPorNombre($nombre);
+
+            if ($existente === null) {
+                $this->crear($nombre, $orden);
+                $creados++;
+            } elseif ((int) $existente['orden'] !== $orden) {
+                $this->actualizar((int) $existente['id'], $nombre, $orden);
+                $actualizados++;
+            }
+        }
+
+        $eliminados = 0;
+        $omitidos = 0;
+
+        foreach ($this->obtenerTodos() as $existente) {
+            if (in_array($existente['nombre'], $nombresCsv, true)) {
+                continue;
+            }
+
+            $id = (int) $existente['id'];
+
+            if (CsvConfiguracion::tieneReferencias($this->db, 'roles', $id)) {
+                $omitidos++;
+                continue;
+            }
+
+            try {
+                $this->eliminar($id);
+                $eliminados++;
+            } catch (PDOException $excepcion) {
+                $omitidos++;
+            }
+        }
+
+        return ['creados' => $creados, 'actualizados' => $actualizados, 'eliminados' => $eliminados, 'omitidos' => $omitidos];
+    }
+
+    private function buscarPorNombre(string $nombre): ?array
+    {
+        $consulta = $this->db->prepare('SELECT id, nombre, orden, creado_en FROM roles WHERE nombre = :nombre LIMIT 1');
+        $consulta->execute(['nombre' => $nombre]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
     }
 }

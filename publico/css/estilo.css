@@ -2152,6 +2152,18 @@ a.barra-progreso:hover {
     gap: 0.75rem;
 }
 
+.tarjeta-encabezado {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.tarjeta-encabezado h1 {
+    margin: 0;
+}
+
 /* Botones de un mismo grupo de encabezado (Crear/Enviar/Exportar, Ver/Editar/Redireccionar/Duplicar,
    etc.) deben verse como un solo conjunto: misma altura, relleno, tipografía y esquinas, sin
    importar si cada uno usa .boton-accion (pill de color) o .boton-agregar (sólido). */
@@ -2605,6 +2617,80 @@ a.barra-progreso:hover {
     display: flex;
     align-items: center;
     gap: 0.9rem;
+}
+
+/* Barra de 4 zonas (barra-modulo.php): zona 1 (volver, oculta en estado creación) + zona 2
+   (título) agrupadas a la izquierda; zona 3 (acciones secundarias) + zona 4 (acción principal)
+   ya cubiertas por .grupo-acciones-encabezado. */
+.barra-modulo-zona1-y-2 {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.boton-icono-accion {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--color-gris-fondo);
+    color: var(--color-gris-texto);
+    cursor: pointer;
+    text-decoration: none;
+    transition: background var(--transicion), color var(--transicion), opacity var(--transicion);
+}
+
+.boton-icono-accion:hover,
+.boton-icono-accion:focus-visible {
+    background: var(--color-primario-suave);
+    color: var(--color-primario-oscuro);
+    outline: none;
+}
+
+.boton-icono-accion:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.boton-icono-accion::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 0.4rem);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--color-texto);
+    color: var(--color-superficie);
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+    padding: 0.3rem 0.6rem;
+    border-radius: var(--radio-chico);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transicion);
+    z-index: 20;
+}
+
+.boton-icono-accion:hover::after,
+.boton-icono-accion:focus-visible::after {
+    opacity: 1;
+}
+
+.boton-icono-accion:disabled::after {
+    content: none;
+}
+
+.tabla-bulk-seleccionable .columna-seleccion {
+    display: none;
+}
+
+.tabla-bulk-seleccionable.modo-seleccion .columna-seleccion {
+    display: table-cell;
 }
 
 .subtitulo-seccion {

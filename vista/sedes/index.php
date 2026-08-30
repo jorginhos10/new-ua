@@ -1,7 +1,10 @@
 <?php $tituloPagina = 'Sedes'; require __DIR__ . '/../parciales/encabezado.php'; ?>
 
     <div class="tarjeta">
-        <h1>Sedes</h1>
+        <div class="tarjeta-encabezado">
+            <h1>Sedes</h1>
+            <?php $csvRuta = 'sedes'; $csvEtiqueta = 'Sedes'; require __DIR__ . '/../parciales/csv-configuracion.php'; ?>
+        </div>
 
         <?php if (!empty($error)): ?>
             <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>

@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../modelo/LineaInversion.php';
+require_once __DIR__ . '/../modelo/CsvConfiguracion.php';
 
 class LineaInversionControlador
 {
@@ -23,20 +24,54 @@ class LineaInversionControlador
             exit;
         }
 
+        if (($_GET['accion_csv'] ?? '') === 'plantilla') {
+            $this->exportarCsv();
+        }
+
         $error = '';
         $exito = '';
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            if (($_POST['accion'] ?? '') === 'cambiar_estado') {
-                $this->cambiarEstado();
-            }
+            $accion = $_POST['accion'] ?? '';
 
-            [$error, $exito] = $this->guardar();
+            if ($accion === 'cambiar_estado') {
+                $this->cambiarEstado();
+            } elseif ($accion === 'importar_csv') {
+                [$error, $exito] = $this->importarCsv();
+            } else {
+                [$error, $exito] = $this->guardar();
+            }
         }
 
         $lineasInversion = $this->modeloLineaInversion->obtenerTodas();
 
         require __DIR__ . '/../vista/lineas-inversion/index.php';
+    }
+
+    private function exportarCsv(): void
+    {
+        $filas = array_map(
+            static fn (array $l): array => [$l['codigo'], $l['nombre'], $l['descripcion'], $l['estado']],
+            $this->modeloLineaInversion->obtenerTodas()
+        );
+
+        CsvConfiguracion::exportar('lineas_inversion.csv', ['codigo', 'nombre', 'descripcion', 'estado'], $filas);
+    }
+
+    private function importarCsv(): array
+    {
+        $filas = CsvConfiguracion::leerArchivoSubido($_FILES['archivo_csv'] ?? []);
+
+        if ($filas === null) {
+            return ['No se pudo leer el archivo CSV. Verifica que el archivo tenga el formato correcto.', ''];
+        }
+
+        $resultado = $this->modeloLineaInversion->sincronizarDesdeCsv($filas);
+
+        $mensaje = 'Se crearon ' . $resultado['creados'] . ', se actualizaron ' . $resultado['actualizados']
+            . ' y se desactivaron ' . $resultado['desactivados'] . ' línea(s) de inversión.';
+
+        return ['', $mensaje];
     }
 
     private function cambiarEstado(): void

@@ -1,7 +1,10 @@
 <?php $tituloPagina = 'Roles'; require __DIR__ . '/../parciales/encabezado.php'; ?>
 
     <div class="tarjeta">
-        <h1>Roles</h1>
+        <div class="tarjeta-encabezado">
+            <h1>Roles</h1>
+            <?php $csvRuta = 'roles'; $csvEtiqueta = 'Roles'; require __DIR__ . '/../parciales/csv-configuracion.php'; ?>
+        </div>
         <p class="texto-atenuado">El orden define la jerarquía entre roles (1 = más alto).</p>
 
         <?php if (!empty($error)): ?>

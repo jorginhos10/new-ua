@@ -17,33 +17,64 @@ require __DIR__ . '/../parciales/encabezado.php';
 ?>
 
     <div class="tarjeta">
-        <div class="cabecera-modulo">
-            <div class="cabecera-modulo-titulo">
-                <h1>Extensión</h1>
-                <?php if (!empty($autogestionItems)): ?>
-                <select class="selector-autogestion-item" onchange="if (this.value) { window.location.href = this.value; }">
-                    <?php foreach ($autogestionItems as $itemAutogestion): ?>
-                    <option
-                        value="index.php?ruta=extension&tab=<?= htmlspecialchars($tab) ?>&autogestion_id=<?= (int) $itemAutogestion['id'] ?>&anio_id=<?= (int) $anioSeleccionadoId ?>"
-                        <?= $autogestionSeleccionadoId === (int) $itemAutogestion['id'] ? 'selected' : '' ?>
-                    ><?= htmlspecialchars($itemAutogestion['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <?php endif; ?>
-            </div>
-            <div class="grupo-acciones-encabezado">
-                <button
-                    type="button"
-                    id="boton-abrir-modal-enviar-todo-extension"
-                    class="boton-accion boton-accion-enviar"
-                    <?= $puedeEnviarTodo ? '' : 'disabled' ?>
-                    title="<?= $puedeEnviarTodo ? 'Enviar todos los ingresos y egresos en borrador de este ítem' : 'Disponible cuando el total de egresos sea igual al total de ingresos de este ítem' ?>"
-                >Enviar todo</button>
-                <?php if ($catalogosListos): ?>
-                <button type="button" id="boton-abrir-modal-gasto" class="boton-agregar">+ Agregar <?= $tab === 'ingresos' ? 'ingreso' : 'egreso' ?></button>
-                <?php endif; ?>
-            </div>
-        </div>
+        <?php
+        $barraTituloExtra = null;
+        if (!empty($autogestionItems)) {
+            ob_start();
+            ?>
+            <select class="selector-autogestion-item" onchange="if (this.value) { window.location.href = this.value; }">
+                <?php foreach ($autogestionItems as $itemAutogestion): ?>
+                <option
+                    value="index.php?ruta=extension&tab=<?= htmlspecialchars($tab) ?>&autogestion_id=<?= (int) $itemAutogestion['id'] ?>&anio_id=<?= (int) $anioSeleccionadoId ?>"
+                    <?= $autogestionSeleccionadoId === (int) $itemAutogestion['id'] ? 'selected' : '' ?>
+                ><?= htmlspecialchars($itemAutogestion['nombre']) ?></option>
+                <?php endforeach; ?>
+            </select>
+            <?php
+            $barraTituloExtra = ob_get_clean();
+        }
+
+        $barraTitulo = 'Extensión';
+        $barraBotonesSecundarios = [
+            [
+                'id' => 'boton-seleccionar-extension',
+                'icono' => 'seleccionar',
+                'etiqueta' => 'Seleccionar elementos',
+            ],
+            [
+                'id' => 'boton-editar-extension',
+                'icono' => 'editar',
+                'etiqueta' => 'Editar seleccionado',
+                'disabled' => true,
+                'titulo_disabled' => 'Selecciona exactamente un elemento',
+            ],
+            [
+                'id' => 'boton-duplicar-extension',
+                'icono' => 'duplicar',
+                'etiqueta' => 'Duplicar seleccionados',
+                'disabled' => true,
+                'titulo_disabled' => 'Selecciona uno o más elementos',
+            ],
+            [
+                'id' => 'boton-eliminar-extension',
+                'icono' => 'eliminar',
+                'etiqueta' => 'Eliminar seleccionados',
+                'disabled' => true,
+                'titulo_disabled' => 'Selecciona uno o más elementos',
+            ],
+            [
+                'id' => 'boton-abrir-modal-enviar-todo-extension',
+                'icono' => 'enviar',
+                'etiqueta' => 'Enviar todos los ingresos y egresos en borrador de este ítem',
+                'disabled' => !$puedeEnviarTodo,
+                'titulo_disabled' => 'Disponible cuando el total de egresos sea igual al total de ingresos de este ítem',
+            ],
+        ];
+        $barraBotonPrincipal = $catalogosListos
+            ? ['id' => 'boton-abrir-modal-gasto', 'etiqueta' => '+ Agregar ' . ($tab === 'ingresos' ? 'ingreso' : 'egreso')]
+            : null;
+        require __DIR__ . '/../parciales/barra-modulo.php';
+        ?>
 
         <div class="pestanas">
             <a href="index.php?ruta=extension&tab=ingresos" class="pestana<?= $tab === 'ingresos' ? ' activa' : '' ?>">Ingresos</a>
@@ -143,10 +174,21 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php endif; ?>
 
         <?php if ($tab === 'egresos'): ?>
-        <div class="tabla-scroll">
+        <div
+            class="tabla-scroll tabla-bulk-seleccionable"
+            data-boton-seleccionar="boton-seleccionar-extension"
+            data-boton-editar="boton-editar-extension"
+            data-boton-duplicar="boton-duplicar-extension"
+            data-boton-eliminar="boton-eliminar-extension"
+            data-accion-form="index.php?ruta=extension&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>"
+            data-accion-eliminar="eliminar_seleccionados"
+            data-accion-duplicar="duplicar_seleccionados"
+            data-tab="egresos"
+        >
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
                         <th>Acciones</th>
                         <th>Estado</th>
                         <th>Categoría</th>
@@ -173,12 +215,17 @@ require __DIR__ . '/../parciales/encabezado.php';
                         : [];
                     ?>
                     <tr>
+                        <td class="columna-seleccion">
+                            <?php if ($gasto['tipo_automatico'] === null && $gasto['estado'] === 'borrador'): ?>
+                            <input type="checkbox" class="checkbox-bulk-fila" data-id="<?= (int) $gasto['id'] ?>">
+                            <?php endif; ?>
+                        </td>
                         <td class="celda-acciones">
                             <?php if ($gasto['tipo_automatico'] === null && $gasto['estado'] === 'borrador'): ?>
                             <div class="acciones-fila">
                                 <button
                                     type="button"
-                                    class="boton-accion boton-accion-editar boton-editar-egreso"
+                                    class="boton-accion boton-accion-editar boton-editar-egreso boton-editar-fila-generico"
                                     data-gasto="<?= htmlspecialchars(json_encode($gasto)) ?>"
                                 >Editar</button>
                                 <form method="POST" action="index.php?ruta=extension&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>" class="form-eliminar-egreso">
@@ -213,17 +260,28 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <?php endforeach; ?>
                     <?php if (empty($gastos)): ?>
                     <tr>
-                        <td colspan="16">No hay egresos registrados.</td>
+                        <td colspan="17">No hay egresos registrados.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
             </table>
         </div>
         <?php else: ?>
-        <div class="tabla-scroll">
+        <div
+            class="tabla-scroll tabla-bulk-seleccionable"
+            data-boton-seleccionar="boton-seleccionar-extension"
+            data-boton-editar="boton-editar-extension"
+            data-boton-duplicar="boton-duplicar-extension"
+            data-boton-eliminar="boton-eliminar-extension"
+            data-accion-form="index.php?ruta=extension&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>"
+            data-accion-eliminar="eliminar_seleccionados"
+            data-accion-duplicar="duplicar_seleccionados"
+            data-tab="ingresos"
+        >
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
                         <th>Acciones</th>
                         <th>Estado</th>
                         <th>Dependencia</th>
@@ -236,12 +294,17 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <tbody>
                     <?php foreach ($gastos as $ingreso): ?>
                     <tr>
+                        <td class="columna-seleccion">
+                            <?php if ($ingreso['estado'] === 'borrador'): ?>
+                            <input type="checkbox" class="checkbox-bulk-fila" data-id="<?= (int) $ingreso['id'] ?>">
+                            <?php endif; ?>
+                        </td>
                         <td class="celda-acciones">
                             <?php if ($ingreso['estado'] === 'borrador'): ?>
                             <div class="acciones-fila">
                                 <button
                                     type="button"
-                                    class="boton-accion boton-accion-editar boton-editar-ingreso"
+                                    class="boton-accion boton-accion-editar boton-editar-ingreso boton-editar-fila-generico"
                                     data-ingreso="<?= htmlspecialchars(json_encode($ingreso)) ?>"
                                 >Editar</button>
                                 <form method="POST" action="index.php?ruta=extension&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>" class="form-eliminar-ingreso">
@@ -283,7 +346,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <?php endforeach; ?>
                     <?php if (empty($gastos)): ?>
                     <tr>
-                        <td colspan="7">No hay ingresos registrados.</td>
+                        <td colspan="8">No hay ingresos registrados.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>

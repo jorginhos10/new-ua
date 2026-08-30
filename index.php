@@ -48,6 +48,7 @@ $rutaAMenuKey = [
     'peticiones' => 'peticiones',
     'consolidado-detalle' => 'peticiones',
     'consolidado-autogestion' => 'peticiones',
+    'peticiones-historial' => 'peticiones',
     'extension' => 'extension',
     'postgrado' => 'postgrado',
     'unisalud' => 'unisalud',
@@ -235,6 +236,10 @@ switch ($ruta) {
 
     case 'consolidado-autogestion':
         (new PeticionesControlador())->autogestion();
+        break;
+
+    case 'peticiones-historial':
+        (new PeticionesControlador())->historial();
         break;
 
     case 'jerarquias':

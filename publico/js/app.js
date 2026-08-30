@@ -3525,3 +3525,189 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
+
+/**
+ * Modal "Importar CSV" de los catálogos de Configuraciones (csv-configuracion.php): genérico,
+ * solo hay uno por página. Confirma explícitamente antes de enviar, ya que reemplaza datos.
+ */
+document.addEventListener('DOMContentLoaded', function () {
+    var botonAbrir = document.querySelector('.boton-abrir-modal-importar-csv');
+    var modal = document.querySelector('[id^="modal-importar-csv-"]');
+
+    if (!botonAbrir || !modal) {
+        return;
+    }
+
+    var botonCerrar = modal.querySelector('.boton-cerrar-modal-importar-csv');
+    var formulario = modal.querySelector('.form-confirmar-importar-csv');
+
+    function abrirModal() {
+        modal.classList.add('abierto');
+    }
+
+    function cerrarModal() {
+        modal.classList.remove('abierto');
+    }
+
+    botonAbrir.addEventListener('click', abrirModal);
+
+    if (botonCerrar) {
+        botonCerrar.addEventListener('click', cerrarModal);
+    }
+
+    if (formulario) {
+        formulario.addEventListener('submit', function (evento) {
+            var mensaje = formulario.dataset.mensajeConfirmar || '¿Confirmas que quieres reemplazar los datos existentes con el contenido de este archivo?';
+
+            if (!confirm(mensaje)) {
+                evento.preventDefault();
+            }
+        });
+    }
+
+    modal.addEventListener('click', function (evento) {
+        if (evento.target === modal) {
+            cerrarModal();
+        }
+    });
+
+    document.addEventListener('keydown', function (evento) {
+        if (evento.key === 'Escape') {
+            cerrarModal();
+        }
+    });
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    var envolturas = document.querySelectorAll('.tabla-bulk-seleccionable');
+
+    envolturas.forEach(function (envoltura) {
+        var checkboxTodos = envoltura.querySelector('.checkbox-bulk-todos');
+        var filas = envoltura.querySelectorAll('.checkbox-bulk-fila');
+        var botonSeleccionar = document.getElementById(envoltura.dataset.botonSeleccionar || '');
+        var botonEditar = document.getElementById(envoltura.dataset.botonEditar || '');
+        var botonDuplicar = document.getElementById(envoltura.dataset.botonDuplicar || '');
+        var botonEliminar = document.getElementById(envoltura.dataset.botonEliminar || '');
+
+        function obtenerSeleccionadas() {
+            return Array.prototype.filter.call(filas, function (casilla) { return casilla.checked; });
+        }
+
+        function actualizarBotones() {
+            var seleccionadas = obtenerSeleccionadas();
+            var hay = seleccionadas.length > 0;
+
+            if (botonEditar) { botonEditar.disabled = seleccionadas.length !== 1; }
+            if (botonDuplicar) { botonDuplicar.disabled = !hay; }
+            if (botonEliminar) { botonEliminar.disabled = !hay; }
+
+            if (checkboxTodos) {
+                checkboxTodos.checked = filas.length > 0 && seleccionadas.length === filas.length;
+            }
+        }
+
+        function limpiarSeleccion() {
+            filas.forEach(function (casilla) { casilla.checked = false; });
+            if (checkboxTodos) { checkboxTodos.checked = false; }
+            actualizarBotones();
+        }
+
+        function enviarAccion(accion) {
+            var seleccionadas = obtenerSeleccionadas();
+
+            if (seleccionadas.length === 0) {
+                return;
+            }
+
+            var mensaje = accion === 'eliminar'
+                ? '¿Eliminar ' + seleccionadas.length + ' elemento(s) seleccionado(s)? Esta acción no se puede deshacer.'
+                : '¿Duplicar ' + seleccionadas.length + ' elemento(s) seleccionado(s)?';
+
+            if (!confirm(mensaje)) {
+                return;
+            }
+
+            var accionValor = accion === 'eliminar' ? envoltura.dataset.accionEliminar : envoltura.dataset.accionDuplicar;
+
+            if (!accionValor) {
+                return;
+            }
+
+            var formulario = document.createElement('form');
+            formulario.method = 'POST';
+            formulario.action = envoltura.dataset.accionForm || window.location.href;
+            formulario.style.display = 'none';
+
+            function agregarCampo(nombre, valor) {
+                var campo = document.createElement('input');
+                campo.type = 'hidden';
+                campo.name = nombre;
+                campo.value = valor;
+                formulario.appendChild(campo);
+            }
+
+            agregarCampo('accion', accionValor);
+
+            if (envoltura.dataset.tab) {
+                agregarCampo('tab', envoltura.dataset.tab);
+            }
+
+            seleccionadas.forEach(function (casilla) {
+                agregarCampo('id[]', casilla.dataset.id);
+            });
+
+            document.body.appendChild(formulario);
+            formulario.submit();
+        }
+
+        if (botonSeleccionar) {
+            botonSeleccionar.addEventListener('click', function () {
+                var activo = envoltura.classList.toggle('modo-seleccion');
+                botonSeleccionar.setAttribute('aria-pressed', activo ? 'true' : 'false');
+
+                if (!activo) {
+                    limpiarSeleccion();
+                }
+            });
+        }
+
+        filas.forEach(function (casilla) {
+            casilla.addEventListener('change', actualizarBotones);
+            casilla.addEventListener('click', function (evento) { evento.stopPropagation(); });
+        });
+
+        if (checkboxTodos) {
+            checkboxTodos.addEventListener('change', function () {
+                filas.forEach(function (casilla) { casilla.checked = checkboxTodos.checked; });
+                actualizarBotones();
+            });
+        }
+
+        if (botonEditar) {
+            botonEditar.addEventListener('click', function () {
+                var seleccionadas = obtenerSeleccionadas();
+
+                if (seleccionadas.length !== 1) {
+                    return;
+                }
+
+                var fila = seleccionadas[0].closest('tr');
+                var botonFila = fila ? fila.querySelector('.boton-editar-fila-generico') : null;
+
+                if (botonFila) {
+                    botonFila.click();
+                }
+            });
+        }
+
+        if (botonDuplicar) {
+            botonDuplicar.addEventListener('click', function () { enviarAccion('duplicar'); });
+        }
+
+        if (botonEliminar) {
+            botonEliminar.addEventListener('click', function () { enviarAccion('eliminar'); });
+        }
+
+        actualizarBotones();
+    });
+});

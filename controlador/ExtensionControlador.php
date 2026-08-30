@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../modelo/GastoExtension.php';
 require_once __DIR__ . '/../modelo/IngresoExtension.php';
+require_once __DIR__ . '/../modelo/DuplicadorFilas.php';
 require_once __DIR__ . '/../modelo/Linea.php';
 require_once __DIR__ . '/../modelo/Motor.php';
 require_once __DIR__ . '/../modelo/Proyecto.php';
@@ -112,6 +113,10 @@ class ExtensionControlador
                 [$error, $exito] = $this->actualizarIngreso();
             } elseif ($tab === 'ingresos' && $accion === 'eliminar') {
                 [$error, $exito] = $this->eliminarIngreso();
+            } elseif ($accion === 'eliminar_seleccionados') {
+                [$error, $exito] = $this->eliminarSeleccionados($tab);
+            } elseif ($accion === 'duplicar_seleccionados') {
+                [$error, $exito] = $this->duplicarSeleccionados($tab);
             } else {
                 [$error, $exito] = $tab === 'ingresos' ? $this->guardarIngreso() : $this->guardarEgreso();
             }
@@ -603,6 +608,90 @@ class ExtensionControlador
         );
 
         return ['', 'Ingreso eliminado correctamente.'];
+    }
+
+    private function eliminarSeleccionados(string $tab): array
+    {
+        $ids = array_map('intval', $_POST['id'] ?? []);
+        $eliminados = 0;
+
+        foreach ($ids as $id) {
+            if ($id <= 0) {
+                continue;
+            }
+
+            if ($tab === 'egresos') {
+                $existente = $this->modeloGasto->obtenerPorId($id);
+
+                if ($existente !== null && $existente['tipo_automatico'] === null) {
+                    $this->modeloGasto->eliminar($id);
+                    $eliminados++;
+                }
+            } else {
+                $existente = $this->modeloIngreso->obtenerPorId($id);
+
+                if ($existente !== null) {
+                    $this->modeloIngreso->eliminar($id);
+                    $this->generarEgresosAutomaticos(
+                        null,
+                        (int) $existente['anio_presupuestal_id'],
+                        (int) $existente['autogestion_id'],
+                        (string) $existente['dependencia']
+                    );
+                    $eliminados++;
+                }
+            }
+        }
+
+        if ($eliminados === 0) {
+            return ['No se eliminó ningún elemento.', ''];
+        }
+
+        return ['', 'Se eliminaron ' . $eliminados . ' elemento(s).'];
+    }
+
+    private function duplicarSeleccionados(string $tab): array
+    {
+        $ids = array_map('intval', $_POST['id'] ?? []);
+        $db = Conexion::obtener();
+        $duplicados = 0;
+
+        foreach ($ids as $id) {
+            if ($id <= 0) {
+                continue;
+            }
+
+            if ($tab === 'egresos') {
+                $existente = $this->modeloGasto->obtenerPorId($id);
+
+                if ($existente !== null && $existente['tipo_automatico'] === null && DuplicadorFilas::duplicarFila($db, 'gastos_extension', $id) !== null) {
+                    $duplicados++;
+                }
+            } else {
+                $nuevoId = DuplicadorFilas::duplicarFila($db, 'ingresos_extension', $id);
+
+                if ($nuevoId !== null) {
+                    DuplicadorFilas::duplicarFilasHijo($db, 'ingresos_extension_conceptos', 'ingreso_id', $id, $nuevoId);
+                    $duplicados++;
+
+                    $nuevo = $this->modeloIngreso->obtenerPorId($nuevoId);
+                    if ($nuevo !== null) {
+                        $this->generarEgresosAutomaticos(
+                            null,
+                            (int) $nuevo['anio_presupuestal_id'],
+                            (int) $nuevo['autogestion_id'],
+                            (string) $nuevo['dependencia']
+                        );
+                    }
+                }
+            }
+        }
+
+        if ($duplicados === 0) {
+            return ['No se duplicó ningún elemento.', ''];
+        }
+
+        return ['', 'Se duplicaron ' . $duplicados . ' elemento(s).'];
     }
 
     private function generarEgresosAutomaticos(?int $ingresoId, int $anioPresupuestalId, int $autogestionId, string $dependencia): void

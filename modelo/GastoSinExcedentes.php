@@ -98,11 +98,11 @@ class GastoSinExcedentes
         return array_column($consulta->fetchAll(), 'dependencia');
     }
 
-    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaDestinoNombre, int $rolDestinatarioId): int
+    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaDestinoNombre, int $rolDestinatarioId, string $categoriaPeticion): int
     {
         $consulta = $this->db->prepare(
             "UPDATE gastos_sin_excedentes
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia = :dependencia
+             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia_destino = :dependencia, categoria_peticion = :categoria_peticion
              WHERE anio_presupuestal_id = :anio_presupuestal_id
                 AND estado = 'borrador'"
         );
@@ -110,6 +110,7 @@ class GastoSinExcedentes
             'anio_presupuestal_id' => $anioPresupuestalId,
             'dependencia' => $dependenciaDestinoNombre,
             'rol_destinatario_id' => $rolDestinatarioId,
+            'categoria_peticion' => $categoriaPeticion,
         ]);
 
         return $consulta->rowCount();

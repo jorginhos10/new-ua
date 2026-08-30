@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../modelo/SublineaInversion.php';
 require_once __DIR__ . '/../modelo/LineaInversion.php';
+require_once __DIR__ . '/../modelo/CsvConfiguracion.php';
 
 class SublineaInversionControlador
 {
@@ -26,21 +27,63 @@ class SublineaInversionControlador
             exit;
         }
 
+        if (($_GET['accion_csv'] ?? '') === 'plantilla') {
+            $this->exportarCsv();
+        }
+
         $error = '';
         $exito = '';
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            if (($_POST['accion'] ?? '') === 'cambiar_estado') {
-                $this->cambiarEstado();
-            }
+            $accion = $_POST['accion'] ?? '';
 
-            [$error, $exito] = $this->guardar();
+            if ($accion === 'cambiar_estado') {
+                $this->cambiarEstado();
+            } elseif ($accion === 'importar_csv') {
+                [$error, $exito] = $this->importarCsv();
+            } else {
+                [$error, $exito] = $this->guardar();
+            }
         }
 
         $sublineasInversion = $this->modeloSublineaInversion->obtenerTodas();
         $lineasInversion = $this->modeloLineaInversion->obtenerActivas();
 
         require __DIR__ . '/../vista/sublineas-inversion/index.php';
+    }
+
+    private function exportarCsv(): void
+    {
+        $filas = array_map(
+            static fn (array $s): array => [$s['codigo'], $s['nombre'], $s['descripcion'], $s['linea_codigo'], $s['estado']],
+            $this->modeloSublineaInversion->obtenerTodas()
+        );
+
+        CsvConfiguracion::exportar(
+            'sublineas_inversion.csv',
+            ['codigo', 'nombre', 'descripcion', 'linea_codigo', 'estado'],
+            $filas
+        );
+    }
+
+    private function importarCsv(): array
+    {
+        $filas = CsvConfiguracion::leerArchivoSubido($_FILES['archivo_csv'] ?? []);
+
+        if ($filas === null) {
+            return ['No se pudo leer el archivo CSV. Verifica que el archivo tenga el formato correcto.', ''];
+        }
+
+        $resultado = $this->modeloSublineaInversion->sincronizarDesdeCsv($filas);
+
+        $mensaje = 'Se crearon ' . $resultado['creados'] . ', se actualizaron ' . $resultado['actualizados']
+            . ' y se desactivaron ' . $resultado['desactivados'] . ' sublínea(s) de inversión.';
+
+        if ($resultado['ignorados'] > 0) {
+            $mensaje .= ' ' . $resultado['ignorados'] . ' fila(s) se ignoraron porque su línea de inversión no existe.';
+        }
+
+        return ['', $mensaje];
     }
 
     private function cambiarEstado(): void

@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../config/conexion.php';
+require_once __DIR__ . '/CsvConfiguracion.php';
 
 /**
  * Clasifica los rubros presupuestales por "capítulo" y "sección" (los dos primeros grupos de
@@ -84,5 +85,57 @@ class RubroCategoria
             static fn (array $fila): string => $fila['cap'] . '.' . $fila['seccion'],
             $consulta->fetchAll()
         );
+    }
+
+    /**
+     * Las filas de este catálogo no se crean ni se borran desde aquí (se derivan de los prefijos
+     * cap.sección realmente usados en Rubros, vía sincronizarPrefijos()); el CSV solo controla las 3
+     * marcas booleanas. Igual que el guardado por formulario, es un reemplazo total: cap.sección que
+     * no aparezca en el archivo queda sin marcar en las 3 categorías. Filas del CSV cuyo cap.sección
+     * no exista en el catálogo actual se ignoran (no se pueden inventar combinaciones nuevas).
+     */
+    public function sincronizarDesdeCsv(array $filas): array
+    {
+        $deseado = [];
+
+        foreach ($filas as $fila) {
+            $cap = trim($fila['cap'] ?? '');
+            $seccion = trim($fila['seccion'] ?? '');
+
+            if ($cap === '' || $seccion === '') {
+                continue;
+            }
+
+            $deseado[$cap . '.' . $seccion] = [
+                'autogestion' => $this->esVerdadero($fila['autogestion'] ?? ''),
+                'egresos' => $this->esVerdadero($fila['egresos'] ?? ''),
+                'proyectos' => $this->esVerdadero($fila['proyectos'] ?? ''),
+            ];
+        }
+
+        $actualizados = 0;
+
+        foreach ($this->obtenerTodos() as $existente) {
+            $clave = $existente['cap'] . '.' . $existente['seccion'];
+            $valores = $deseado[$clave] ?? ['autogestion' => false, 'egresos' => false, 'proyectos' => false];
+
+            $cambio = (bool) $existente['autogestion'] !== $valores['autogestion']
+                || (bool) $existente['egresos'] !== $valores['egresos']
+                || (bool) $existente['proyectos'] !== $valores['proyectos'];
+
+            if ($cambio) {
+                $this->guardar((int) $existente['id'], $valores['autogestion'], $valores['egresos'], $valores['proyectos']);
+                $actualizados++;
+            }
+
+            unset($deseado[$clave]);
+        }
+
+        return ['actualizados' => $actualizados, 'sin_coincidencia' => count($deseado)];
+    }
+
+    private function esVerdadero(string $valor): bool
+    {
+        return in_array(strtolower(trim($valor)), ['1', 'si', 'sí', 'true', 'x'], true);
     }
 }
