@@ -1,0 +1,462 @@
+<?php
+$tituloPagina = 'Gastos';
+$nombresMeses = [
+    1 => 'Ene', 2 => 'Feb', 3 => 'Mar', 4 => 'Abr',
+    5 => 'May', 6 => 'Jun', 7 => 'Jul', 8 => 'Ago',
+    9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dic',
+];
+$nombresMesesCompletos = [
+    1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril',
+    5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
+    9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
+];
+$catalogosListos = !empty($sedes) && !empty($lineas) && !empty($motores) && !empty($proyectos) && !empty($rubros) && !empty($aniosActivos);
+require __DIR__ . '/../parciales/encabezado.php';
+?>
+
+    <div class="tarjeta">
+        <div class="cabecera-modulo">
+            <h1>Gastos</h1>
+            <div class="grupo-acciones-encabezado">
+                <button
+                    type="button"
+                    id="boton-abrir-modal-enviar-todo-gasto"
+                    class="boton-accion boton-accion-enviar"
+                    <?= $puedeEnviarTodo ? '' : 'disabled' ?>
+                    title="<?= $puedeEnviarTodo ? 'Enviar todos los gastos en borrador' : 'Disponible cuando se haya ejecutado el 100% del presupuesto' ?>"
+                >Enviar todo</button>
+                <?php if ($catalogosListos): ?>
+                <button type="button" id="boton-abrir-modal-gasto" class="boton-agregar">+ Agregar gasto</button>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <?php if (!empty($error)): ?>
+            <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
+        <?php endif; ?>
+
+        <?php if (!empty($exito)): ?>
+            <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
+        <?php endif; ?>
+
+        <?php if (empty($sedes)): ?>
+            <p class="mensaje-error">Primero debes crear al menos una sede en <a href="index.php?ruta=sedes">Configuraciones &gt; Sedes</a>.</p>
+        <?php elseif (empty($lineas)): ?>
+            <p class="mensaje-error">Primero debes crear al menos una línea en <a href="index.php?ruta=lineas">Configuraciones &gt; Línea</a>.</p>
+        <?php elseif (empty($motores)): ?>
+            <p class="mensaje-error">Primero debes crear al menos un motor en <a href="index.php?ruta=motores">Configuraciones &gt; Motor</a>.</p>
+        <?php elseif (empty($proyectos)): ?>
+            <p class="mensaje-error">Primero debes crear al menos un proyecto en <a href="index.php?ruta=proyectos">Configuraciones &gt; Proyecto</a>.</p>
+        <?php elseif (empty($rubros)): ?>
+            <p class="mensaje-error">Primero debes crear al menos un rubro en <a href="index.php?ruta=rubros">Configuraciones &gt; Rubros</a>.</p>
+        <?php elseif (empty($aniosActivos)): ?>
+            <p class="mensaje-error">Primero debes crear un año presupuestal activo en <a href="index.php?ruta=anios-presupuestales">Configuraciones &gt; Año presupuestal</a>.</p>
+        <?php endif; ?>
+
+        <?php if (count($aniosActivos) >= 2): ?>
+            <form method="GET" action="index.php" class="form-filtro-anio">
+                <input type="hidden" name="ruta" value="gastos">
+                <label for="anio_id_filtro">Año presupuestal</label>
+                <select id="anio_id_filtro" name="anio_id" onchange="this.form.submit()">
+                    <?php foreach ($aniosActivos as $anioFila): ?>
+                    <option value="<?= (int) $anioFila['id'] ?>" <?= $anioSeleccionadoId === (int) $anioFila['id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars((string) $anioFila['anio']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </form>
+        <?php endif; ?>
+
+        <?php if ($anioSeleccionado): ?>
+            <div class="progreso-presupuesto">
+                <div class="progreso-presupuesto-info">
+                    <span class="progreso-presupuesto-porcentaje">
+                        <?php if ($presupuestoAnio > 0): ?>
+                            <?= number_format($porcentajeGastado, 1) ?>% del <?= $dependenciaUsuarioEsRaiz ? 'presupuesto' : 'techo' ?> <?= (int) $anioSeleccionado['anio'] ?><?= $dependenciaUsuarioEsRaiz ? '' : ' de tu dependencia' ?>
+                            (<?= number_format($totalGastado, 2) ?> / <?= number_format($presupuestoAnio, 2) ?>)
+                        <?php elseif ($dependenciaUsuarioId === null): ?>
+                            No tienes una dependencia asignada, así que no se puede mostrar un techo presupuestal.
+                        <?php else: ?>
+                            Tu dependencia no tiene techo presupuestal asignado para este año.
+                        <?php endif; ?>
+                    </span>
+                    <span class="progreso-presupuesto-dias">Día <?= $diaActual ?>/<?= $totalDiasAnio ?></span>
+                </div>
+                <?php if ($puedeVerTechos): ?>
+                <a href="index.php?ruta=techos" class="barra-progreso" title="Ir a Techos">
+                    <div class="barra-progreso-relleno" style="width: <?= number_format($porcentajeGastado, 2, '.', '') ?>%;"></div>
+                </a>
+                <?php else: ?>
+                <div class="barra-progreso" title="Techo presupuestal (solo informativo)">
+                    <div class="barra-progreso-relleno" style="width: <?= number_format($porcentajeGastado, 2, '.', '') ?>%;"></div>
+                </div>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
+        <div class="tabla-scroll">
+            <table class="tabla-usuarios">
+                <thead>
+                    <tr>
+                        <th>Acciones</th>
+                        <th>Estado</th>
+                        <th>Sede</th>
+                        <th>Dependencia</th>
+                        <th>Línea estratégica</th>
+                        <th>Motor de desarrollo</th>
+                        <th>Proyecto PDI</th>
+                        <th>Contratos comunes</th>
+                        <th>Actividad</th>
+                        <th>Rubro</th>
+                        <th>Insumo</th>
+                        <th>Cantidad</th>
+                        <th>Costo unitario</th>
+                        <th>Valor total</th>
+                        <th>Meses</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($gastos as $gasto): ?>
+                    <?php
+                    $mesesGasto = $gasto['meses'] !== ''
+                        ? array_map(static fn ($mes) => $nombresMeses[(int) $mes] ?? $mes, explode(',', $gasto['meses']))
+                        : [];
+                    ?>
+                    <tr>
+                        <td class="celda-acciones">
+                            <?php if ($gasto['estado'] === 'borrador'): ?>
+                            <div class="acciones-fila">
+                                <button
+                                    type="button"
+                                    class="boton-accion boton-accion-editar boton-editar-gasto"
+                                    data-gasto="<?= htmlspecialchars(json_encode($gasto)) ?>"
+                                >Editar</button>
+                                <form method="POST" action="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-eliminar-gasto">
+                                    <input type="hidden" name="accion" value="eliminar">
+                                    <input type="hidden" name="id" value="<?= (int) $gasto['id'] ?>">
+                                    <button type="submit" class="boton-accion boton-accion-eliminar">Eliminar</button>
+                                </form>
+                            </div>
+                            <?php else: ?>
+                            <span class="texto-atenuado">—</span>
+                            <?php endif; ?>
+                        </td>
+                        <td><span class="badge-rol badge-<?= htmlspecialchars($gasto['estado']) ?>"><?= $gasto['estado'] === 'enviado' ? 'Enviado' : 'Borrador' ?></span></td>
+                        <td><?= htmlspecialchars($gasto['sede_codigo'] . ' - ' . $gasto['sede_nombre']) ?></td>
+                        <td><?= htmlspecialchars($gasto['dependencia']) ?></td>
+                        <td><?= htmlspecialchars($gasto['linea_codigo'] . ' - ' . $gasto['linea_nombre']) ?></td>
+                        <td><?= htmlspecialchars($gasto['motor_codigo'] . ' - ' . $gasto['motor_nombre']) ?></td>
+                        <td><?= htmlspecialchars($gasto['proyecto_codigo'] . ' - ' . $gasto['proyecto_nombre']) ?></td>
+                        <td><?= htmlspecialchars($gasto['objeto_proyecto_paa']) ?></td>
+                        <td><?= htmlspecialchars($gasto['actividad']) ?></td>
+                        <td><?= $gasto['rubro_id'] !== null ? htmlspecialchars($gasto['rubro_codigo'] . ' - ' . $gasto['rubro_descripcion']) : htmlspecialchars($gasto['rubro_texto'] ?? '—') ?></td>
+                        <td><?= htmlspecialchars($gasto['insumo']) ?></td>
+                        <td><?= (int) $gasto['cantidad'] ?></td>
+                        <td><?= number_format((float) $gasto['costo_unitario'], 2) ?></td>
+                        <td><?= number_format((float) $gasto['valor_total'], 2) ?></td>
+                        <td><?= htmlspecialchars(implode(', ', $mesesGasto)) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                    <?php if (empty($gastos)): ?>
+                    <tr>
+                        <td colspan="15">No hay gastos registrados.</td>
+                    </tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <?php if ($catalogosListos): ?>
+    <div id="modal-gasto" class="modal-fondo<?= !empty($error) && $accion !== 'actualizar' ? ' abierto' : '' ?>">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Registrar gasto</h2>
+                <button type="button" id="boton-cerrar-modal-gasto" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <?php if (!empty($error) && $accion !== 'actualizar'): ?>
+            <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
+            <?php endif; ?>
+
+            <form method="POST" action="index.php?ruta=gastos" class="form-necesidad">
+                <div class="campo">
+                    <label for="anio_presupuestal_id">Año presupuestal *</label>
+                    <select id="anio_presupuestal_id" name="anio_presupuestal_id" required>
+                        <option value="">Selecciona un año</option>
+                        <?php foreach ($aniosActivos as $anioOpcion): ?>
+                        <option value="<?= (int) $anioOpcion['id'] ?>" <?= $anioSeleccionadoId === (int) $anioOpcion['id'] ? 'selected' : '' ?>><?= htmlspecialchars((string) $anioOpcion['anio']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="campo">
+                    <label for="sede_id">Sede *</label>
+                    <select id="sede_id" name="sede_id" required>
+                        <option value="">Selecciona una sede</option>
+                        <?php foreach ($sedes as $sede): ?>
+                        <option value="<?= (int) $sede['id'] ?>"><?= htmlspecialchars($sede['codigo'] . ' - ' . $sede['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="campo">
+                    <label for="<?= (!$tieneHijas && $dependenciaPorDefecto !== null) ? 'dependencia' : 'dependencia_buscador' ?>">Dependencia *</label>
+                    <?php if (!$tieneHijas && $dependenciaPorDefecto !== null): ?>
+                    <select disabled>
+                        <option selected><?= htmlspecialchars($dependenciaPorDefecto) ?></option>
+                    </select>
+                    <input type="hidden" name="dependencia" id="dependencia" value="<?= htmlspecialchars($dependenciaPorDefecto) ?>">
+                    <?php else: ?>
+                    <?php
+                    $idPrefijoDependencia = '';
+                    $nombreCampoDependencia = 'dependencia';
+                    $dependenciasOpciones = $dependenciasSugeridas;
+                    $dependenciaValorInicial = $dependenciaPorDefecto;
+                    require __DIR__ . '/../parciales/selector-dependencia.php';
+                    ?>
+                    <?php endif; ?>
+                </div>
+
+                <?php $idPrefijoProyecto = ''; $proyectosPdi = $proyectos; require __DIR__ . '/../parciales/selector-proyecto-pdi.php'; ?>
+
+                <?php $idPrefijoContrato = ''; require __DIR__ . '/../parciales/selector-contrato-comun.php'; ?>
+
+                <div class="campo campo-ancho">
+                    <label for="actividad">Actividad *</label>
+                    <input type="text" id="actividad" name="actividad" placeholder="Diligenciar" required>
+                </div>
+
+                <div class="campo campo-ancho">
+                    <label for="rubro_buscador">Rubro *</label>
+                    <div class="selector-buscable" id="selector-rubro">
+                        <input type="text" id="rubro_buscador" class="selector-buscable-input" placeholder="Buscar rubro..." autocomplete="off">
+                        <input type="hidden" name="rubro_id" id="rubro_id">
+                        <div class="selector-buscable-lista" id="rubro_lista">
+                            <?php foreach ($rubros as $rubro): ?>
+                            <div class="selector-buscable-opcion" data-id="<?= (int) $rubro['id'] ?>" data-texto="<?= htmlspecialchars($rubro['codigo'] . ' - ' . $rubro['descripcion']) ?>">
+                                <?= htmlspecialchars($rubro['codigo'] . ' - ' . $rubro['descripcion']) ?>
+                            </div>
+                            <?php endforeach; ?>
+                            <div class="selector-buscable-vacio">Sin resultados.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="campo">
+                    <label for="insumo">Insumo *</label>
+                    <input type="text" id="insumo" name="insumo" placeholder="Diligenciar" required>
+                </div>
+
+                <div class="campo">
+                    <label for="cantidad">Cantidad *</label>
+                    <input type="number" id="cantidad" name="cantidad" min="1" step="1" required>
+                </div>
+
+                <div class="campo">
+                    <label for="costo_unitario">Costo unitario *</label>
+                    <input type="number" id="costo_unitario" name="costo_unitario" min="0" step="0.01" required>
+                </div>
+
+                <div class="campo campo-ancho">
+                    <label>Meses de ejecución *</label>
+                    <div class="calendario-meses-envoltorio">
+                        <div class="calendario-meses">
+                            <div class="calendario-meses-cabecera">Calendario</div>
+                            <div class="calendario-meses-grilla">
+                                <?php foreach ($nombresMesesCompletos as $numero => $nombre): ?>
+                                <label class="mes-celda">
+                                    <input type="checkbox" name="meses[]" value="<?= $numero ?>">
+                                    <span><?= htmlspecialchars($nombre) ?></span>
+                                </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+
+                        <div class="resumen-meses">
+                            <h3>Distribución del presupuesto</h3>
+                            <ul id="lista-meses-seleccionados" class="lista-meses-seleccionados">
+                                <li class="lista-meses-vacio">Selecciona los meses de ejecución.</li>
+                            </ul>
+                            <div class="resumen-meses-total">
+                                <span>Total</span>
+                                <span id="resumen-meses-total-valor" class="resumen-meses-total-valor">$0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="boton-enviar">Registrar gasto</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-editar-gasto" class="modal-fondo<?= !empty($error) && $accion === 'actualizar' ? ' abierto' : '' ?>">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Editar gasto</h2>
+                <button type="button" id="boton-cerrar-modal-editar-gasto" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <?php if (!empty($error) && $accion === 'actualizar'): ?>
+            <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
+            <?php endif; ?>
+
+            <form method="POST" action="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-necesidad">
+                <input type="hidden" name="accion" value="actualizar">
+                <input type="hidden" name="id" id="editar-gasto-id" value="">
+
+                <div class="campo">
+                    <label for="editar-anio_presupuestal_id">Año presupuestal *</label>
+                    <select id="editar-anio_presupuestal_id" name="anio_presupuestal_id" required>
+                        <option value="">Selecciona un año</option>
+                        <?php foreach ($aniosActivos as $anioOpcion): ?>
+                        <option value="<?= (int) $anioOpcion['id'] ?>"><?= htmlspecialchars((string) $anioOpcion['anio']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="campo">
+                    <label for="editar-sede_id">Sede *</label>
+                    <select id="editar-sede_id" name="sede_id" required>
+                        <option value="">Selecciona una sede</option>
+                        <?php foreach ($sedes as $sede): ?>
+                        <option value="<?= (int) $sede['id'] ?>"><?= htmlspecialchars($sede['codigo'] . ' - ' . $sede['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="campo">
+                    <label for="<?= (!$tieneHijas && $dependenciaPorDefecto !== null) ? 'editar-dependencia' : 'editar-dependencia_buscador' ?>">Dependencia *</label>
+                    <?php if (!$tieneHijas && $dependenciaPorDefecto !== null): ?>
+                    <select disabled>
+                        <option selected><?= htmlspecialchars($dependenciaPorDefecto) ?></option>
+                    </select>
+                    <input type="hidden" name="dependencia" id="editar-dependencia" value="<?= htmlspecialchars($dependenciaPorDefecto) ?>">
+                    <?php else: ?>
+                    <?php
+                    $idPrefijoDependencia = 'editar-';
+                    $nombreCampoDependencia = 'dependencia';
+                    $dependenciasOpciones = $dependenciasSugeridas;
+                    require __DIR__ . '/../parciales/selector-dependencia.php';
+                    ?>
+                    <?php endif; ?>
+                </div>
+
+                <?php $idPrefijoProyecto = 'editar-'; $proyectosPdi = $proyectos; require __DIR__ . '/../parciales/selector-proyecto-pdi.php'; ?>
+
+                <?php $idPrefijoContrato = 'editar-'; require __DIR__ . '/../parciales/selector-contrato-comun.php'; ?>
+
+                <div class="campo campo-ancho">
+                    <label for="editar-actividad">Actividad *</label>
+                    <input type="text" id="editar-actividad" name="actividad" placeholder="Diligenciar" required>
+                </div>
+
+                <div class="campo campo-ancho">
+                    <label for="editar-rubro_buscador">Rubro *</label>
+                    <div class="selector-buscable" id="editar-selector-rubro">
+                        <input type="text" id="editar-rubro_buscador" class="selector-buscable-input" placeholder="Buscar rubro..." autocomplete="off">
+                        <input type="hidden" name="rubro_id" id="editar-rubro_id">
+                        <div class="selector-buscable-lista" id="editar-rubro_lista">
+                            <?php foreach ($rubros as $rubro): ?>
+                            <div class="selector-buscable-opcion" data-id="<?= (int) $rubro['id'] ?>" data-texto="<?= htmlspecialchars($rubro['codigo'] . ' - ' . $rubro['descripcion']) ?>">
+                                <?= htmlspecialchars($rubro['codigo'] . ' - ' . $rubro['descripcion']) ?>
+                            </div>
+                            <?php endforeach; ?>
+                            <div class="selector-buscable-vacio">Sin resultados.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="campo">
+                    <label for="editar-insumo">Insumo *</label>
+                    <input type="text" id="editar-insumo" name="insumo" placeholder="Diligenciar" required>
+                </div>
+
+                <div class="campo">
+                    <label for="editar-cantidad">Cantidad *</label>
+                    <input type="number" id="editar-cantidad" name="cantidad" min="1" step="1" required>
+                </div>
+
+                <div class="campo">
+                    <label for="editar-costo_unitario">Costo unitario *</label>
+                    <input type="number" id="editar-costo_unitario" name="costo_unitario" min="0" step="0.01" required>
+                </div>
+
+                <div class="campo campo-ancho">
+                    <label>Meses de ejecución *</label>
+                    <div class="calendario-meses-envoltorio">
+                        <div class="calendario-meses">
+                            <div class="calendario-meses-cabecera">Calendario</div>
+                            <div class="calendario-meses-grilla">
+                                <?php foreach ($nombresMesesCompletos as $numero => $nombre): ?>
+                                <label class="mes-celda">
+                                    <input type="checkbox" name="meses[]" value="<?= $numero ?>">
+                                    <span><?= htmlspecialchars($nombre) ?></span>
+                                </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+
+                        <div class="resumen-meses">
+                            <h3>Distribución del presupuesto</h3>
+                            <ul class="lista-meses-seleccionados">
+                                <li class="lista-meses-vacio">Selecciona los meses de ejecución.</li>
+                            </ul>
+                            <div class="resumen-meses-total">
+                                <span>Total</span>
+                                <span class="resumen-meses-total-valor">$0.00</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit" class="boton-enviar">Guardar cambios</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-enviar-todo-gasto" class="modal-fondo">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Enviar todos los gastos</h2>
+                <button type="button" id="boton-cerrar-modal-enviar-todo-gasto" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <p class="texto-atenuado">Se enviarán todos los gastos en borrador de la dependencia seleccionada para el año presupuestal actual.</p>
+
+            <form method="POST" action="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-necesidad form-confirmar-envio" data-campo-dependencia="enviar-todo-gasto-dependencia" data-campo-rol="enviar-todo-gasto-rol">
+                <input type="hidden" name="accion" value="enviar_todo">
+                <input type="hidden" name="anio_presupuestal_id" value="<?= (int) $anioSeleccionadoId ?>">
+
+                <div class="campo">
+                    <label for="enviar-todo-gasto-dependencia_buscador">Dependencia *</label>
+                    <?php
+                    $idPrefijoDependencia = 'enviar-todo-gasto-';
+                    $nombreCampoDependencia = 'dependencia';
+                    $dependenciasOpciones = $dependenciasConTipo;
+                    $dependenciaDataSelectRol = 'enviar-todo-gasto-rol';
+                    require __DIR__ . '/../parciales/selector-dependencia.php';
+                    ?>
+                </div>
+
+                <div class="campo">
+                    <label for="enviar-todo-gasto-rol">Rol al que se enviará *</label>
+                    <select id="enviar-todo-gasto-rol" name="rol_destinatario_id" required>
+                        <option value="">Selecciona un rol</option>
+                        <?php foreach ($roles as $rolOpcion): ?>
+                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <button type="submit" class="boton-enviar">Enviar todo</button>
+            </form>
+        </div>
+    </div>
+
+    <script type="application/json" id="datos-roles-por-tipo"><?= json_encode($rolesPorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
+    <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+    <?php endif; ?>
+
+<?php require __DIR__ . '/../parciales/pie.php'; ?>

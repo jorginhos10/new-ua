@@ -1,0 +1,9 @@
+-- Catálogo de sedes
+USE new_ua;
+
+CREATE TABLE IF NOT EXISTS sedes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    codigo VARCHAR(20) NOT NULL UNIQUE,
+    nombre VARCHAR(150) NOT NULL,
+    creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

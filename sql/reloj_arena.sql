@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS reloj_arena_configuracion (
+    id INT PRIMARY KEY DEFAULT 1,
+    fecha_inicio DATE NOT NULL,
+    fecha_cierre DATE NOT NULL,
+    actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

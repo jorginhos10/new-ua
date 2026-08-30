@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"c:\\\\xampp\\\\htdocs\\\\new-ua\" && mkdir -p config modelo controlador vista/login vista/dashboard publico/css sql)",
+      "Bash(php -r \"echo password_hash\\('admin123', PASSWORD_DEFAULT\\);\")",
+      "Bash(\"/c/xampp/php/php.exe\" -r \"echo password_hash\\('admin123', PASSWORD_DEFAULT\\);\")",
+      "Bash(\"/c/xampp/mysql/bin/mysql.exe\" -u root -e \"SELECT 1\")",
+      "Bash(\"/c/xampp/mysql/bin/mysql.exe\" -u root)",
+      "Bash(\"/c/xampp/php/php.exe\" -S 127.0.0.1:8899)",
+      "Bash(curl -s -c /tmp/cookies.txt \"http://127.0.0.1:8899/index.php?ruta=login\" -o /tmp/login_page.html)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -b /tmp/cookies.txt -c /tmp/cookies.txt -X POST \"http://127.0.0.1:8899/index.php?ruta=login\" -d \"usuario=admin&password=incorrecta\" -o /tmp/login_fail.html)",
+      "Bash(curl -s -b /tmp/cookies.txt -c /tmp/cookies.txt -X POST \"http://127.0.0.1:8899/index.php?ruta=login\" -d \"usuario=admin&password=admin123\" -D /tmp/headers.txt -o /tmp/login_ok.html)",
+      "Bash(pkill -f \"php.exe -S 127.0.0.1:8899\")",
+      "Bash(curl -s -c /tmp/cookies.txt -X POST \"http://127.0.0.1:8899/index.php?ruta=login\" -d \"usuario=admin&password=admin123\" -D /tmp/headers.txt -o /dev/null)",
+      "Bash(curl -s -b /tmp/cookies.txt \"http://127.0.0.1:8899/index.php?ruta=dashboard\" -o /tmp/dash.html)",
+      "Bash(curl -s -b /tmp/cookies.txt -c /tmp/cookies.txt \"http://127.0.0.1:8899/index.php?ruta=logout\" -D /tmp/headers2.txt -o /dev/null)",
+      "Bash(/c/xampp/mysql/bin/mysql.exe -u root new_ua -e ' *)",
+      "Bash(curl -s -c /tmp/c_juan.txt -X POST \"http://127.0.0.1:8899/index.php?ruta=login\" -d \"usuario=juan&password=juan123\" -o /dev/null)",
+      "Bash(curl -s -b /tmp/c_juan.txt \"http://127.0.0.1:8899/index.php?ruta=formulario-invitado\" -o /tmp/form.html)",
+      "Bash(curl -s -b /tmp/c_juan.txt -X POST http://127.0.0.1:8899/index.php?ruta=formulario-invitado --data-urlencode 'linea_inversion=LINEA INFRAESTRUCTURA TECNOLOGICA' --data-urlencode 'sublinea_inversion=Equipos de Computo y de Tecnologia de la Informacion' --data-urlencode detalle_inversion= --data-urlencode sede=Norte --data-urlencode 'dependencia=Fac. Ciencias E' --data-urlencode programa_academico=Administracion --data-urlencode proyecto_pdi=L3M1P1 --data-urlencode 'articulacion_plan=Plan de Mejoramiento Renovacion Registro Calificado' --data-urlencode espacio_intervenir=403D --data-urlencode 'requisitos_normativos=Factor CNA, Condicion de calidad' --data-urlencode valor=15000000 --data-urlencode fuente_financiacion=Autogestion --data-urlencode responsable=Decano --data-urlencode observaciones= -o /tmp/form_post.html)"
+    ],
+    "additionalDirectories": [
+      "c:\\xampp\\htdocs\\new-ua"
+    ]
+  }
+}
