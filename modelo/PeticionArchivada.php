@@ -74,6 +74,19 @@ class PeticionArchivada
         ]);
     }
 
+    public function actualizarValor(string $origen, int $origenId, float $valor): bool
+    {
+        $consulta = $this->db->prepare(
+            'UPDATE peticiones_archivadas SET valor = :valor WHERE origen = :origen AND origen_id = :origen_id'
+        );
+
+        return $consulta->execute([
+            'valor' => $valor,
+            'origen' => $origen,
+            'origen_id' => $origenId,
+        ]);
+    }
+
     public function restaurar(int $id): bool
     {
         $consulta = $this->db->prepare('DELETE FROM peticiones_archivadas WHERE id = :id');
@@ -81,16 +94,33 @@ class PeticionArchivada
         return $consulta->execute(['id' => $id]);
     }
 
-    public function redireccionar(string $tipo, string $dependenciaDestino): int
+    /**
+     * Redirecciona ítems puntuales (por origen+origen_id), en vez de un tipo completo — permite
+     * redireccionar una selección arbitraria de ítems consolidados, de uno o varios tipos a la vez.
+     */
+    public function redireccionarItems(array $pares, string $dependenciaDestino): int
     {
+        if (empty($pares)) {
+            return 0;
+        }
+
         $consulta = $this->db->prepare(
             "UPDATE peticiones_archivadas
              SET accion = 'redireccionada', redireccionado_a_dependencia = :destino
-             WHERE tipo = :tipo AND accion = 'aprobada'"
+             WHERE origen = :origen AND origen_id = :origen_id AND accion = 'aprobada'"
         );
-        $consulta->execute(['destino' => $dependenciaDestino, 'tipo' => $tipo]);
 
-        return $consulta->rowCount();
+        $total = 0;
+        foreach ($pares as $par) {
+            $consulta->execute([
+                'destino' => $dependenciaDestino,
+                'origen' => $par['origen'],
+                'origen_id' => $par['origen_id'],
+            ]);
+            $total += $consulta->rowCount();
+        }
+
+        return $total;
     }
 
     public function obtenerRedireccionadas(): array

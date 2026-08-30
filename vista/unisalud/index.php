@@ -720,9 +720,24 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </select>
                 </div>
 
+                <div class="campo" style="display:none;">
+                    <label for="enviar-todo-unisalud-destinatario">¿A quién exactamente? *</label>
+                    <select
+                        id="enviar-todo-unisalud-destinatario"
+                        name="usuario_destinatario_id"
+                        class="selector-destinatario"
+                        data-campo-dependencia="enviar-todo-unisalud-destino"
+                        data-campo-rol="enviar-todo-unisalud-rol"
+                    >
+                        <option value="">Selecciona a quién enviarlo</option>
+                    </select>
+                </div>
+
                 <button type="submit" class="boton-enviar">Enviar todo</button>
             </form>
         </div>
     </div>
+
+    <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

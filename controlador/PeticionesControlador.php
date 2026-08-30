@@ -28,9 +28,11 @@ require_once __DIR__ . '/../modelo/Linea.php';
 require_once __DIR__ . '/../modelo/Motor.php';
 require_once __DIR__ . '/../modelo/Proyecto.php';
 require_once __DIR__ . '/../modelo/ExportadorExcel.php';
+require_once __DIR__ . '/../config/conexion.php';
 
 class PeticionesControlador
 {
+    private PDO $db;
     private SolicitudArl $modeloSolicitud;
     private SolicitudMonitor $modeloMonitor;
     private SolicitudOps $modeloOps;
@@ -65,8 +67,33 @@ class PeticionesControlador
 
     private const ORIGENES_AUTOGESTION = ['gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes', 'necesidad'];
 
+    private const TABLAS_ORIGEN = [
+        'arl' => 'solicitudes_arl',
+        'monitores' => 'solicitudes_monitores',
+        'ops' => 'solicitudes_ops',
+        'otros' => 'solicitudes_peticiones',
+        'necesidad' => 'necesidades_academicas',
+        'gasto_principal' => 'gastos',
+        'gasto_extension' => 'gastos_extension',
+        'gasto_postgrado' => 'gastos_postgrado',
+        'gasto_unisalud' => 'gastos_unisalud',
+        'gasto_sin_excedentes' => 'gastos_sin_excedentes',
+        'ingreso_extension' => 'ingresos_extension',
+        'ingreso_postgrado' => 'ingresos_postgrado',
+        'ingreso_unisalud' => 'ingresos_unisalud',
+        'ingreso_sin_excedentes' => 'ingresos_sin_excedentes',
+    ];
+
+    private const TABLAS_CONCEPTOS_ORIGEN = [
+        'ingreso_extension' => ['ingresos_extension_conceptos', 'ingreso_id'],
+        'ingreso_postgrado' => ['ingresos_postgrado_conceptos', 'ingreso_id'],
+        'ingreso_unisalud' => ['ingresos_unisalud_conceptos', 'ingreso_id'],
+        'ingreso_sin_excedentes' => ['ingresos_sin_excedentes_conceptos', 'ingreso_id'],
+    ];
+
     public function __construct()
     {
+        $this->db = Conexion::obtener();
         $this->modeloSolicitud = new SolicitudArl();
         $this->modeloMonitor = new SolicitudMonitor();
         $this->modeloOps = new SolicitudOps();
@@ -141,9 +168,17 @@ class PeticionesControlador
                 [$errorEliminar, $exitoEliminar] = $this->eliminarPendiente();
                 $_SESSION['peticiones_flash_error'] = $errorEliminar;
                 $_SESSION['peticiones_flash_exito'] = $exitoEliminar;
+            } elseif ($accion === 'editar_consolidado_grupo') {
+                [$errorEditar, $exitoEditar] = $this->editarConsolidadoGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorEditar;
+                $_SESSION['peticiones_flash_exito'] = $exitoEditar;
+            } elseif ($accion === 'duplicar_consolidado') {
+                [$errorDuplicar, $exitoDuplicar] = $this->duplicarConsolidadoGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorDuplicar;
+                $_SESSION['peticiones_flash_exito'] = $exitoDuplicar;
             }
 
-            $vistaDestino = $accion === 'aprobar' ? 'consolidado' : ($_POST['vista'] ?? 'pendientes');
+            $vistaDestino = $_POST['vista'] ?? 'pendientes';
             $destino = 'index.php?ruta=peticiones&vista=' . urlencode($vistaDestino);
             if (!empty($_POST['anio_id'])) {
                 $destino .= '&anio_id=' . (int) $_POST['anio_id'];
@@ -198,18 +233,39 @@ class PeticionesControlador
             }
         }
 
+        $filasDetalladasConsolidado = $vista === 'consolidado' ? $this->construirFilasDetalleCompleto($aprobados, $anioSeleccionadoId) : [];
+
         $consolidado = [];
-        foreach ($aprobados as $item) {
+        foreach ($aprobados as $indice => $item) {
             $tipo = $item['tipo'];
             if (!isset($consolidado[$tipo])) {
-                $consolidado[$tipo] = ['tipo' => $tipo, 'cantidad' => 0, 'ruta' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones', 'items' => []];
+                $consolidado[$tipo] = ['tipo' => $tipo, 'cantidad' => 0, 'ruta' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones', 'items' => [], 'puede_editar' => true];
             }
             $consolidado[$tipo]['cantidad']++;
+            $filaDetalle = $filasDetalladasConsolidado[$indice] ?? [];
+            if (empty($filaDetalle['puede_editar'])) {
+                $consolidado[$tipo]['puede_editar'] = false;
+            }
             $consolidado[$tipo]['items'][] = [
+                'origen' => $item['origen'],
+                'origen_id' => (int) $item['origen_id'],
+                'tipo' => $tipo,
                 'detalle' => $item['detalle'],
                 'cantidad' => $item['cantidad'],
                 'valor' => $item['valor'],
                 'ruta_ver' => $item['ruta_ver'],
+                'dependencia' => $filaDetalle['dependencia'] ?? $item['detalle'],
+                'sede' => $filaDetalle['sede'] ?? null,
+                'linea' => $filaDetalle['linea'] ?? null,
+                'motor' => $filaDetalle['motor'] ?? null,
+                'proyecto' => $filaDetalle['proyecto'] ?? null,
+                'objeto_proyecto_paa' => $filaDetalle['objeto_proyecto_paa'] ?? null,
+                'actividad' => $filaDetalle['actividad'] ?? null,
+                'rubro' => $filaDetalle['rubro'] ?? null,
+                'insumo' => $filaDetalle['insumo'] ?? null,
+                'costo_unitario' => $filaDetalle['costo_unitario'] ?? null,
+                'meses' => $filaDetalle['meses'] ?? null,
+                'techo' => $filaDetalle['techo'] ?? null,
             ];
         }
         $consolidado = array_values($consolidado);
@@ -221,7 +277,7 @@ class PeticionesControlador
         $archivados = $vista === 'archivar' ? $this->modeloArchivada->obtenerPorAccion('archivada') : [];
         $archivados = $this->filtrarPorDependencia($archivados, $dependenciasPermitidas);
 
-        $dependenciasSugeridas = $this->modeloDependencia->obtenerActivas();
+        $dependenciasSugeridas = $this->modeloDependencia->obtenerActivasParaEnvio();
         $roles = $this->modeloRol->obtenerTodos();
         $rolesPorTipo = $this->modeloTipoDependenciaRol->obtenerMapaCompleto();
         $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
@@ -246,6 +302,32 @@ class PeticionesControlador
             header('Location: index.php?ruta=dashboard');
             exit;
         }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            $accion = $_POST['accion'] ?? '';
+
+            if ($accion === 'editar_consolidado_grupo') {
+                [$_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']] = $this->editarConsolidadoGrupo();
+            } elseif ($accion === 'redireccionar_consolidado') {
+                [$_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']] = $this->redireccionarConsolidado();
+            } elseif ($accion === 'duplicar_consolidado') {
+                [$_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']] = $this->duplicarConsolidadoGrupo();
+            }
+
+            $destino = 'index.php?ruta=consolidado-detalle';
+            if (!empty($_POST['anio_id'])) {
+                $destino .= '&anio_id=' . (int) $_POST['anio_id'];
+            }
+            if (!empty($_POST['tipo_filtro'])) {
+                $destino .= '&tipo=' . urlencode($_POST['tipo_filtro']);
+            }
+            header('Location: ' . $destino);
+            exit;
+        }
+
+        $error = $_SESSION['peticiones_flash_error'] ?? '';
+        $exito = $_SESSION['peticiones_flash_exito'] ?? '';
+        unset($_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']);
 
         $anioSeleccionadoId = (int) ($_GET['anio_id'] ?? 0);
         $tipoFiltro = trim($_GET['tipo'] ?? '');
@@ -297,6 +379,9 @@ class PeticionesControlador
         }
 
         $anio = $anioSeleccionadoId > 0 ? $this->modeloAnio->obtenerPorId($anioSeleccionadoId) : null;
+        $roles = $this->modeloRol->obtenerTodos();
+        $dependenciasSugeridas = $this->modeloDependencia->obtenerActivasParaEnvio();
+        $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
 
         require __DIR__ . '/../vista/peticiones/consolidado-detalle.php';
     }
@@ -451,6 +536,8 @@ class PeticionesControlador
             $techo = $dependenciaOrigen !== null ? ($presupuestosPorDependenciaId[(int) $dependenciaOrigen['id']]['techo'] ?? null) : null;
 
             $fila = [
+                'origen' => $item['origen'],
+                'origen_id' => (int) $item['origen_id'],
                 'tipo' => $item['tipo'],
                 'dependencia' => $dependenciaNombre,
                 'sede' => '—',
@@ -467,6 +554,7 @@ class PeticionesControlador
                 'meses' => '—',
                 'techo' => $techo !== null ? (float) $techo : null,
                 'ruta_ver' => $item['ruta_ver'],
+                'puede_editar' => $this->esPropietarioActualDeItem($item),
             ];
 
             if ($gastoOriginal !== null) {
@@ -685,14 +773,184 @@ class PeticionesControlador
         return $filas;
     }
 
+    /**
+     * Determina si el usuario actual puede editar un ítem consolidado en este momento: o bien su
+     * propia dependencia coincide exactamente con la dependencia actual del ítem (no la foto fija
+     * guardada al aprobar), o bien su dependencia es "padre" (ancestra, a cualquier nivel) de la
+     * dependencia actual del ítem — todo padre puede editar lo que ya consolidaron sus hijas.
+     *
+     * Excepción: la Contribución a posgrado (5%) solo la puede editar el superadmin, o el Avalador/
+     * Gestor que está exactamente en DEPARTAMENTO DE POSTGRADOS (la dependencia con tipo
+     * "Departamento", no cualquiera de sus programas) — ni el resto de dependencias padres (esta
+     * regla general de jerarquía no aplica aquí) ni sus hijas (los programas académicos/gestores
+     * hijos tampoco), igual que en el propio módulo de Postgrado.
+     */
+    private function esPropietarioActualDeItem(array $item): bool
+    {
+        if ($item['origen'] === 'otros') {
+            return true;
+        }
+
+        $dependenciaActual = $this->resolverDependenciaActualItem($item);
+
+        if ($dependenciaActual === null || $dependenciaActual === '') {
+            return false;
+        }
+
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+
+        if ($usuarioActual === null) {
+            return false;
+        }
+
+        if ($this->esContribucionPostgrado($item)) {
+            if ((int) ($usuarioActual['es_super_admin'] ?? 0) === 1) {
+                return true;
+            }
+
+            if ($dependenciaActual !== 'DEPARTAMENTO DE POSTGRADOS') {
+                return false;
+            }
+
+            $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
+            $dependenciaUsuario = $dependenciaUsuarioId !== null ? $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId) : null;
+
+            return $dependenciaUsuario !== null
+                && $dependenciaUsuario['nombre'] === 'DEPARTAMENTO DE POSTGRADOS'
+                && ($dependenciaUsuario['tipo'] ?? null) === 'Departamento';
+        }
+
+        $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
+
+        if ($dependenciaUsuarioId === null) {
+            return false;
+        }
+
+        $dependenciaUsuario = $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId);
+
+        if ($dependenciaUsuario === null) {
+            return false;
+        }
+
+        if ($dependenciaUsuario['nombre'] === $dependenciaActual) {
+            return true;
+        }
+
+        $nombresDescendientes = array_column($this->modeloDependencia->obtenerDescendientesPlano($dependenciaUsuarioId), 'nombre');
+
+        return in_array($dependenciaActual, $nombresDescendientes, true);
+    }
+
+    private function esContribucionPostgrado(array $item): bool
+    {
+        if ($item['origen'] !== 'gasto_postgrado') {
+            return false;
+        }
+
+        $registro = $this->modeloGastoPostgrado->obtenerPorId((int) $item['origen_id']);
+
+        return $registro !== null && ($registro['tipo_automatico'] ?? null) === 'contrib_postgrado';
+    }
+
+    private function resolverDependenciaActualItem(array $item): ?string
+    {
+        $modelosConDependencia = [
+            'arl' => [$this->modeloSolicitud, 'facultad'],
+            'monitores' => [$this->modeloMonitor, 'dependencia'],
+            'ops' => [$this->modeloOps, 'dependencia'],
+            'necesidad' => [$this->modeloNecesidad, 'dependencia'],
+            'gasto_principal' => [$this->modeloGasto, 'dependencia'],
+            'gasto_extension' => [$this->modeloGastoExtension, 'dependencia'],
+            'gasto_postgrado' => [$this->modeloGastoPostgrado, 'dependencia'],
+            'gasto_unisalud' => [$this->modeloGastoUnisalud, 'dependencia'],
+            'gasto_sin_excedentes' => [$this->modeloGastoSinExcedentes, 'dependencia'],
+            'ingreso_extension' => [$this->modeloIngresoExtension, 'dependencia'],
+            'ingreso_postgrado' => [$this->modeloIngresoPostgrado, 'dependencia'],
+            'ingreso_unisalud' => [$this->modeloIngresoUnisalud, 'dependencia'],
+            'ingreso_sin_excedentes' => [$this->modeloIngresoSinExcedentes, 'dependencia'],
+        ];
+
+        if (!isset($modelosConDependencia[$item['origen']])) {
+            return $item['detalle'] ?? null;
+        }
+
+        [$modelo, $campo] = $modelosConDependencia[$item['origen']];
+        $registro = $modelo->obtenerPorId((int) $item['origen_id']);
+
+        if ($registro === null || empty($registro[$campo])) {
+            return $item['detalle'] ?? null;
+        }
+
+        return $registro[$campo];
+    }
+
+    /**
+     * Edita el "valor" de todos los ítems de un grupo consolidado a la vez — solo si el usuario
+     * actual es, en este momento, el dueño de CADA ítem del grupo (mismo criterio que habilita el
+     * botón Editar). Valida todo antes de aplicar cualquier cambio, para que no queden ítems a medio
+     * actualizar si alguno falla.
+     */
+    /**
+     * Edita el "valor" de una selección arbitraria de ítems consolidados (uno o varios tipos a la
+     * vez) — solo si el usuario actual es, en este momento, el dueño de CADA ítem seleccionado.
+     * Valida todo antes de aplicar cualquier cambio, para que no queden ítems a medio actualizar
+     * si alguno falla.
+     */
+    private function editarConsolidadoGrupo(): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+        $valores = $_POST['item_valor'] ?? [];
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem para editar.', ''];
+        }
+
+        $aprobadosPorClave = $this->obtenerAprobadosPorClave();
+        $cambios = [];
+
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+            $valorTexto = trim((string) ($valores[$indice] ?? ''));
+            $clave = $origen . ':' . $origenId;
+
+            if (!isset($aprobadosPorClave[$clave])) {
+                return ['Uno o más ítems seleccionados ya no existen. Recarga la página.', ''];
+            }
+
+            if (!$this->esPropietarioActualDeItem($aprobadosPorClave[$clave])) {
+                return ['Ya no tienes permiso para editar uno o más ítems seleccionados. Recarga la página.', ''];
+            }
+
+            if ($valorTexto === '' || !is_numeric($valorTexto) || (float) $valorTexto < 0) {
+                return ['Todos los valores deben ser números válidos.', ''];
+            }
+
+            $cambios[] = ['origen' => $origen, 'origen_id' => $origenId, 'valor' => (float) $valorTexto];
+        }
+
+        foreach ($cambios as $cambio) {
+            $this->modeloArchivada->actualizarValor($cambio['origen'], $cambio['origen_id'], $cambio['valor']);
+        }
+
+        return ['', 'Se actualizaron ' . count($cambios) . ' ítem(s).'];
+    }
+
+    /**
+     * Redirecciona una selección arbitraria de ítems consolidados (uno o varios tipos a la vez) a
+     * otra dependencia/rol. No exige propiedad actual del ítem — igual que el comportamiento
+     * original por tipo, cualquiera con acceso a Consolidado puede redireccionar.
+     */
     private function redireccionarConsolidado(): array
     {
-        $tipo = trim($_POST['tipo'] ?? '');
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
         $dependenciaNombre = trim($_POST['dependencia_destino'] ?? '');
         $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
 
-        if ($tipo === '') {
-            return ['El grupo consolidado que intentas redireccionar no existe.', ''];
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem para redireccionar.', ''];
         }
 
         if ($dependenciaNombre === '') {
@@ -714,21 +972,226 @@ class PeticionesControlador
             return ['No se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '" para notificar.', ''];
         }
 
-        $cantidadItems = $this->modeloArchivada->redireccionar($tipo, $dependenciaNombre);
+        if (count($destinatarios) > 1) {
+            $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
+            $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
+
+            if (empty($destinatarios)) {
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '". Selecciona a quién remitir la petición.', ''];
+            }
+        }
+
+        $pares = [];
+        foreach ($origenes as $indice => $origen) {
+            $pares[] = ['origen' => trim((string) $origen), 'origen_id' => (int) ($origenIds[$indice] ?? 0)];
+        }
+
+        $cantidadItems = $this->modeloArchivada->redireccionarItems($pares, $dependenciaNombre);
 
         if ($cantidadItems === 0) {
-            return ['No hay ítems consolidados de "' . $tipo . '" para redireccionar.', ''];
+            return ['No hay ítems seleccionados para redireccionar.', ''];
         }
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
-        $asunto = 'Petición consolidada redireccionada — ' . $tipo;
-        $cuerpo = 'Se te redireccionó el grupo consolidado de "' . $tipo . '" (' . $cantidadItems . ' ítem(s)) para tu gestión en "' . $dependenciaNombre . '".';
+        $asunto = 'Petición consolidada redireccionada';
+        $cuerpo = 'Se te redireccionaron ' . $cantidadItems . ' ítem(s) consolidado(s) para tu gestión en "' . $dependenciaNombre . '".';
 
         foreach ($destinatarios as $destinatario) {
             $this->modeloMensaje->crear($remitenteId, (int) $destinatario['id'], $asunto, $cuerpo);
         }
 
-        return ['', 'Se redireccionó "' . $tipo . '" (' . $cantidadItems . ' ítem(s)) a ' . count($destinatarios) . ' usuario(s) con el rol "' . $rol['nombre'] . '".'];
+        return ['', 'Se redireccionaron ' . $cantidadItems . ' ítem(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaNombre . '").'];
+    }
+
+    /**
+     * Duplica una selección arbitraria de ítems consolidados (uno o varios tipos a la vez): crea
+     * una copia exacta del registro de origen (incluyendo sus conceptos, en ingresos) y lo archiva
+     * de nuevo como aprobado, para que aparezca como un ítem nuevo separado. Solo si el usuario
+     * actual es, en este momento, el dueño de CADA ítem seleccionado.
+     */
+    private function duplicarConsolidadoGrupo(): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem para duplicar.', ''];
+        }
+
+        $aprobadosPorClave = $this->obtenerAprobadosPorClave();
+        $itemsValidados = [];
+
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+            $clave = $origen . ':' . $origenId;
+
+            if (!isset($aprobadosPorClave[$clave])) {
+                return ['Uno o más ítems seleccionados ya no existen. Recarga la página.', ''];
+            }
+
+            if (!$this->esPropietarioActualDeItem($aprobadosPorClave[$clave])) {
+                return ['Ya no tienes permiso para duplicar uno o más ítems seleccionados. Recarga la página.', ''];
+            }
+
+            $itemsValidados[] = $aprobadosPorClave[$clave];
+        }
+
+        $duplicados = 0;
+
+        foreach ($itemsValidados as $item) {
+            $nuevoId = $this->duplicarRegistroOrigen($item['origen'], (int) $item['origen_id']);
+
+            if ($nuevoId === null) {
+                continue;
+            }
+
+            $this->modeloArchivada->archivar([
+                'origen' => $item['origen'],
+                'origen_id' => $nuevoId,
+                'accion' => 'aprobada',
+                'tipo' => $item['tipo'],
+                'detalle' => $item['detalle'],
+                'cantidad' => $item['cantidad'],
+                'valor' => $item['valor'],
+                'ruta_ver' => $this->construirRutaVer($item['origen'], $nuevoId),
+                'ruta_origen' => $this->construirRutaOrigen($item['origen']),
+            ]);
+
+            $duplicados++;
+        }
+
+        if ($duplicados === 0) {
+            return ['No se pudo duplicar ningún ítem.', ''];
+        }
+
+        return ['', 'Se duplicaron ' . $duplicados . ' ítem(s).'];
+    }
+
+    private function obtenerAprobadosPorClave(): array
+    {
+        $aprobadosPorClave = [];
+        foreach ($this->modeloArchivada->obtenerPorAccion('aprobada') as $fila) {
+            $aprobadosPorClave[$fila['origen'] . ':' . $fila['origen_id']] = $fila;
+        }
+
+        return $aprobadosPorClave;
+    }
+
+    private function duplicarRegistroOrigen(string $origen, int $origenId): ?int
+    {
+        if (!isset(self::TABLAS_ORIGEN[$origen])) {
+            return null;
+        }
+
+        $nuevoId = $this->duplicarFilaTabla(self::TABLAS_ORIGEN[$origen], $origenId);
+
+        if ($nuevoId === null) {
+            return null;
+        }
+
+        if (isset(self::TABLAS_CONCEPTOS_ORIGEN[$origen])) {
+            [$tablaHijo, $campoFk] = self::TABLAS_CONCEPTOS_ORIGEN[$origen];
+            $this->duplicarFilasHijo($tablaHijo, $campoFk, $origenId, $nuevoId);
+        }
+
+        return $nuevoId;
+    }
+
+    private function obtenerColumnasTabla(string $tabla): array
+    {
+        $consulta = $this->db->query("SHOW COLUMNS FROM {$tabla}");
+
+        return array_column($consulta->fetchAll(), 'Field');
+    }
+
+    private function duplicarFilaTabla(string $tabla, int $id): ?int
+    {
+        $columnas = $this->obtenerColumnasTabla($tabla);
+        $columnasCopiar = array_values(array_filter(
+            $columnas,
+            static fn (string $columna): bool => !in_array($columna, ['id', 'creado_en', 'actualizado_en'], true)
+        ));
+
+        if (empty($columnasCopiar)) {
+            return null;
+        }
+
+        $listaColumnas = implode(', ', $columnasCopiar);
+        $consulta = $this->db->prepare("INSERT INTO {$tabla} ({$listaColumnas}) SELECT {$listaColumnas} FROM {$tabla} WHERE id = :id");
+        $consulta->execute(['id' => $id]);
+
+        return $consulta->rowCount() > 0 ? (int) $this->db->lastInsertId() : null;
+    }
+
+    private function duplicarFilasHijo(string $tablaHijo, string $campoFk, int $idViejo, int $idNuevo): void
+    {
+        $columnas = $this->obtenerColumnasTabla($tablaHijo);
+        $columnasCopiar = array_values(array_filter(
+            $columnas,
+            static fn (string $columna): bool => !in_array($columna, ['id', $campoFk], true)
+        ));
+
+        $consultaHijos = $this->db->prepare("SELECT * FROM {$tablaHijo} WHERE {$campoFk} = :id");
+        $consultaHijos->execute(['id' => $idViejo]);
+        $hijos = $consultaHijos->fetchAll();
+
+        if (empty($hijos)) {
+            return;
+        }
+
+        $listaColumnas = implode(', ', array_merge([$campoFk], $columnasCopiar));
+        $marcadores = implode(', ', array_merge([':fk'], array_map(static fn (string $columna): string => ':' . $columna, $columnasCopiar)));
+        $consultaInsertar = $this->db->prepare("INSERT INTO {$tablaHijo} ({$listaColumnas}) VALUES ({$marcadores})");
+
+        foreach ($hijos as $hijo) {
+            $parametros = ['fk' => $idNuevo];
+            foreach ($columnasCopiar as $columna) {
+                $parametros[$columna] = $hijo[$columna];
+            }
+            $consultaInsertar->execute($parametros);
+        }
+    }
+
+    private function construirRutaVer(string $origen, int $origenId): string
+    {
+        $mapaSolicitud = ['arl' => 'arl', 'monitores' => 'monitores', 'ops' => 'ops', 'otros' => 'otros'];
+
+        if (isset($mapaSolicitud[$origen])) {
+            return 'index.php?ruta=solicitud-detalle&tipo=' . $mapaSolicitud[$origen] . '&id=' . $origenId;
+        }
+
+        if ($origen === 'necesidad') {
+            return 'index.php?ruta=perfil-proyectos';
+        }
+
+        if ($origen === 'gasto_principal') {
+            return 'index.php?ruta=gastos';
+        }
+
+        return 'index.php?ruta=gasto-detalle&origen=' . $origen . '&id=' . $origenId;
+    }
+
+    private function construirRutaOrigen(string $origen): string
+    {
+        $mapa = [
+            'arl' => 'index.php?ruta=solicitudes&tab=arl',
+            'monitores' => 'index.php?ruta=solicitudes&tab=monitores',
+            'ops' => 'index.php?ruta=solicitudes&tab=ops',
+            'otros' => 'index.php?ruta=solicitudes&tab=otros',
+            'necesidad' => 'index.php?ruta=perfil-proyectos',
+            'gasto_principal' => 'index.php?ruta=gastos',
+            'gasto_extension' => 'index.php?ruta=extension',
+            'gasto_postgrado' => 'index.php?ruta=postgrado',
+            'gasto_unisalud' => 'index.php?ruta=unisalud',
+            'gasto_sin_excedentes' => 'index.php?ruta=sin-excedentes',
+            'ingreso_extension' => 'index.php?ruta=extension',
+            'ingreso_postgrado' => 'index.php?ruta=postgrado',
+            'ingreso_unisalud' => 'index.php?ruta=unisalud',
+            'ingreso_sin_excedentes' => 'index.php?ruta=sin-excedentes',
+        ];
+
+        return $mapa[$origen] ?? 'index.php?ruta=peticiones';
     }
 
     private function rechazarRedireccion(): array

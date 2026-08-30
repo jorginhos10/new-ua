@@ -97,10 +97,17 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     class="boton-accion boton-accion-editar fila-menu-editar-solicitud"
                                     data-solicitud="<?= htmlspecialchars(json_encode($solicitud, JSON_UNESCAPED_UNICODE)) ?>"
                                 >Editar</button>
-                                <form method="POST" action="index.php?ruta=solicitudes" class="form-enviar-solicitud">
+                                <form
+                                    method="POST"
+                                    action="index.php?ruta=solicitudes"
+                                    class="form-enviar-solicitud"
+                                    data-dependencia="<?= htmlspecialchars($solicitud['facultad']) ?>"
+                                    data-rol="<?= (int) ($solicitud['rol_destinatario_id'] ?? 0) ?>"
+                                >
                                     <input type="hidden" name="accion" value="enviar">
                                     <input type="hidden" name="tab" value="arl">
                                     <input type="hidden" name="id" value="<?= (int) $solicitud['id'] ?>">
+                                    <input type="hidden" name="usuario_destinatario_id" value="">
                                     <button type="submit" class="boton-accion boton-accion-enviar">Enviar</button>
                                 </form>
                                 <form method="POST" action="index.php?ruta=solicitudes" class="form-eliminar-solicitud">
@@ -158,10 +165,17 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     class="boton-accion boton-accion-editar fila-menu-editar-monitor"
                                     data-monitor="<?= htmlspecialchars(json_encode($solicitudMonitor, JSON_UNESCAPED_UNICODE)) ?>"
                                 >Editar</button>
-                                <form method="POST" action="index.php?ruta=solicitudes" class="form-enviar-solicitud">
+                                <form
+                                    method="POST"
+                                    action="index.php?ruta=solicitudes"
+                                    class="form-enviar-solicitud"
+                                    data-dependencia="<?= htmlspecialchars($solicitudMonitor['dependencia']) ?>"
+                                    data-rol="<?= (int) ($solicitudMonitor['rol_destinatario_id'] ?? 0) ?>"
+                                >
                                     <input type="hidden" name="accion" value="enviar_monitor">
                                     <input type="hidden" name="tab" value="monitores">
                                     <input type="hidden" name="id" value="<?= (int) $solicitudMonitor['id'] ?>">
+                                    <input type="hidden" name="usuario_destinatario_id" value="">
                                     <button type="submit" class="boton-accion boton-accion-enviar">Enviar</button>
                                 </form>
                                 <form method="POST" action="index.php?ruta=solicitudes" class="form-eliminar-monitor">
@@ -223,10 +237,17 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     class="boton-accion boton-accion-editar fila-menu-editar-ops"
                                     data-ops="<?= htmlspecialchars(json_encode($solicitudOps, JSON_UNESCAPED_UNICODE)) ?>"
                                 >Editar</button>
-                                <form method="POST" action="index.php?ruta=solicitudes" class="form-enviar-solicitud">
+                                <form
+                                    method="POST"
+                                    action="index.php?ruta=solicitudes"
+                                    class="form-enviar-solicitud"
+                                    data-dependencia="<?= htmlspecialchars($solicitudOps['dependencia']) ?>"
+                                    data-rol="<?= (int) ($solicitudOps['rol_destinatario_id'] ?? 0) ?>"
+                                >
                                     <input type="hidden" name="accion" value="enviar_ops">
                                     <input type="hidden" name="tab" value="ops">
                                     <input type="hidden" name="id" value="<?= (int) $solicitudOps['id'] ?>">
+                                    <input type="hidden" name="usuario_destinatario_id" value="">
                                     <button type="submit" class="boton-accion boton-accion-enviar">Enviar</button>
                                 </form>
                                 <form method="POST" action="index.php?ruta=solicitudes" class="form-eliminar-ops">
@@ -936,6 +957,25 @@ require __DIR__ . '/../parciales/encabezado.php';
 
     <?php endif; ?>
 
+    <div id="modal-elegir-destinatario" class="modal-fondo">
+        <div class="modal-caja modal-caja-selector">
+            <div class="modal-cabecera">
+                <h2>¿A quién enviar?</h2>
+                <button type="button" id="boton-cerrar-modal-elegir-destinatario" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <p class="texto-atenuado">Hay más de una persona con ese rol en esa dependencia. Elige a quién remitir la solicitud.</p>
+
+            <div class="campo">
+                <label for="elegir-destinatario-select">Destinatario *</label>
+                <select id="elegir-destinatario-select"></select>
+            </div>
+
+            <button type="button" id="boton-confirmar-destinatario" class="boton-enviar">Confirmar y enviar</button>
+        </div>
+    </div>
+
     <script type="application/json" id="datos-roles-por-tipo"><?= json_encode($rolesPorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
+    <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

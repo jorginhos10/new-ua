@@ -965,6 +965,24 @@ body.pagina-auth {
     border-bottom: none;
 }
 
+/* Tablas de detalle dentro de los modales de Consolidado (Ver/Editar/Duplicar): con table-layout
+   auto, una columna "Tipo" con texto largo se comía todo el ancho y dejaba el input de Valor
+   angostísimo con espacio en blanco sobrante. table-layout fixed reparte el ancho de forma pareja
+   y deja que el texto largo haga salto de línea en vez de estirar la columna. */
+.tabla-consolidado-detalle {
+    table-layout: fixed;
+}
+
+.tabla-consolidado-detalle th,
+.tabla-consolidado-detalle td {
+    overflow-wrap: break-word;
+}
+
+.tabla-consolidado-detalle input[type="number"] {
+    width: 100%;
+    box-sizing: border-box;
+}
+
 .fila-no-leida td:nth-child(1),
 .fila-no-leida td:nth-child(2) {
     font-weight: 700;
@@ -1109,6 +1127,41 @@ body.pagina-auth {
 
 .icono-info.oculto {
     display: none;
+}
+
+/* Selección múltiple estilo "tags" (ej. Beneficiarios por estamento en Perfil de proyectos):
+   cada checkbox se dibuja a sí mismo como una píldora, sin envoltorio extra. */
+.grupo-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.tag-chip {
+    appearance: none;
+    -webkit-appearance: none;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.9rem;
+    border: 1px solid var(--color-borde);
+    border-radius: 999px;
+    background: var(--color-superficie);
+    color: var(--color-texto);
+    font-size: 0.85rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background var(--transicion), border-color var(--transicion), color var(--transicion);
+}
+
+.tag-chip::before {
+    content: attr(data-label);
+}
+
+.tag-chip:checked {
+    background: var(--color-primario-suave);
+    border-color: var(--color-primario);
+    color: var(--color-primario-oscuro);
+    font-weight: 600;
 }
 
 .estrella-super-admin {
@@ -2099,6 +2152,29 @@ a.barra-progreso:hover {
     gap: 0.75rem;
 }
 
+/* Botones de un mismo grupo de encabezado (Crear/Enviar/Exportar, Ver/Editar/Redireccionar/Duplicar,
+   etc.) deben verse como un solo conjunto: misma altura, relleno, tipografía y esquinas, sin
+   importar si cada uno usa .boton-accion (pill de color) o .boton-agregar (sólido). */
+.grupo-acciones-encabezado > .boton-accion,
+.grupo-acciones-encabezado > .boton-agregar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 2.25rem;
+    padding: 0 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    line-height: 1;
+    border-radius: var(--radio-chico);
+    box-sizing: border-box;
+}
+
+.grupo-acciones-encabezado > .boton-accion:disabled,
+.grupo-acciones-encabezado > .boton-agregar:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .menu-mensajes {
     position: relative;
 }
@@ -2607,6 +2683,11 @@ a.barra-progreso:hover {
     max-height: 90vh;
     overflow-y: auto;
     padding: 1.75rem 2rem;
+}
+
+/* Para modales con tablas de muchas columnas (ej. detalle completo de gasto en Editar consolidado). */
+.modal-caja-ancha {
+    max-width: 1400px;
 }
 
 .modal-cabecera {

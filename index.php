@@ -17,6 +17,8 @@ require_once __DIR__ . '/controlador/ProyectoControlador.php';
 require_once __DIR__ . '/controlador/GastoControlador.php';
 require_once __DIR__ . '/controlador/RubroControlador.php';
 require_once __DIR__ . '/controlador/ContratoComunControlador.php';
+require_once __DIR__ . '/controlador/LineaInversionControlador.php';
+require_once __DIR__ . '/controlador/SublineaInversionControlador.php';
 require_once __DIR__ . '/controlador/RubroCategoriaControlador.php';
 require_once __DIR__ . '/controlador/AnioPresupuestalControlador.php';
 require_once __DIR__ . '/controlador/SedeControlador.php';
@@ -66,6 +68,8 @@ $rutaAMenuKey = [
     'proyectos' => 'configuraciones',
     'rubros' => 'configuraciones',
     'contratos-comunes' => 'configuraciones',
+    'lineas-inversion' => 'configuraciones',
+    'sublineas-inversion' => 'configuraciones',
     'rubro-categorias' => 'configuraciones',
     'anios-presupuestales' => 'configuraciones',
     'sedes' => 'configuraciones',
@@ -143,6 +147,14 @@ switch ($ruta) {
 
     case 'contratos-comunes':
         (new ContratoComunControlador())->index();
+        break;
+
+    case 'lineas-inversion':
+        (new LineaInversionControlador())->index();
+        break;
+
+    case 'sublineas-inversion':
+        (new SublineaInversionControlador())->index();
         break;
 
     case 'rubro-categorias':

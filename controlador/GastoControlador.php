@@ -435,16 +435,24 @@ class GastoControlador
             }
         }
 
+        $destinatarios = $dependenciaObjetivo !== null
+            ? $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaObjetivo['id'], $rolDestinatarioId)
+            : [];
+
+        if (count($destinatarios) > 1) {
+            $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
+            $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
+
+            if (empty($destinatarios)) {
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '". Selecciona a quién remitir la petición.', ''];
+            }
+        }
+
         $enviados = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaNombre, $rolDestinatarioId, $nombresDumi);
 
         if ($enviados === 0) {
             return ['No hay gastos en borrador para enviar en "' . $dependenciaNombre . '".', ''];
         }
-
-        $dependencia = $this->modeloDependencia->obtenerPorNombre($dependenciaNombre);
-        $destinatarios = $dependencia !== null
-            ? $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependencia['id'], $rolDestinatarioId)
-            : [];
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
 
@@ -461,7 +469,7 @@ class GastoControlador
             return ['', 'Se enviaron ' . $enviados . ' gasto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '" para notificar.'];
         }
 
-        return ['', 'Se enviaron ' . $enviados . ' gasto(s) a ' . count($destinatarios) . ' usuario(s) con el rol "' . $rol['nombre'] . '".'];
+        return ['', 'Se enviaron ' . $enviados . ' gasto(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ').'];
     }
 
     private function validarDatos(): array

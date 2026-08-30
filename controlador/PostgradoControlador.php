@@ -122,6 +122,7 @@ class PostgradoControlador
         $sedes = $this->modeloSede->obtenerTodas();
         $categoriasEgreso = self::CATEGORIAS_EGRESO;
         $roles = $this->modeloRol->obtenerTodos();
+        $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
         $puedeAdministrarContribucion = $this->puedeAdministrarContribucion();
         $puedeAdministrarExcedentes = $this->puedeAdministrarExcedentes();
 
@@ -173,7 +174,7 @@ class PostgradoControlador
             ? $gastos
             : ($anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : []);
 
-        $dependenciasTodas = $this->modeloDependencia->obtenerActivas();
+        $dependenciasTodas = $this->modeloDependencia->obtenerActivasParaEnvio();
 
         $anioSeleccionado = null;
         foreach ($aniosActivos as $anioFila) {
@@ -252,6 +253,15 @@ class PostgradoControlador
     private function puedeAdministrarContribucion(): bool
     {
         $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+
+        if ($usuarioActual === null) {
+            return false;
+        }
+
+        if ((int) ($usuarioActual['es_super_admin'] ?? 0) === 1) {
+            return true;
+        }
+
         $rolId = !empty($usuarioActual['rol_id']) ? (int) $usuarioActual['rol_id'] : null;
 
         if ($rolId === null) {
@@ -272,7 +282,9 @@ class PostgradoControlador
 
         $dependencia = $this->modeloDependencia->obtenerPorId($dependenciaId);
 
-        return $dependencia !== null && $dependencia['nombre'] === 'DEPARTAMENTO DE POSTGRADOS';
+        return $dependencia !== null
+            && $dependencia['nombre'] === 'DEPARTAMENTO DE POSTGRADOS'
+            && ($dependencia['tipo'] ?? null) === 'Departamento';
     }
 
     private function puedeAdministrarExcedentes(): bool
@@ -390,6 +402,17 @@ class PostgradoControlador
             return ['La dependencia destino seleccionada no existe.', ''];
         }
 
+        $destinatarios = $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaDestino['id'], $rolDestinatarioId);
+
+        if (count($destinatarios) > 1) {
+            $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
+            $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
+
+            if (empty($destinatarios)) {
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '". Selecciona a quién remitir la petición.', ''];
+            }
+        }
+
         $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnio($anioId);
         $totalEgresos = $this->modeloGasto->obtenerTotalPorAnio($anioId);
 
@@ -397,14 +420,12 @@ class PostgradoControlador
             return ['Solo puedes enviar cuando el total de egresos sea igual al total de ingresos de este año.', ''];
         }
 
-        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $rolDestinatarioId);
-        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $rolDestinatarioId);
+        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId);
+        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId);
 
         if ($enviadosIngresos === 0 && $enviadosEgresos === 0) {
             return ['No hay ingresos ni egresos en borrador para enviar.', ''];
         }
-
-        $destinatarios = $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaDestino['id'], $rolDestinatarioId);
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
 
@@ -421,7 +442,7 @@ class PostgradoControlador
             return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '" para notificar.'];
         }
 
-        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . count($destinatarios) . ' usuario(s) con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '".'];
+        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoNombre . '").'];
     }
 
     private function eliminarEgreso(): array

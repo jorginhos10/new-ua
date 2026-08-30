@@ -71,6 +71,20 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </div>
                     <p class="texto-atenuado">Gestiona el catálogo de contratos comunes (BCC) para el campo "Contratos comunes" de los gastos.</p>
                 </a>
+                <a href="index.php?ruta=lineas-inversion" class="tarjeta-modulo">
+                    <div class="tarjeta-modulo-cabecera">
+                        <h2>Líneas de inversión</h2>
+                        <?= $flechaModulo ?>
+                    </div>
+                    <p class="texto-atenuado">Gestiona el catálogo de líneas de inversión para Perfil de proyectos.</p>
+                </a>
+                <a href="index.php?ruta=sublineas-inversion" class="tarjeta-modulo">
+                    <div class="tarjeta-modulo-cabecera">
+                        <h2>Sublíneas de inversión</h2>
+                        <?= $flechaModulo ?>
+                    </div>
+                    <p class="texto-atenuado">Gestiona el catálogo de sublíneas de inversión, condicionadas a una línea, para Perfil de proyectos.</p>
+                </a>
                 <a href="index.php?ruta=rubro-categorias" class="tarjeta-modulo">
                     <div class="tarjeta-modulo-cabecera">
                         <h2>Categorías de rubros</h2>

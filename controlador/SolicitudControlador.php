@@ -191,9 +191,10 @@ class SolicitudControlador
         $motores = $this->modeloMotor->obtenerTodos();
         $proyectos = $this->modeloProyecto->obtenerTodos();
         $rubros = $this->modeloRubro->obtenerActivosPorCategoria('egresos');
-        $dependenciasSugeridas = $this->modeloDependencia->obtenerActivas();
+        $dependenciasSugeridas = $this->modeloDependencia->obtenerActivasParaEnvio();
         $roles = $this->modeloRol->obtenerTodos();
         $rolesPorTipo = $this->modeloTipoDependenciaRol->obtenerMapaCompleto();
+        $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
 
         require __DIR__ . '/../vista/solicitudes/index.php';
     }
@@ -376,6 +377,19 @@ class SolicitudControlador
             return ['No se encontró ningún usuario con el rol "' . $rol['nombre'] . '"' . $ubicacion . ' para notificar.', ''];
         }
 
+        // El filtro por destinatario específico solo aplica cuando el envío está acotado a una
+        // dependencia (ahí sí tiene sentido "elegir a cuál Gestor/Avalador"). Para 'otros' (sin
+        // dependencia, dirigida a todos los que tengan ese rol en toda la universidad) se mantiene
+        // el envío masivo original: no tendría sentido pedir elegir uno entre decenas.
+        if ($dependenciaNombre !== null && count($destinatarios) > 1) {
+            $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
+            $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
+
+            if (empty($destinatarios)) {
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '". Selecciona a quién remitir la petición.', ''];
+            }
+        }
+
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
 
         foreach ($destinatarios as $destinatario) {
@@ -384,7 +398,11 @@ class SolicitudControlador
 
         $modelo->enviar($id, $rol['nombre']);
 
-        return ['', 'Solicitud enviada a ' . count($destinatarios) . ' usuario(s) con el rol "' . $rol['nombre'] . '".'];
+        $mensajeDestino = count($destinatarios) === 1
+            ? $destinatarios[0]['nombre']
+            : count($destinatarios) . ' usuario(s) con el rol "' . $rol['nombre'] . '"';
+
+        return ['', 'Solicitud enviada a ' . $mensajeDestino . '.'];
     }
 
     private function enviar(): array

@@ -122,6 +122,7 @@ class UnisaludControlador
         $sedes = $this->modeloSede->obtenerTodas();
         $categoriasEgreso = self::CATEGORIAS_EGRESO;
         $roles = $this->modeloRol->obtenerTodos();
+        $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
 
         $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
         $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
@@ -171,7 +172,7 @@ class UnisaludControlador
             ? $gastos
             : ($anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : []);
 
-        $dependenciasTodas = $this->modeloDependencia->obtenerActivas();
+        $dependenciasTodas = $this->modeloDependencia->obtenerActivasParaEnvio();
 
         $anioSeleccionado = null;
         foreach ($aniosActivos as $anioFila) {
@@ -337,6 +338,17 @@ class UnisaludControlador
             return ['La dependencia destino seleccionada no existe.', ''];
         }
 
+        $destinatarios = $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaDestino['id'], $rolDestinatarioId);
+
+        if (count($destinatarios) > 1) {
+            $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
+            $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
+
+            if (empty($destinatarios)) {
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '". Selecciona a quién remitir la petición.', ''];
+            }
+        }
+
         $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnio($anioId);
         $totalEgresos = $this->modeloGasto->obtenerTotalPorAnio($anioId);
 
@@ -344,14 +356,12 @@ class UnisaludControlador
             return ['Solo puedes enviar cuando el total de egresos sea igual al total de ingresos de este año.', ''];
         }
 
-        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $rolDestinatarioId);
-        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $rolDestinatarioId);
+        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId);
+        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId);
 
         if ($enviadosIngresos === 0 && $enviadosEgresos === 0) {
             return ['No hay ingresos ni egresos en borrador para enviar.', ''];
         }
-
-        $destinatarios = $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaDestino['id'], $rolDestinatarioId);
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
 
@@ -368,7 +378,7 @@ class UnisaludControlador
             return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '" para notificar.'];
         }
 
-        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . count($destinatarios) . ' usuario(s) con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '".'];
+        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoNombre . '").'];
     }
 
     private function eliminarEgreso(): array

@@ -87,7 +87,7 @@ class Usuario
     public function obtenerMapaPorDependenciaYRol(): array
     {
         $consulta = $this->db->query(
-            "SELECT d.nombre AS dependencia_nombre, u.rol_id, u.nombre AS usuario_nombre
+            "SELECT d.nombre AS dependencia_nombre, u.rol_id, u.id AS usuario_id, u.nombre AS usuario_nombre
              FROM usuarios u
              JOIN dependencias d ON d.id = u.dependencia_id
              WHERE u.rol_id IS NOT NULL"
@@ -95,7 +95,10 @@ class Usuario
 
         $mapa = [];
         foreach ($consulta->fetchAll() as $fila) {
-            $mapa[$fila['dependencia_nombre']][(string) $fila['rol_id']][] = $fila['usuario_nombre'];
+            $mapa[$fila['dependencia_nombre']][(string) $fila['rol_id']][] = [
+                'id' => (int) $fila['usuario_id'],
+                'nombre' => $fila['usuario_nombre'],
+            ];
         }
 
         return $mapa;

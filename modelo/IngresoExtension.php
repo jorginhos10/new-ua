@@ -100,11 +100,11 @@ class IngresoExtension
         return array_column($consulta->fetchAll(), 'dependencia');
     }
 
-    public function enviarTodosBorrador(int $anioPresupuestalId, int $autogestionId, int $rolDestinatarioId): int
+    public function enviarTodosBorrador(int $anioPresupuestalId, int $autogestionId, string $dependenciaDestinoNombre, int $rolDestinatarioId): int
     {
         $consulta = $this->db->prepare(
             "UPDATE ingresos_extension
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id
+             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia = :dependencia
              WHERE anio_presupuestal_id = :anio_presupuestal_id
                 AND autogestion_id = :autogestion_id
                 AND estado = 'borrador'"
@@ -112,6 +112,7 @@ class IngresoExtension
         $consulta->execute([
             'anio_presupuestal_id' => $anioPresupuestalId,
             'autogestion_id' => $autogestionId,
+            'dependencia' => $dependenciaDestinoNombre,
             'rol_destinatario_id' => $rolDestinatarioId,
         ]);
 

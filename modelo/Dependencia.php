@@ -33,10 +33,47 @@ class Dependencia
         return $consulta->fetchAll();
     }
 
+    /**
+     * Dependencias activas cuyo tipo está entre los indicados (ej. programas académicos de
+     * pregrado/postgrado, para el campo "Programa académico" de Perfil de proyectos).
+     */
+    public function obtenerPorTipos(array $tipos): array
+    {
+        if (empty($tipos)) {
+            return [];
+        }
+
+        $marcadores = implode(',', array_fill(0, count($tipos), '?'));
+        $consulta = $this->db->prepare(
+            "SELECT id, codigo, nombre, tipo FROM dependencias WHERE estado = 'activo' AND tipo IN ($marcadores) ORDER BY nombre"
+        );
+        $consulta->execute(array_values($tipos));
+
+        return $consulta->fetchAll();
+    }
+
     public function obtenerActivas(): array
     {
         $consulta = $this->db->query(
             "SELECT id, codigo, nombre, tipo, es_raiz_superadmin, no_monetizable FROM dependencias WHERE estado = 'activo' AND no_listar = 0 ORDER BY es_raiz_superadmin DESC, nombre"
+        );
+
+        return $consulta->fetchAll();
+    }
+
+    /**
+     * Igual que obtenerActivas(), pero sin las dependencias "hijas" (programas académicos de
+     * pregrado/postgrado) — para los selectores de "enviar a" / "redireccionar a", donde solo
+     * tiene sentido elegir una unidad administrativa (facultad, departamento, oficina, etc.),
+     * no un programa académico individual.
+     */
+    public function obtenerActivasParaEnvio(): array
+    {
+        $consulta = $this->db->query(
+            "SELECT id, codigo, nombre, tipo, es_raiz_superadmin, no_monetizable
+             FROM dependencias
+             WHERE estado = 'activo' AND no_listar = 0 AND (tipo IS NULL OR tipo NOT IN ('postgrado', 'pregrado'))
+             ORDER BY es_raiz_superadmin DESC, nombre"
         );
 
         return $consulta->fetchAll();

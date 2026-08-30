@@ -98,16 +98,17 @@ class GastoUnisalud
         return array_column($consulta->fetchAll(), 'dependencia');
     }
 
-    public function enviarTodosBorrador(int $anioPresupuestalId, int $rolDestinatarioId): int
+    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaDestinoNombre, int $rolDestinatarioId): int
     {
         $consulta = $this->db->prepare(
             "UPDATE gastos_unisalud
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id
+             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia = :dependencia
              WHERE anio_presupuestal_id = :anio_presupuestal_id
                 AND estado = 'borrador'"
         );
         $consulta->execute([
             'anio_presupuestal_id' => $anioPresupuestalId,
+            'dependencia' => $dependenciaDestinoNombre,
             'rol_destinatario_id' => $rolDestinatarioId,
         ]);
 

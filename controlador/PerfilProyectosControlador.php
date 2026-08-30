@@ -5,6 +5,12 @@ require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/Usuario.php';
 require_once __DIR__ . '/../modelo/Rol.php';
 require_once __DIR__ . '/../modelo/Mensaje.php';
+require_once __DIR__ . '/../modelo/LineaInversion.php';
+require_once __DIR__ . '/../modelo/SublineaInversion.php';
+require_once __DIR__ . '/../modelo/Sede.php';
+require_once __DIR__ . '/../modelo/Proyecto.php';
+require_once __DIR__ . '/../modelo/Estamento.php';
+require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 
 class PerfilProyectosControlador
 {
@@ -13,6 +19,29 @@ class PerfilProyectosControlador
     private Usuario $modeloUsuario;
     private Rol $modeloRol;
     private Mensaje $modeloMensaje;
+    private LineaInversion $modeloLineaInversion;
+    private SublineaInversion $modeloSublineaInversion;
+    private Sede $modeloSede;
+    private Proyecto $modeloProyecto;
+    private Estamento $modeloEstamento;
+    private AnioPresupuestal $modeloAnio;
+
+    private const CAMPOS_REQUERIDOS_PROYECTO = [
+        'vigencia',
+        'nombre_necesidad',
+        'estamento_solicitante_id',
+        'linea_inversion',
+        'sublinea_inversion',
+        'sede_id',
+        'dependencia',
+        'valor',
+        'fuente_financiacion',
+        'responsable_usuario_id',
+    ];
+
+    private const PROGRAMA_ACADEMICO_TIPOS = ['pregrado', 'postgrado'];
+
+    private const MAX_ANIOS_VIGENCIA_ADICIONALES = 5;
 
     public function __construct()
     {
@@ -21,6 +50,12 @@ class PerfilProyectosControlador
         $this->modeloUsuario = new Usuario();
         $this->modeloRol = new Rol();
         $this->modeloMensaje = new Mensaje();
+        $this->modeloLineaInversion = new LineaInversion();
+        $this->modeloSublineaInversion = new SublineaInversion();
+        $this->modeloSede = new Sede();
+        $this->modeloProyecto = new Proyecto();
+        $this->modeloEstamento = new Estamento();
+        $this->modeloAnio = new AnioPresupuestal();
     }
 
     public function index(): void
@@ -40,14 +75,58 @@ class PerfilProyectosControlador
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'enviar_todo') {
             [$error, $exito] = $this->enviarTodo();
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_proyecto') {
+            [$error, $exito] = $this->crearProyecto();
         }
 
         $necesidades = $this->modeloNecesidad->obtenerTodas();
         $roles = $this->modeloRol->obtenerTodos();
-        $dependenciasTodas = $this->modeloDependencia->obtenerActivas();
+        $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
+        $dependenciasSugeridas = array_column($this->modeloDependencia->obtenerActivas(), 'nombre');
+        $dependenciasTodas = $this->modeloDependencia->obtenerActivasParaEnvio();
+        $dependenciasPrograma = $this->modeloDependencia->obtenerPorTipos(self::PROGRAMA_ACADEMICO_TIPOS);
+        $lineasInversion = $this->modeloLineaInversion->obtenerActivas();
+        $sublineasInversion = $this->modeloSublineaInversion->obtenerActivas();
+        $sedes = $this->modeloSede->obtenerTodas();
+        $proyectos = $this->modeloProyecto->obtenerTodos();
+        $estamentos = $this->modeloEstamento->obtenerTodos();
+        $avaladores = $this->obtenerAvaladores();
+        $aniosVigencia = $this->obtenerAniosVigencia();
         $puedeEnviarTodo = !empty(array_filter($necesidades, static fn (array $n): bool => ($n['estado'] ?? 'borrador') === 'borrador'));
 
         require __DIR__ . '/../vista/perfil-proyectos/index.php';
+    }
+
+    private function obtenerAvaladores(): array
+    {
+        $roles = $this->modeloRol->obtenerTodos();
+        $rolAvalador = null;
+
+        foreach ($roles as $rol) {
+            if ($rol['nombre'] === 'Avalador') {
+                $rolAvalador = $rol;
+                break;
+            }
+        }
+
+        if ($rolAvalador === null) {
+            return [];
+        }
+
+        return $this->modeloUsuario->obtenerPorRolId((int) $rolAvalador['id']);
+    }
+
+    private function obtenerAniosVigencia(): array
+    {
+        $aniosActivos = $this->modeloAnio->obtenerActivos();
+        $anioBase = !empty($aniosActivos) ? (int) $aniosActivos[0]['anio'] : (int) date('Y');
+
+        $anios = [];
+        for ($i = 0; $i <= self::MAX_ANIOS_VIGENCIA_ADICIONALES; $i++) {
+            $anios[] = $anioBase + $i;
+        }
+
+        return $anios;
     }
 
     public function exportar(): void
@@ -71,27 +150,40 @@ class PerfilProyectosControlador
         fwrite($salida, "\xEF\xBB\xBF");
 
         fputcsv($salida, [
-            'Solicitante', 'Línea', 'Sublínea', 'Inversión (detalle)', 'Sede', 'Dependencia',
+            'Solicitante', 'Vigencia', 'Nombre de la necesidad', 'Descripción', 'Justificación', 'Estamento solicitante',
+            'Beneficiarios', 'Beneficiarios por estamento', 'Línea', 'Sublínea', 'Inversión (detalle)', 'Sede', 'Dependencia',
             'Programa académico', 'Proyecto PDI', 'Articulación con Plan/planes', 'Espacio a intervenir',
             'Requisitos normativos', 'Valor', 'Fuente de financiación', 'Responsable', 'Observaciones', 'Registrado',
         ], ';');
 
         foreach ($necesidades as $necesidad) {
+            $beneficiariosEstamentos = array_map(
+                static fn (array $e): string => $e['nombre'],
+                $necesidad['beneficiarios_estamentos'] ?? []
+            );
+
             fputcsv($salida, [
                 $necesidad['nombre_solicitante'],
-                $necesidad['linea_inversion'],
-                $necesidad['sublinea_inversion'],
+                $necesidad['vigencia'] ?? '',
+                $necesidad['nombre_necesidad'] ?? '',
+                $necesidad['descripcion'] ?? '',
+                $necesidad['justificacion'] ?? '',
+                $necesidad['estamento_solicitante_nombre'] ?? '',
+                $necesidad['beneficiarios_cantidad'] ?? '',
+                implode(', ', $beneficiariosEstamentos),
+                $necesidad['linea_inversion_nombre'] ?? $necesidad['linea_inversion'],
+                $necesidad['sublinea_inversion_nombre'] ?? $necesidad['sublinea_inversion'],
                 $necesidad['detalle_inversion'] ?? '',
-                $necesidad['sede'],
+                $necesidad['sede_nombre'] ?? '',
                 $necesidad['dependencia'],
                 $necesidad['programa_academico'] ?? '',
-                $necesidad['proyecto_pdi'] ?? '',
+                $necesidad['proyecto_nombre'] ?? '',
                 $necesidad['articulacion_plan'] ?? '',
                 $necesidad['espacio_intervenir'] ?? '',
                 $necesidad['requisitos_normativos'] ?? '',
                 number_format((float) $necesidad['valor'], 2, '.', ''),
                 $necesidad['fuente_financiacion'],
-                $necesidad['responsable'],
+                $necesidad['responsable_nombre'] ?? '',
                 $necesidad['observaciones'] ?? '',
                 $necesidad['creado_en'],
             ], ';');
@@ -99,6 +191,61 @@ class PerfilProyectosControlador
 
         fclose($salida);
         exit;
+    }
+
+    private function crearProyecto(): array
+    {
+        $datos = [];
+
+        foreach ($_POST as $campo => $valor) {
+            $datos[$campo] = is_string($valor) ? trim($valor) : $valor;
+        }
+
+        foreach (self::CAMPOS_REQUERIDOS_PROYECTO as $campo) {
+            if (($datos[$campo] ?? '') === '') {
+                return ['Todos los campos obligatorios deben diligenciarse.', ''];
+            }
+        }
+
+        if (!is_numeric($datos['valor']) || (float) $datos['valor'] < 0) {
+            return ['El valor debe ser un número válido.', ''];
+        }
+
+        if (!is_numeric($datos['vigencia'])) {
+            return ['Selecciona una vigencia válida.', ''];
+        }
+
+        if (isset($datos['beneficiarios_cantidad']) && $datos['beneficiarios_cantidad'] !== '') {
+            if (!is_numeric($datos['beneficiarios_cantidad']) || (int) $datos['beneficiarios_cantidad'] < 0) {
+                return ['Los beneficiarios deben ser un número entero válido.', ''];
+            }
+            $datos['beneficiarios_cantidad'] = (int) $datos['beneficiarios_cantidad'];
+        } else {
+            $datos['beneficiarios_cantidad'] = '';
+        }
+
+        $lineaElegida = $this->modeloLineaInversion->obtenerPorCodigo($datos['linea_inversion']);
+
+        if ($lineaElegida === null) {
+            return ['Selecciona una línea de inversión válida.', ''];
+        }
+
+        $sublinea = $this->modeloSublineaInversion->obtenerPorCodigo($datos['sublinea_inversion']);
+
+        if ($sublinea === null || (int) $sublinea['linea_inversion_id'] !== (int) $lineaElegida['id']) {
+            return ['La sublínea de inversión seleccionada no pertenece a la línea elegida.', ''];
+        }
+
+        $datos['sede_id'] = (int) $datos['sede_id'];
+        $datos['estamento_solicitante_id'] = (int) $datos['estamento_solicitante_id'];
+        $datos['responsable_usuario_id'] = (int) $datos['responsable_usuario_id'];
+        $datos['proyecto_pdi_id'] = !empty($datos['proyecto_id']) ? (int) $datos['proyecto_id'] : null;
+        $datos['vigencia'] = (int) $datos['vigencia'];
+        $datos['beneficiarios_estamentos'] = array_map('intval', $_POST['beneficiarios_estamentos'] ?? []);
+
+        $this->modeloNecesidad->crear($datos, (int) ($_SESSION['usuario_id'] ?? 0));
+
+        return ['', 'Proyecto registrado correctamente.'];
     }
 
     private function enviarTodo(): array
@@ -122,13 +269,22 @@ class PerfilProyectosControlador
             return ['La dependencia destino seleccionada no existe.', ''];
         }
 
-        $enviados = $this->modeloNecesidad->enviarTodosBorrador($rolDestinatarioId);
+        $destinatarios = $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaDestino['id'], $rolDestinatarioId);
+
+        if (count($destinatarios) > 1) {
+            $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
+            $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
+
+            if (empty($destinatarios)) {
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '". Selecciona a quién remitir la petición.', ''];
+            }
+        }
+
+        $enviados = $this->modeloNecesidad->enviarTodosBorrador($dependenciaDestinoNombre, $rolDestinatarioId);
 
         if ($enviados === 0) {
             return ['No hay proyectos en borrador para enviar.', ''];
         }
-
-        $destinatarios = $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaDestino['id'], $rolDestinatarioId);
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
 
@@ -145,6 +301,6 @@ class PerfilProyectosControlador
             return ['', 'Se enviaron ' . $enviados . ' proyecto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '" para notificar.'];
         }
 
-        return ['', 'Se enviaron ' . $enviados . ' proyecto(s) a ' . count($destinatarios) . ' usuario(s) con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '".'];
+        return ['', 'Se enviaron ' . $enviados . ' proyecto(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoNombre . '").'];
     }
 }
