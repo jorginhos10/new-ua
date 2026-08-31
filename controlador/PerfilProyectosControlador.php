@@ -87,7 +87,9 @@ class PerfilProyectosControlador
             [$error, $exito] = $this->duplicarSeleccionados();
         }
 
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
         $necesidades = $this->modeloNecesidad->obtenerTodas();
+        $necesidades = $this->filtrarPorPropietarioODestinatario($necesidades, $usuarioActual);
         $roles = $this->modeloRol->obtenerTodos();
         $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
         $dependenciasSugeridas = array_column($this->modeloDependencia->obtenerActivas(), 'nombre');
@@ -109,6 +111,35 @@ class PerfilProyectosControlador
         $volverEdicion = $_GET['volver'] ?? '';
 
         require __DIR__ . '/../vista/perfil-proyectos/index.php';
+    }
+
+    /**
+     * Un proyecto solo debe ser visible, en este listado, para quien lo creó o para quien
+     * coincide exactamente con la dependencia y el rol al que fue enviado — mismo criterio que
+     * ya usan Gastos/Extensión/Postgrado/etc. en su propio listado.
+     */
+    private function filtrarPorPropietarioODestinatario(array $items, ?array $usuarioActual): array
+    {
+        $usuarioActualId = (int) ($usuarioActual['id'] ?? 0);
+        $dependenciaUsuarioNombre = null;
+
+        if (!empty($usuarioActual['dependencia_id'])) {
+            $dependenciaFila = $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id']);
+            $dependenciaUsuarioNombre = $dependenciaFila['nombre'] ?? null;
+        }
+
+        $rolUsuarioId = !empty($usuarioActual['rol_id']) ? (int) $usuarioActual['rol_id'] : null;
+
+        return array_values(array_filter($items, static function (array $item) use ($usuarioActualId, $dependenciaUsuarioNombre, $rolUsuarioId): bool {
+            if ($usuarioActualId > 0 && (int) $item['usuario_id'] === $usuarioActualId) {
+                return true;
+            }
+
+            return ($item['estado'] ?? 'borrador') === 'enviado'
+                && $rolUsuarioId !== null
+                && (int) ($item['rol_destinatario_id'] ?? 0) === $rolUsuarioId
+                && ($item['dependencia_destino'] ?? null) === $dependenciaUsuarioNombre;
+        }));
     }
 
     private function obtenerAvaladores(): array
