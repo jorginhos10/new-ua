@@ -3786,6 +3786,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var campoDestinatario = document.getElementById('ver-mensaje-destinatario');
     var campoFecha = document.getElementById('ver-mensaje-fecha');
     var campoCuerpo = document.getElementById('ver-mensaje-cuerpo');
+    var botonResponderMensaje = document.getElementById('boton-responder-mensaje');
 
     function cerrarVerMensaje() {
         modalVerMensaje.classList.remove('abierto');
@@ -3826,6 +3827,11 @@ document.addEventListener('DOMContentLoaded', function () {
         campoFecha.textContent = boton.dataset.fecha;
         campoCuerpo.textContent = boton.dataset.cuerpo;
 
+        if (botonResponderMensaje) {
+            botonResponderMensaje.href = 'index.php?ruta=mensajes&responder_a=' + encodeURIComponent(boton.dataset.contraparteId || '')
+                + '&asunto=' + encodeURIComponent(boton.dataset.asunto || '');
+        }
+
         modalVerMensaje.classList.add('abierto');
 
         if (boton.dataset.leido === '0') {
@@ -3857,6 +3863,50 @@ document.addEventListener('DOMContentLoaded', function () {
         if (evento.key === 'Escape') {
             cerrarVerMensaje();
         }
+    });
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    var botonesMarcarLeido = document.querySelectorAll('.boton-marcar-leido');
+
+    if (botonesMarcarLeido.length === 0) {
+        return;
+    }
+
+    botonesMarcarLeido.forEach(function (boton) {
+        boton.addEventListener('click', function () {
+            var id = boton.dataset.id;
+
+            fetch('index.php?ruta=mensajes-marcar-leido', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'id=' + encodeURIComponent(id),
+            }).then(function () {
+                document.querySelectorAll('.boton-ver-mensaje[data-id="' + id + '"]').forEach(function (botonVer) {
+                    botonVer.classList.remove('no-leido');
+                    botonVer.dataset.leido = '1';
+                });
+
+                var fila = document.querySelector('.fila-mensaje[data-mensaje-id="' + id + '"]');
+                if (fila) {
+                    fila.classList.remove('fila-no-leida');
+                }
+
+                var insignia = document.querySelector('.insignia-no-leidos');
+                if (insignia) {
+                    var restante = parseInt(insignia.textContent, 10) - 1;
+                    if (isNaN(restante) || restante <= 0) {
+                        insignia.remove();
+                    } else {
+                        insignia.textContent = restante > 9 ? '9+' : restante;
+                    }
+                }
+
+                boton.remove();
+            }).catch(function () {
+                // Si falla la marca de lectura, el botón sigue disponible para reintentar.
+            });
+        });
     });
 });
 

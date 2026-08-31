@@ -132,39 +132,17 @@ require __DIR__ . '/../parciales/encabezado.php';
         require __DIR__ . '/' . ($mapaPartialEdicion[$tab] ?? 'formulario-edicion-arl.php');
         ?>
         <?php elseif ($tab === 'arl'): ?>
-        <div
-            class="tabla-scroll tabla-bulk-seleccionable"
-            data-boton-seleccionar="boton-seleccionar-arl"
-            data-boton-editar="boton-editar-arl"
-            data-boton-duplicar="boton-duplicar-arl"
-            data-boton-eliminar="boton-eliminar-arl"
-            data-accion-form="index.php?ruta=solicitudes&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=arl"
-            data-accion-eliminar="eliminar_seleccionados"
-            data-accion-duplicar="duplicar_seleccionados"
-            data-editar-en-pagina="1"
-            data-tab="arl"
-        >
-            <table class="tabla-usuarios">
-                <thead>
-                    <tr>
-                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
-                        <th>Facultad</th>
-                        <th>Estado</th>
-                        <th>Total de practicantes</th>
-                        <th>Total valor año</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($solicitudes as $solicitud): ?>
-                    <?php
-                    $totalPracticantes = (int) $solicitud['riesgo1_estudiantes'] + (int) $solicitud['riesgo2_estudiantes']
-                        + (int) $solicitud['riesgo3_estudiantes'] + (int) $solicitud['riesgo4_estudiantes']
-                        + (int) $solicitud['riesgo5_estudiantes'];
-                    $totalValor = (float) $solicitud['riesgo1_valor'] + (float) $solicitud['riesgo2_valor']
-                        + (float) $solicitud['riesgo3_valor'] + (float) $solicitud['riesgo4_valor']
-                        + (float) $solicitud['riesgo5_valor'];
-                    ?>
+        <?php
+        $solicitudesBorrador = array_values(array_filter($solicitudes, static fn (array $s): bool => $s['estado'] === 'borrador'));
+        $solicitudesEnviadas = array_values(array_filter($solicitudes, static fn (array $s): bool => $s['estado'] !== 'borrador'));
+        $filaSolicitudArl = static function (array $solicitud) use ($anioSeleccionadoId): void {
+            $totalPracticantes = (int) $solicitud['riesgo1_estudiantes'] + (int) $solicitud['riesgo2_estudiantes']
+                + (int) $solicitud['riesgo3_estudiantes'] + (int) $solicitud['riesgo4_estudiantes']
+                + (int) $solicitud['riesgo5_estudiantes'];
+            $totalValor = (float) $solicitud['riesgo1_valor'] + (float) $solicitud['riesgo2_valor']
+                + (float) $solicitud['riesgo3_valor'] + (float) $solicitud['riesgo4_valor']
+                + (float) $solicitud['riesgo5_valor'];
+            ?>
                     <tr>
                         <td class="columna-seleccion">
                             <?php if ($solicitud['estado'] === 'borrador'): ?>
@@ -209,44 +187,93 @@ require __DIR__ . '/../parciales/encabezado.php';
                             </div>
                         </td>
                     </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($solicitudes)): ?>
-                    <tr>
-                        <td colspan="6">No hay solicitudes registradas para este año.</td>
-                    </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
+            <?php
+        };
+        ?>
+
+        <details class="acordeon-grupo" open>
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></span>
+                <span class="acordeon-titulo">Borradores</span>
+                <span class="acordeon-contador"><?= count($solicitudesBorrador) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div
+                    class="tabla-scroll tabla-bulk-seleccionable"
+                    data-boton-seleccionar="boton-seleccionar-arl"
+                    data-boton-editar="boton-editar-arl"
+                    data-boton-duplicar="boton-duplicar-arl"
+                    data-boton-eliminar="boton-eliminar-arl"
+                    data-accion-form="index.php?ruta=solicitudes&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=arl"
+                    data-accion-eliminar="eliminar_seleccionados"
+                    data-accion-duplicar="duplicar_seleccionados"
+                    data-editar-en-pagina="1"
+                    data-tab="arl"
+                >
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
+                                <th>Facultad</th>
+                                <th>Estado</th>
+                                <th>Total de practicantes</th>
+                                <th>Total valor año</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($solicitudesBorrador as $solicitud): $filaSolicitudArl($solicitud); endforeach; ?>
+                            <?php if (empty($solicitudesBorrador)): ?>
+                            <tr>
+                                <td colspan="6">No hay borradores.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
+
+        <details class="acordeon-grupo">
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></span>
+                <span class="acordeon-titulo">Enviados</span>
+                <span class="acordeon-contador"><?= count($solicitudesEnviadas) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div class="tabla-scroll">
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"></th>
+                                <th>Facultad</th>
+                                <th>Estado</th>
+                                <th>Total de practicantes</th>
+                                <th>Total valor año</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($solicitudesEnviadas as $solicitud): $filaSolicitudArl($solicitud); endforeach; ?>
+                            <?php if (empty($solicitudesEnviadas)): ?>
+                            <tr>
+                                <td colspan="6">No hay solicitudes enviadas.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
         <?php elseif ($tab === 'monitores'): ?>
-        <div
-            class="tabla-scroll tabla-bulk-seleccionable"
-            data-boton-seleccionar="boton-seleccionar-monitores"
-            data-boton-editar="boton-editar-monitores"
-            data-boton-duplicar="boton-duplicar-monitores"
-            data-boton-eliminar="boton-eliminar-monitores"
-            data-accion-form="index.php?ruta=solicitudes&tab=monitores&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=monitores"
-            data-accion-eliminar="eliminar_monitor_seleccionados"
-            data-accion-duplicar="duplicar_monitor_seleccionados"
-            data-editar-en-pagina="1"
-            data-tab="monitores"
-        >
-            <table class="tabla-usuarios">
-                <thead>
-                    <tr>
-                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
-                        <th>Dependencia</th>
-                        <th>Tipo</th>
-                        <th>Estado</th>
-                        <th>Monitores semestre I</th>
-                        <th>Monitores semestre II</th>
-                        <th>N° de monitores</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($solicitudesMonitores as $solicitudMonitor): ?>
-                    <?php $totalMonitores = (int) $solicitudMonitor['monitores_semestre1'] + (int) $solicitudMonitor['monitores_semestre2']; ?>
+        <?php
+        $monitoresBorrador = array_values(array_filter($solicitudesMonitores, static fn (array $s): bool => $s['estado'] === 'borrador'));
+        $monitoresEnviados = array_values(array_filter($solicitudesMonitores, static fn (array $s): bool => $s['estado'] !== 'borrador'));
+        $filaSolicitudMonitor = static function (array $solicitudMonitor) use ($anioSeleccionadoId, $tiposMonitor): void {
+            $totalMonitores = (int) $solicitudMonitor['monitores_semestre1'] + (int) $solicitudMonitor['monitores_semestre2'];
+            ?>
                     <tr>
                         <td class="columna-seleccion">
                             <?php if ($solicitudMonitor['estado'] === 'borrador'): ?>
@@ -293,46 +320,97 @@ require __DIR__ . '/../parciales/encabezado.php';
                             </div>
                         </td>
                     </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($solicitudesMonitores)): ?>
-                    <tr>
-                        <td colspan="8">No hay solicitudes de monitores registradas para este año.</td>
-                    </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
+            <?php
+        };
+        ?>
+
+        <details class="acordeon-grupo" open>
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></span>
+                <span class="acordeon-titulo">Borradores</span>
+                <span class="acordeon-contador"><?= count($monitoresBorrador) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div
+                    class="tabla-scroll tabla-bulk-seleccionable"
+                    data-boton-seleccionar="boton-seleccionar-monitores"
+                    data-boton-editar="boton-editar-monitores"
+                    data-boton-duplicar="boton-duplicar-monitores"
+                    data-boton-eliminar="boton-eliminar-monitores"
+                    data-accion-form="index.php?ruta=solicitudes&tab=monitores&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=monitores"
+                    data-accion-eliminar="eliminar_monitor_seleccionados"
+                    data-accion-duplicar="duplicar_monitor_seleccionados"
+                    data-editar-en-pagina="1"
+                    data-tab="monitores"
+                >
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
+                                <th>Dependencia</th>
+                                <th>Tipo</th>
+                                <th>Estado</th>
+                                <th>Monitores semestre I</th>
+                                <th>Monitores semestre II</th>
+                                <th>N° de monitores</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($monitoresBorrador as $solicitudMonitor): $filaSolicitudMonitor($solicitudMonitor); endforeach; ?>
+                            <?php if (empty($monitoresBorrador)): ?>
+                            <tr>
+                                <td colspan="8">No hay borradores.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
+
+        <details class="acordeon-grupo">
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></span>
+                <span class="acordeon-titulo">Enviados</span>
+                <span class="acordeon-contador"><?= count($monitoresEnviados) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div class="tabla-scroll">
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"></th>
+                                <th>Dependencia</th>
+                                <th>Tipo</th>
+                                <th>Estado</th>
+                                <th>Monitores semestre I</th>
+                                <th>Monitores semestre II</th>
+                                <th>N° de monitores</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($monitoresEnviados as $solicitudMonitor): $filaSolicitudMonitor($solicitudMonitor); endforeach; ?>
+                            <?php if (empty($monitoresEnviados)): ?>
+                            <tr>
+                                <td colspan="8">No hay solicitudes enviadas.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
         <?php elseif ($tab === 'ops'): ?>
-        <div
-            class="tabla-scroll tabla-bulk-seleccionable"
-            data-boton-seleccionar="boton-seleccionar-ops"
-            data-boton-editar="boton-editar-ops"
-            data-boton-duplicar="boton-duplicar-ops"
-            data-boton-eliminar="boton-eliminar-ops"
-            data-accion-form="index.php?ruta=solicitudes&tab=ops&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=ops"
-            data-accion-eliminar="eliminar_ops_seleccionados"
-            data-accion-duplicar="duplicar_ops_seleccionados"
-            data-editar-en-pagina="1"
-            data-tab="ops"
-        >
-            <table class="tabla-usuarios">
-                <thead>
-                    <tr>
-                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
-                        <th>Sede</th>
-                        <th>Dependencia</th>
-                        <th>Rubro</th>
-                        <th>Perfil</th>
-                        <th>Estado</th>
-                        <th>Valor</th>
-                        <th>Cantidad</th>
-                        <th>Total</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($solicitudesOps as $solicitudOps): ?>
-                    <?php $totalOps = (float) $solicitudOps['valor'] * (int) $solicitudOps['cantidad']; ?>
+        <?php
+        $opsBorrador = array_values(array_filter($solicitudesOps, static fn (array $s): bool => $s['estado'] === 'borrador'));
+        $opsEnviados = array_values(array_filter($solicitudesOps, static fn (array $s): bool => $s['estado'] !== 'borrador'));
+        $filaSolicitudOps = static function (array $solicitudOps) use ($anioSeleccionadoId, $perfilesOps): void {
+            $totalOps = (float) $solicitudOps['valor'] * (int) $solicitudOps['cantidad'];
+            ?>
                     <tr>
                         <td class="columna-seleccion">
                             <?php if ($solicitudOps['estado'] === 'borrador'): ?>
@@ -381,43 +459,100 @@ require __DIR__ . '/../parciales/encabezado.php';
                             </div>
                         </td>
                     </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($solicitudesOps)): ?>
-                    <tr>
-                        <td colspan="10">No hay solicitudes OPS registradas para este año.</td>
-                    </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
+            <?php
+        };
+        ?>
+
+        <details class="acordeon-grupo" open>
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></span>
+                <span class="acordeon-titulo">Borradores</span>
+                <span class="acordeon-contador"><?= count($opsBorrador) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div
+                    class="tabla-scroll tabla-bulk-seleccionable"
+                    data-boton-seleccionar="boton-seleccionar-ops"
+                    data-boton-editar="boton-editar-ops"
+                    data-boton-duplicar="boton-duplicar-ops"
+                    data-boton-eliminar="boton-eliminar-ops"
+                    data-accion-form="index.php?ruta=solicitudes&tab=ops&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=ops"
+                    data-accion-eliminar="eliminar_ops_seleccionados"
+                    data-accion-duplicar="duplicar_ops_seleccionados"
+                    data-editar-en-pagina="1"
+                    data-tab="ops"
+                >
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
+                                <th>Sede</th>
+                                <th>Dependencia</th>
+                                <th>Rubro</th>
+                                <th>Perfil</th>
+                                <th>Estado</th>
+                                <th>Valor</th>
+                                <th>Cantidad</th>
+                                <th>Total</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($opsBorrador as $solicitudOps): $filaSolicitudOps($solicitudOps); endforeach; ?>
+                            <?php if (empty($opsBorrador)): ?>
+                            <tr>
+                                <td colspan="10">No hay borradores.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
+
+        <details class="acordeon-grupo">
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></span>
+                <span class="acordeon-titulo">Enviados</span>
+                <span class="acordeon-contador"><?= count($opsEnviados) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div class="tabla-scroll">
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"></th>
+                                <th>Sede</th>
+                                <th>Dependencia</th>
+                                <th>Rubro</th>
+                                <th>Perfil</th>
+                                <th>Estado</th>
+                                <th>Valor</th>
+                                <th>Cantidad</th>
+                                <th>Total</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($opsEnviados as $solicitudOps): $filaSolicitudOps($solicitudOps); endforeach; ?>
+                            <?php if (empty($opsEnviados)): ?>
+                            <tr>
+                                <td colspan="10">No hay solicitudes enviadas.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
         <?php else: ?>
-        <div
-            class="tabla-scroll tabla-bulk-seleccionable"
-            data-boton-seleccionar="boton-seleccionar-otros"
-            data-boton-editar="boton-editar-otros"
-            data-boton-duplicar="boton-duplicar-otros"
-            data-boton-eliminar="boton-eliminar-otros"
-            data-accion-form="index.php?ruta=solicitudes&tab=otros&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=otros"
-            data-accion-eliminar="eliminar_peticion_seleccionados"
-            data-accion-duplicar="duplicar_peticion_seleccionados"
-            data-editar-en-pagina="1"
-            data-tab="otros"
-        >
-            <table class="tabla-usuarios">
-                <thead>
-                    <tr>
-                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
-                        <th>Concepto</th>
-                        <th>Estado</th>
-                        <th>Semestre 1</th>
-                        <th>Valor S1</th>
-                        <th>Semestre 2</th>
-                        <th>Valor S2</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($solicitudesPeticiones as $solicitudPeticion): ?>
+        <?php
+        $peticionesBorrador = array_values(array_filter($solicitudesPeticiones, static fn (array $s): bool => $s['estado'] === 'borrador'));
+        $peticionesEnviadas = array_values(array_filter($solicitudesPeticiones, static fn (array $s): bool => $s['estado'] !== 'borrador'));
+        $filaSolicitudPeticion = static function (array $solicitudPeticion) use ($anioSeleccionadoId): void {
+            ?>
                     <tr>
                         <td class="columna-seleccion">
                             <?php if ($solicitudPeticion['estado'] === 'borrador'): ?>
@@ -457,15 +592,90 @@ require __DIR__ . '/../parciales/encabezado.php';
                             </div>
                         </td>
                     </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($solicitudesPeticiones)): ?>
-                    <tr>
-                        <td colspan="8">No hay peticiones registradas para este año.</td>
-                    </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
+            <?php
+        };
+        ?>
+
+        <details class="acordeon-grupo" open>
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></span>
+                <span class="acordeon-titulo">Borradores</span>
+                <span class="acordeon-contador"><?= count($peticionesBorrador) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div
+                    class="tabla-scroll tabla-bulk-seleccionable"
+                    data-boton-seleccionar="boton-seleccionar-otros"
+                    data-boton-editar="boton-editar-otros"
+                    data-boton-duplicar="boton-duplicar-otros"
+                    data-boton-eliminar="boton-eliminar-otros"
+                    data-accion-form="index.php?ruta=solicitudes&tab=otros&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=otros"
+                    data-accion-eliminar="eliminar_peticion_seleccionados"
+                    data-accion-duplicar="duplicar_peticion_seleccionados"
+                    data-editar-en-pagina="1"
+                    data-tab="otros"
+                >
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
+                                <th>Concepto</th>
+                                <th>Estado</th>
+                                <th>Semestre 1</th>
+                                <th>Valor S1</th>
+                                <th>Semestre 2</th>
+                                <th>Valor S2</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($peticionesBorrador as $solicitudPeticion): $filaSolicitudPeticion($solicitudPeticion); endforeach; ?>
+                            <?php if (empty($peticionesBorrador)): ?>
+                            <tr>
+                                <td colspan="8">No hay borradores.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
+
+        <details class="acordeon-grupo">
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></span>
+                <span class="acordeon-titulo">Enviados</span>
+                <span class="acordeon-contador"><?= count($peticionesEnviadas) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div class="tabla-scroll">
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"></th>
+                                <th>Concepto</th>
+                                <th>Estado</th>
+                                <th>Semestre 1</th>
+                                <th>Valor S1</th>
+                                <th>Semestre 2</th>
+                                <th>Valor S2</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($peticionesEnviadas as $solicitudPeticion): $filaSolicitudPeticion($solicitudPeticion); endforeach; ?>
+                            <?php if (empty($peticionesEnviadas)): ?>
+                            <tr>
+                                <td colspan="8">No hay peticiones enviadas.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
         <?php endif; ?>
         <?php endif; ?>
     </div>

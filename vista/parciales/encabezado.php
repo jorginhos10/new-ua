@@ -108,6 +108,7 @@ if (!empty($_SESSION['usuario_id'])) {
                                     data-destinatario="<?= htmlspecialchars($nombreActual) ?>"
                                     data-fecha="<?= htmlspecialchars($mensajeReciente['creado_en']) ?>"
                                     data-leido="<?= (int) $mensajeReciente['leido'] ?>"
+                                    data-contraparte-id="<?= (int) $mensajeReciente['remitente_id'] ?>"
                                 >
                                     <span class="menu-mensajes-item-remitente"><?= htmlspecialchars($mensajeReciente['remitente_nombre']) ?></span>
                                     <span class="menu-mensajes-item-asunto"><?= htmlspecialchars($mensajeReciente['asunto']) ?></span>
@@ -150,6 +151,9 @@ if (!empty($_SESSION['usuario_id'])) {
                         — <span id="ver-mensaje-fecha"></span>
                     </p>
                     <p class="detalle-mensaje-cuerpo" id="ver-mensaje-cuerpo"></p>
+                    <div class="modal-pie">
+                        <a id="boton-responder-mensaje" href="#" class="boton-agregar">Responder</a>
+                    </div>
                 </div>
             </div>
 

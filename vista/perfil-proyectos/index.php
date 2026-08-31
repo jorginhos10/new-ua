@@ -74,39 +74,11 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php else: ?>
         <p>Formularios de necesidades diligenciados por los usuarios invitados. Haz clic en una fila para ver el detalle.</p>
 
-        <div
-            class="tabla-scroll tabla-bulk-seleccionable"
-            data-boton-seleccionar="boton-seleccionar-perfil-proyectos"
-            data-boton-duplicar="boton-duplicar-perfil-proyectos"
-            data-boton-eliminar="boton-eliminar-perfil-proyectos"
-            data-accion-form="index.php?ruta=perfil-proyectos"
-            data-accion-eliminar="eliminar_seleccionados"
-            data-accion-duplicar="duplicar_seleccionados"
-        >
-            <table class="tabla-usuarios">
-                <thead>
-                    <tr>
-                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
-                        <th>Estado</th>
-                        <th>Solicitante</th>
-                        <th>Vigencia</th>
-                        <th>Nombre de la necesidad</th>
-                        <th>Estamento solicitante</th>
-                        <th>Línea</th>
-                        <th>Sublínea</th>
-                        <th>Sede</th>
-                        <th>Dependencia</th>
-                        <th>Programa académico</th>
-                        <th>Proyecto PDI</th>
-                        <th>Valor</th>
-                        <th>Fuente</th>
-                        <th>Responsable</th>
-                        <th>Registrado</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($necesidades as $necesidad): ?>
+        <?php
+        $necesidadesBorrador = array_values(array_filter($necesidades, static fn (array $n): bool => $n['estado'] === 'borrador'));
+        $necesidadesEnviadas = array_values(array_filter($necesidades, static fn (array $n): bool => $n['estado'] === 'enviado'));
+        $filaNecesidad = static function (array $necesidad): void {
+            ?>
                     <tr class="fila-clickeable" data-necesidad="<?= htmlspecialchars(json_encode($necesidad, JSON_UNESCAPED_UNICODE)) ?>" tabindex="0">
                         <td class="columna-seleccion">
                             <?php if ($necesidad['estado'] === 'borrador'): ?>
@@ -138,15 +110,105 @@ require __DIR__ . '/../parciales/encabezado.php';
                             <?php endif; ?>
                         </td>
                     </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($necesidades)): ?>
-                    <tr>
-                        <td colspan="17">Aún no hay formularios registrados por invitados.</td>
-                    </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
+            <?php
+        };
+        ?>
+
+        <details class="acordeon-grupo" open>
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></span>
+                <span class="acordeon-titulo">Borradores</span>
+                <span class="acordeon-contador"><?= count($necesidadesBorrador) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div
+                    class="tabla-scroll tabla-bulk-seleccionable"
+                    data-boton-seleccionar="boton-seleccionar-perfil-proyectos"
+                    data-boton-duplicar="boton-duplicar-perfil-proyectos"
+                    data-boton-eliminar="boton-eliminar-perfil-proyectos"
+                    data-accion-form="index.php?ruta=perfil-proyectos"
+                    data-accion-eliminar="eliminar_seleccionados"
+                    data-accion-duplicar="duplicar_seleccionados"
+                >
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
+                                <th>Estado</th>
+                                <th>Solicitante</th>
+                                <th>Vigencia</th>
+                                <th>Nombre de la necesidad</th>
+                                <th>Estamento solicitante</th>
+                                <th>Línea</th>
+                                <th>Sublínea</th>
+                                <th>Sede</th>
+                                <th>Dependencia</th>
+                                <th>Programa académico</th>
+                                <th>Proyecto PDI</th>
+                                <th>Valor</th>
+                                <th>Fuente</th>
+                                <th>Responsable</th>
+                                <th>Registrado</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($necesidadesBorrador as $necesidad): $filaNecesidad($necesidad); endforeach; ?>
+                            <?php if (empty($necesidadesBorrador)): ?>
+                            <tr>
+                                <td colspan="17">No hay borradores.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
+
+        <details class="acordeon-grupo">
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></span>
+                <span class="acordeon-titulo">Enviados</span>
+                <span class="acordeon-contador"><?= count($necesidadesEnviadas) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div class="tabla-scroll">
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"></th>
+                                <th>Estado</th>
+                                <th>Solicitante</th>
+                                <th>Vigencia</th>
+                                <th>Nombre de la necesidad</th>
+                                <th>Estamento solicitante</th>
+                                <th>Línea</th>
+                                <th>Sublínea</th>
+                                <th>Sede</th>
+                                <th>Dependencia</th>
+                                <th>Programa académico</th>
+                                <th>Proyecto PDI</th>
+                                <th>Valor</th>
+                                <th>Fuente</th>
+                                <th>Responsable</th>
+                                <th>Registrado</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($necesidadesEnviadas as $necesidad): $filaNecesidad($necesidad); endforeach; ?>
+                            <?php if (empty($necesidadesEnviadas)): ?>
+                            <tr>
+                                <td colspan="17">No hay proyectos enviados.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
         <?php endif; ?>
     </div>
 

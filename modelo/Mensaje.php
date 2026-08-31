@@ -14,7 +14,7 @@ class Mensaje
     public function obtenerRecientesRecibidos(int $usuarioId, int $limite = 5): array
     {
         $consulta = $this->db->prepare(
-            'SELECT m.id, m.asunto, m.cuerpo, m.leido, m.creado_en, u.nombre AS remitente_nombre
+            'SELECT m.id, m.remitente_id, m.asunto, m.cuerpo, m.leido, m.creado_en, u.nombre AS remitente_nombre
              FROM mensajes m
              JOIN usuarios u ON u.id = m.remitente_id
              WHERE m.destinatario_id = :usuario_id
@@ -41,7 +41,7 @@ class Mensaje
     public function obtenerRecibidos(int $usuarioId): array
     {
         $consulta = $this->db->prepare(
-            'SELECT m.id, m.asunto, m.cuerpo, m.leido, m.creado_en, u.nombre AS remitente_nombre, u.correo AS remitente_correo
+            'SELECT m.id, m.remitente_id, m.asunto, m.cuerpo, m.leido, m.creado_en, u.nombre AS remitente_nombre, u.correo AS remitente_correo
              FROM mensajes m
              JOIN usuarios u ON u.id = m.remitente_id
              WHERE m.destinatario_id = :usuario_id
@@ -55,7 +55,7 @@ class Mensaje
     public function obtenerEnviados(int $usuarioId): array
     {
         $consulta = $this->db->prepare(
-            'SELECT m.id, m.asunto, m.cuerpo, m.leido, m.creado_en, u.nombre AS destinatario_nombre, u.correo AS destinatario_correo
+            'SELECT m.id, m.destinatario_id, m.asunto, m.cuerpo, m.leido, m.creado_en, u.nombre AS destinatario_nombre, u.correo AS destinatario_correo
              FROM mensajes m
              JOIN usuarios u ON u.id = m.destinatario_id
              WHERE m.remitente_id = :usuario_id

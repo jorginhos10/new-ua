@@ -138,45 +138,14 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php if ($modoEdicion): ?>
         <?php require __DIR__ . '/formulario-edicion.php'; ?>
         <?php else: ?>
-        <div
-            class="tabla-scroll tabla-bulk-seleccionable"
-            data-boton-seleccionar="boton-seleccionar-gastos"
-            data-boton-editar="boton-editar-gastos"
-            data-boton-duplicar="boton-duplicar-gastos"
-            data-boton-eliminar="boton-eliminar-gastos"
-            data-accion-form="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>"
-            data-accion-eliminar="eliminar_seleccionados"
-            data-accion-duplicar="duplicar_seleccionados"
-            data-editar-en-pagina="1"
-        >
-            <table class="tabla-usuarios">
-                <thead>
-                    <tr>
-                        <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
-                        <th>Acciones</th>
-                        <th>Estado</th>
-                        <th>Sede</th>
-                        <th>Dependencia</th>
-                        <th>Línea estratégica</th>
-                        <th>Motor de desarrollo</th>
-                        <th>Proyecto PDI</th>
-                        <th>Contratos comunes</th>
-                        <th>Actividad</th>
-                        <th>Rubro</th>
-                        <th>Insumo</th>
-                        <th>Cantidad</th>
-                        <th>Costo unitario</th>
-                        <th>Valor total</th>
-                        <th>Meses</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($gastos as $gasto): ?>
-                    <?php
-                    $mesesGasto = $gasto['meses'] !== ''
-                        ? array_map(static fn ($mes) => $nombresMeses[(int) $mes] ?? $mes, explode(',', $gasto['meses']))
-                        : [];
-                    ?>
+        <?php
+        $gastosBorrador = array_values(array_filter($gastos, static fn (array $g): bool => $g['estado'] === 'borrador'));
+        $gastosEnviado = array_values(array_filter($gastos, static fn (array $g): bool => $g['estado'] === 'enviado'));
+        $filaGasto = static function (array $gasto) use ($anioSeleccionadoId, $nombresMeses): void {
+            $mesesGasto = $gasto['meses'] !== ''
+                ? array_map(static fn ($mes) => $nombresMeses[(int) $mes] ?? $mes, explode(',', $gasto['meses']))
+                : [];
+            ?>
                     <tr>
                         <td class="columna-seleccion">
                             <?php if ($gasto['estado'] === 'borrador'): ?>
@@ -215,15 +184,105 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td><?= number_format((float) $gasto['valor_total'], 2) ?></td>
                         <td><?= htmlspecialchars(implode(', ', $mesesGasto)) ?></td>
                     </tr>
-                    <?php endforeach; ?>
-                    <?php if (empty($gastos)): ?>
-                    <tr>
-                        <td colspan="16">No hay gastos registrados.</td>
-                    </tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
-        </div>
+            <?php
+        };
+        ?>
+
+        <details class="acordeon-grupo" open>
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></span>
+                <span class="acordeon-titulo">Borradores</span>
+                <span class="acordeon-contador"><?= count($gastosBorrador) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div
+                    class="tabla-scroll tabla-bulk-seleccionable"
+                    data-boton-seleccionar="boton-seleccionar-gastos"
+                    data-boton-editar="boton-editar-gastos"
+                    data-boton-duplicar="boton-duplicar-gastos"
+                    data-boton-eliminar="boton-eliminar-gastos"
+                    data-accion-form="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>"
+                    data-accion-eliminar="eliminar_seleccionados"
+                    data-accion-duplicar="duplicar_seleccionados"
+                    data-editar-en-pagina="1"
+                >
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"><input type="checkbox" class="checkbox-bulk-todos"></th>
+                                <th>Acciones</th>
+                                <th>Estado</th>
+                                <th>Sede</th>
+                                <th>Dependencia</th>
+                                <th>Línea estratégica</th>
+                                <th>Motor de desarrollo</th>
+                                <th>Proyecto PDI</th>
+                                <th>Contratos comunes</th>
+                                <th>Actividad</th>
+                                <th>Rubro</th>
+                                <th>Insumo</th>
+                                <th>Cantidad</th>
+                                <th>Costo unitario</th>
+                                <th>Valor total</th>
+                                <th>Meses</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($gastosBorrador as $gasto): $filaGasto($gasto); endforeach; ?>
+                            <?php if (empty($gastosBorrador)): ?>
+                            <tr>
+                                <td colspan="16">No hay borradores.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
+
+        <details class="acordeon-grupo">
+            <summary class="acordeon-cabecera">
+                <span class="acordeon-flecha">▸</span>
+                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></span>
+                <span class="acordeon-titulo">Enviados</span>
+                <span class="acordeon-contador"><?= count($gastosEnviado) ?></span>
+            </summary>
+            <div class="acordeon-cuerpo">
+                <div class="tabla-scroll">
+                    <table class="tabla-usuarios">
+                        <thead>
+                            <tr>
+                                <th class="columna-seleccion"></th>
+                                <th>Acciones</th>
+                                <th>Estado</th>
+                                <th>Sede</th>
+                                <th>Dependencia</th>
+                                <th>Línea estratégica</th>
+                                <th>Motor de desarrollo</th>
+                                <th>Proyecto PDI</th>
+                                <th>Contratos comunes</th>
+                                <th>Actividad</th>
+                                <th>Rubro</th>
+                                <th>Insumo</th>
+                                <th>Cantidad</th>
+                                <th>Costo unitario</th>
+                                <th>Valor total</th>
+                                <th>Meses</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($gastosEnviado as $gasto): $filaGasto($gasto); endforeach; ?>
+                            <?php if (empty($gastosEnviado)): ?>
+                            <tr>
+                                <td colspan="16">No hay gastos enviados.</td>
+                            </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </details>
         <?php endif; ?>
     </div>
 

@@ -41,6 +41,11 @@ class MensajeControlador
         $enviados = $this->modeloMensaje->obtenerEnviados($usuarioId);
         $destinatarios = $this->modeloUsuario->obtenerTodosExcepto($usuarioId);
 
+        $responderA = (int) ($_GET['responder_a'] ?? 0);
+        $asuntoRespuesta = $responderA > 0 && trim($_GET['asunto'] ?? '') !== ''
+            ? 'Re: ' . trim($_GET['asunto'])
+            : '';
+
         require __DIR__ . '/../vista/mensajes/index.php';
     }
 

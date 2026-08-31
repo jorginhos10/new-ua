@@ -20,7 +20,7 @@ if (!empty($_SESSION['usuario_id']) && $rolActual === 'administrador') {
 $puedeVerMenu = static fn (string $clave): bool => $menuPermitido === null || isset($menuPermitido[$clave]);
 ?>
 <aside class="barra-lateral">
-    <a href="index.php?ruta=dashboard" class="marca">Programacion<br>Presupuestal</a>
+    <a href="index.php?ruta=dashboard" class="marca">S P P I</a>
         <nav class="menu-lateral">
     <?php if ($rolActual === 'administrador'): ?>
             <?php if ($puedeVerMenu('inicio') || $puedeVerMenu('peticiones')): ?>

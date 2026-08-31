@@ -49,11 +49,15 @@
                                 data-destinatario="<?= htmlspecialchars($tab === 'enviados' ? $mensajeFila['destinatario_nombre'] : $nombreActual) ?>"
                                 data-fecha="<?= htmlspecialchars($mensajeFila['creado_en']) ?>"
                                 data-leido="<?= $tab === 'enviados' ? 1 : (int) $mensajeFila['leido'] ?>"
+                                data-contraparte-id="<?= (int) ($tab === 'enviados' ? $mensajeFila['destinatario_id'] : $mensajeFila['remitente_id']) ?>"
                             ><?= htmlspecialchars($mensajeFila['asunto']) ?></button>
                         </td>
                         <td class="texto-atenuado"><?= htmlspecialchars($mensajeFila['creado_en']) ?></td>
                         <td class="celda-acciones">
                             <div class="acciones-fila">
+                                <?php if ($tab === 'recibidos' && (int) $mensajeFila['leido'] === 0): ?>
+                                <button type="button" class="boton-accion boton-accion-editar boton-marcar-leido" data-id="<?= (int) $mensajeFila['id'] ?>">Marcar como leído</button>
+                                <?php endif; ?>
                                 <form method="POST" action="index.php?ruta=mensajes">
                                     <input type="hidden" name="accion" value="eliminar">
                                     <input type="hidden" name="id" value="<?= (int) $mensajeFila['id'] ?>">
@@ -74,10 +78,10 @@
         </div>
     </div>
 
-    <div id="modal-mensaje" class="modal-fondo">
+    <div id="modal-mensaje" class="modal-fondo<?= $responderA > 0 ? ' abierto' : '' ?>">
         <div class="modal-caja">
             <div class="modal-cabecera">
-                <h2>Redactar mensaje</h2>
+                <h2><?= $responderA > 0 ? 'Responder mensaje' : 'Redactar mensaje' ?></h2>
                 <button type="button" id="boton-cerrar-modal-mensaje" class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
 
@@ -86,7 +90,7 @@
                     <label for="destinatario_id_buscador">Para *</label>
                     <div class="selector-buscable" id="destinatario_id-selector">
                         <input type="text" id="destinatario_id_buscador" class="selector-buscable-input" placeholder="Buscar destinatario..." autocomplete="off">
-                        <input type="hidden" name="destinatario_id" id="destinatario_id">
+                        <input type="hidden" name="destinatario_id" id="destinatario_id" value="<?= $responderA > 0 ? (int) $responderA : '' ?>">
                         <div class="selector-buscable-lista" id="destinatario_id_lista">
                             <?php foreach ($destinatarios as $destinatario): ?>
                             <div class="selector-buscable-opcion" data-id="<?= (int) $destinatario['id'] ?>" data-texto="<?= htmlspecialchars($destinatario['nombre'] . ' ' . $destinatario['correo']) ?>" data-mostrar="<?= htmlspecialchars($destinatario['nombre'] . ' (' . $destinatario['correo'] . ')') ?>">
@@ -100,7 +104,7 @@
 
                 <div class="campo campo-ancho">
                     <label for="asunto">Asunto *</label>
-                    <input type="text" id="asunto" name="asunto" required>
+                    <input type="text" id="asunto" name="asunto" value="<?= htmlspecialchars($asuntoRespuesta) ?>" required>
                 </div>
 
                 <div class="campo campo-ancho">
@@ -112,5 +116,13 @@
             </form>
         </div>
     </div>
+
+    <?php if ($responderA > 0): ?>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            establecerValorBuscable('destinatario_id', <?= (int) $responderA ?>);
+        });
+    </script>
+    <?php endif; ?>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>
