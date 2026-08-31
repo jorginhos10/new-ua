@@ -87,6 +87,26 @@ class PeticionArchivada
         ]);
     }
 
+    /**
+     * Re-sincroniza el snapshot (valor y detalle/dependencia) después de que el ítem real se
+     * edita desde su módulo de origen. No-op si el ítem no está archivado/consolidado (el WHERE
+     * simplemente no encuentra filas).
+     */
+    public function sincronizarDesdeOrigen(string $origen, int $origenId, ?float $valor, ?string $detalle): bool
+    {
+        $consulta = $this->db->prepare(
+            'UPDATE peticiones_archivadas SET valor = :valor, detalle = :detalle
+             WHERE origen = :origen AND origen_id = :origen_id'
+        );
+
+        return $consulta->execute([
+            'valor' => $valor,
+            'detalle' => $detalle,
+            'origen' => $origen,
+            'origen_id' => $origenId,
+        ]);
+    }
+
     public function obtenerPorId(int $id): ?array
     {
         $consulta = $this->db->prepare('SELECT * FROM peticiones_archivadas WHERE id = :id');
@@ -107,7 +127,7 @@ class PeticionArchivada
      * Redirecciona ítems puntuales (por origen+origen_id), en vez de un tipo completo — permite
      * redireccionar una selección arbitraria de ítems consolidados, de uno o varios tipos a la vez.
      */
-    public function redireccionarItems(array $pares, string $dependenciaDestino): int
+    public function redireccionarItems(array $pares, string $dependenciaDestino, string $accionOrigen = 'aprobada'): int
     {
         if (empty($pares)) {
             return 0;
@@ -116,7 +136,7 @@ class PeticionArchivada
         $consulta = $this->db->prepare(
             "UPDATE peticiones_archivadas
              SET accion = 'redireccionada', redireccionado_a_dependencia = :destino
-             WHERE origen = :origen AND origen_id = :origen_id AND accion = 'aprobada'"
+             WHERE origen = :origen AND origen_id = :origen_id AND accion = :accion_origen"
         );
 
         $total = 0;
@@ -125,6 +145,7 @@ class PeticionArchivada
                 'destino' => $dependenciaDestino,
                 'origen' => $par['origen'],
                 'origen_id' => $par['origen_id'],
+                'accion_origen' => $accionOrigen,
             ]);
             $total += $consulta->rowCount();
         }

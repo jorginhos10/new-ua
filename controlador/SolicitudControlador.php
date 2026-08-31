@@ -17,6 +17,7 @@ require_once __DIR__ . '/../modelo/Usuario.php';
 require_once __DIR__ . '/../modelo/Rol.php';
 require_once __DIR__ . '/../modelo/Mensaje.php';
 require_once __DIR__ . '/../modelo/TipoDependenciaRol.php';
+require_once __DIR__ . '/../modelo/PeticionArchivada.php';
 
 class SolicitudControlador
 {
@@ -213,6 +214,25 @@ class SolicitudControlador
         $rolesPorTipo = $this->modeloTipoDependenciaRol->obtenerMapaCompleto();
         $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
 
+        $solicitudArlParaEditarDesdePeticiones = null;
+        $solicitudMonitorParaEditarDesdePeticiones = null;
+        $solicitudOpsParaEditarDesdePeticiones = null;
+        $solicitudPeticionParaEditarDesdePeticiones = null;
+        if (isset($_GET['editar_id']) && ctype_digit((string) $_GET['editar_id'])) {
+            $editarIdSolicitud = (int) $_GET['editar_id'];
+            $tipoSolicitud = $_GET['tipo_solicitud'] ?? '';
+            if ($tipoSolicitud === 'arl') {
+                $solicitudArlParaEditarDesdePeticiones = $this->modeloSolicitud->obtenerPorId($editarIdSolicitud);
+            } elseif ($tipoSolicitud === 'monitores') {
+                $solicitudMonitorParaEditarDesdePeticiones = $this->modeloMonitor->obtenerPorId($editarIdSolicitud);
+            } elseif ($tipoSolicitud === 'ops') {
+                $solicitudOpsParaEditarDesdePeticiones = $this->modeloOps->obtenerPorId($editarIdSolicitud);
+            } elseif ($tipoSolicitud === 'otros') {
+                $solicitudPeticionParaEditarDesdePeticiones = $this->modeloPeticion->obtenerPorId($editarIdSolicitud);
+            }
+        }
+        $volverAPeticiones = $_GET['volver'] ?? '';
+
         require __DIR__ . '/../vista/solicitudes/index.php';
     }
 
@@ -280,6 +300,17 @@ class SolicitudControlador
             $this->modeloSolicitud->actualizar($id, $datos);
         } catch (PDOException $excepcion) {
             return ['No se pudo actualizar la solicitud. Verifica el año presupuestal seleccionado.', ''];
+        }
+
+        $valorTotalArl = 0.0;
+        foreach (self::NIVELES_RIESGO as $nivel) {
+            $valorTotalArl += (float) $datos['riesgo' . $nivel . '_valor'];
+        }
+        (new PeticionArchivada())->sincronizarDesdeOrigen('arl', $id, $valorTotalArl, $datos['facultad']);
+
+        if (!empty($_POST['volver'])) {
+            header('Location: ' . $_POST['volver']);
+            exit;
         }
 
         return ['', 'Solicitud actualizada correctamente.'];
@@ -504,6 +535,13 @@ class SolicitudControlador
             return ['No se pudo actualizar la solicitud de monitores. Verifica el año presupuestal seleccionado.', ''];
         }
 
+        (new PeticionArchivada())->sincronizarDesdeOrigen('monitores', $id, null, $datos['dependencia']);
+
+        if (!empty($_POST['volver'])) {
+            header('Location: ' . $_POST['volver']);
+            exit;
+        }
+
         return ['', 'Solicitud de monitores actualizada correctamente.'];
     }
 
@@ -644,6 +682,13 @@ class SolicitudControlador
             $this->modeloOps->actualizar($id, $datos);
         } catch (PDOException $excepcion) {
             return ['No se pudo actualizar la solicitud OPS. Verifica los datos seleccionados.', ''];
+        }
+
+        (new PeticionArchivada())->sincronizarDesdeOrigen('ops', $id, $datos['valor'] * $datos['cantidad'], $datos['dependencia']);
+
+        if (!empty($_POST['volver'])) {
+            header('Location: ' . $_POST['volver']);
+            exit;
         }
 
         return ['', 'Solicitud OPS actualizada correctamente.'];
@@ -802,6 +847,13 @@ class SolicitudControlador
             $this->modeloPeticion->actualizar($id, $datos);
         } catch (PDOException $excepcion) {
             return ['No se pudo actualizar la petición. Verifica el año presupuestal seleccionado.', ''];
+        }
+
+        (new PeticionArchivada())->sincronizarDesdeOrigen('otros', $id, $datos['valor_s1'] + $datos['valor_s2'], $datos['concepto']);
+
+        if (!empty($_POST['volver'])) {
+            header('Location: ' . $_POST['volver']);
+            exit;
         }
 
         return ['', 'Petición actualizada correctamente.'];

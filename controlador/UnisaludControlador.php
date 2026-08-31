@@ -15,6 +15,7 @@ require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/Usuario.php';
 require_once __DIR__ . '/../modelo/Rol.php';
 require_once __DIR__ . '/../modelo/Mensaje.php';
+require_once __DIR__ . '/../modelo/PeticionArchivada.php';
 
 class UnisaludControlador
 {
@@ -179,6 +180,17 @@ class UnisaludControlador
 
         $dependenciasTodas = $this->modeloDependencia->obtenerActivasParaEnvio();
 
+        $egresoParaEditarDesdePeticiones = null;
+        $ingresoParaEditarDesdePeticiones = null;
+        if (isset($_GET['editar_id']) && ctype_digit((string) $_GET['editar_id'])) {
+            if ($tab === 'egresos') {
+                $egresoParaEditarDesdePeticiones = $this->modeloGasto->obtenerPorId((int) $_GET['editar_id']);
+            } else {
+                $ingresoParaEditarDesdePeticiones = $this->modeloIngreso->obtenerPorId((int) $_GET['editar_id']);
+            }
+        }
+        $volverAPeticiones = $_GET['volver'] ?? '';
+
         $anioSeleccionado = null;
         foreach ($aniosActivos as $anioFila) {
             if ((int) $anioFila['id'] === $anioSeleccionadoId) {
@@ -289,6 +301,13 @@ class UnisaludControlador
             $this->modeloGasto->actualizar($id, $datos);
         } catch (PDOException $excepcion) {
             return ['No se pudo actualizar el egreso. Verifica el año, la sede, la línea, el motor, el proyecto y el rubro seleccionados.', ''];
+        }
+
+        (new PeticionArchivada())->sincronizarDesdeOrigen('gasto_unisalud', $id, $nuevoValor, $datos['dependencia']);
+
+        if (!empty($_POST['volver'])) {
+            header('Location: ' . $_POST['volver']);
+            exit;
         }
 
         return ['', 'Egreso actualizado correctamente.'];
@@ -561,6 +580,13 @@ class UnisaludControlador
         }
 
         $this->generarEgresosAutomaticos($id, $cabecera['anio_presupuestal_id'], $cabecera['dependencia']);
+
+        (new PeticionArchivada())->sincronizarDesdeOrigen('ingreso_unisalud', $id, $cabecera['valor_total'], $cabecera['dependencia']);
+
+        if (!empty($_POST['volver'])) {
+            header('Location: ' . $_POST['volver']);
+            exit;
+        }
 
         return ['', 'Ingreso actualizado correctamente.'];
     }

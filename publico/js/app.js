@@ -373,6 +373,94 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
+    var modalEditarProyecto = document.getElementById('modal-editar-proyecto');
+    var botonCerrarEditarProyecto = document.getElementById('boton-cerrar-modal-editar-proyecto');
+
+    if (!modalEditarProyecto) {
+        return;
+    }
+
+    function cerrarEditarProyecto() {
+        modalEditarProyecto.classList.remove('abierto');
+    }
+
+    document.querySelectorAll('.boton-editar-proyecto').forEach(function (boton) {
+        boton.addEventListener('click', function (evento) {
+            evento.stopPropagation();
+
+            var necesidad;
+
+            try {
+                necesidad = JSON.parse(boton.dataset.proyecto);
+            } catch (error) {
+                return;
+            }
+
+            document.getElementById('editar-proyecto-id').value = necesidad.id;
+            document.getElementById('editar-proyecto-volver').value = necesidad.volver || '';
+            document.getElementById('editar-proyecto-vigencia').value = necesidad.vigencia || '';
+            document.getElementById('editar-proyecto-nombre_necesidad').value = necesidad.nombre_necesidad || '';
+            document.getElementById('editar-proyecto-descripcion').value = necesidad.descripcion || '';
+            document.getElementById('editar-proyecto-justificacion').value = necesidad.justificacion || '';
+            document.getElementById('editar-proyecto-estamento_solicitante_id').value = necesidad.estamento_solicitante_id || '';
+            document.getElementById('editar-proyecto-beneficiarios_cantidad').value = necesidad.beneficiarios_cantidad || '';
+
+            var idsBeneficiarios = Array.isArray(necesidad.beneficiarios_estamentos)
+                ? necesidad.beneficiarios_estamentos.map(function (estamento) { return String(estamento.id); })
+                : [];
+            document.querySelectorAll('#editar-proyecto-beneficiarios-estamentos-grupo .tag-chip').forEach(function (casilla) {
+                casilla.checked = idsBeneficiarios.indexOf(casilla.value) !== -1;
+            });
+
+            establecerValorBuscable('editar-proyecto-linea_inversion', necesidad.linea_inversion);
+            establecerValorBuscable('editar-proyecto-sublinea_inversion', necesidad.sublinea_inversion);
+            document.getElementById('editar-proyecto-detalle_inversion').value = necesidad.detalle_inversion || '';
+            document.getElementById('editar-proyecto-sede_id').value = necesidad.sede_id || '';
+            establecerValorBuscable('editar-proyecto-dependencia', necesidad.dependencia);
+            establecerValorBuscable('editar-proyecto-programa-academico-dependencia', necesidad.programa_academico);
+
+            var campoProyectoTexto = document.getElementById('editar-proyecto-proyecto_buscador');
+            var campoProyectoId = document.getElementById('editar-proyecto-proyecto_id');
+
+            if (necesidad.proyecto_pdi_id) {
+                var opcionProyecto = document.querySelector('#editar-proyecto-proyecto_lista .selector-buscable-opcion[data-id="' + necesidad.proyecto_pdi_id + '"]');
+                campoProyectoTexto.value = opcionProyecto ? (opcionProyecto.dataset.mostrar || opcionProyecto.dataset.texto) : '';
+                campoProyectoId.value = necesidad.proyecto_pdi_id;
+            } else {
+                campoProyectoTexto.value = '';
+                campoProyectoId.value = '';
+            }
+
+            document.getElementById('editar-proyecto-articulacion_plan').value = necesidad.articulacion_plan || '';
+            document.getElementById('editar-proyecto-espacio_intervenir').value = necesidad.espacio_intervenir || '';
+            document.getElementById('editar-proyecto-requisitos_normativos').value = necesidad.requisitos_normativos || '';
+            document.getElementById('editar-proyecto-valor').value = necesidad.valor || '';
+            document.getElementById('editar-proyecto-fuente_financiacion').value = necesidad.fuente_financiacion || '';
+            document.getElementById('editar-proyecto-responsable_usuario_id').value = necesidad.responsable_usuario_id || '';
+            document.getElementById('editar-proyecto-observaciones').value = necesidad.observaciones || '';
+
+            modalEditarProyecto.classList.add('abierto');
+        });
+    });
+
+    if (botonCerrarEditarProyecto) {
+        botonCerrarEditarProyecto.addEventListener('click', cerrarEditarProyecto);
+    }
+
+    modalEditarProyecto.addEventListener('click', function (evento) {
+        if (evento.target === modalEditarProyecto) {
+            cerrarEditarProyecto();
+        }
+    });
+
+    document.addEventListener('keydown', function (evento) {
+        if (evento.key === 'Escape') {
+            cerrarEditarProyecto();
+        }
+    });
+});
+
+document.addEventListener('DOMContentLoaded', function () {
     var modal = document.getElementById('modal-gasto');
     var botonAbrir = document.getElementById('boton-abrir-modal-gasto');
     var botonCerrar = document.getElementById('boton-cerrar-modal-gasto');
@@ -523,16 +611,20 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
-    var modalEditarGasto = document.getElementById('modal-editar-gasto');
+    document.querySelectorAll('.form-eliminar-gasto').forEach(function (formulario) {
+        formulario.addEventListener('submit', function (evento) {
+            if (!confirm('¿Eliminar este gasto? Esta acción no se puede deshacer.')) {
+                evento.preventDefault();
+            }
+        });
+    });
+});
 
-    if (!modalEditarGasto) {
+document.addEventListener('DOMContentLoaded', function () {
+    var formularioEditarGasto = document.getElementById('form-editar-gasto');
+
+    if (!formularioEditarGasto) {
         return;
-    }
-
-    var botonCerrarEditarGasto = document.getElementById('boton-cerrar-modal-editar-gasto');
-
-    function cerrarEditarGasto() {
-        modalEditarGasto.classList.remove('abierto');
     }
 
     document.querySelectorAll('.boton-editar-gasto').forEach(function (boton) {
@@ -546,6 +638,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             document.getElementById('editar-gasto-id').value = gasto.id;
+            document.getElementById('editar-gasto-volver').value = gasto.volver || '';
             document.getElementById('editar-anio_presupuestal_id').value = gasto.anio_presupuestal_id;
             document.getElementById('editar-sede_id').value = gasto.sede_id;
             establecerValorBuscable('editar-dependencia', gasto.dependencia);
@@ -607,7 +700,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             var mesesSeleccionados = gasto.meses ? gasto.meses.split(',') : [];
-            var envoltorio = modalEditarGasto.querySelector('.calendario-meses-envoltorio');
+            var envoltorio = formularioEditarGasto.querySelector('.calendario-meses-envoltorio');
 
             envoltorio.querySelectorAll('input[name="meses[]"]').forEach(function (casilla) {
                 casilla.checked = mesesSeleccionados.indexOf(casilla.value) !== -1;
@@ -616,34 +709,95 @@ document.addEventListener('DOMContentLoaded', function () {
             if (envoltorio.actualizarDistribucion) {
                 envoltorio.actualizarDistribucion();
             }
-
-            modalEditarGasto.classList.add('abierto');
         });
     });
+});
 
-    if (botonCerrarEditarGasto) {
-        botonCerrarEditarGasto.addEventListener('click', cerrarEditarGasto);
+document.addEventListener('DOMContentLoaded', function () {
+    var formularioEdicion = document.getElementById('form-editar-gasto');
+
+    if (!formularioEdicion) {
+        return;
     }
 
-    modalEditarGasto.addEventListener('click', function (evento) {
-        if (evento.target === modalEditarGasto) {
-            cerrarEditarGasto();
-        }
-    });
+    var formularioSucio = false;
 
-    document.addEventListener('keydown', function (evento) {
-        if (evento.key === 'Escape') {
-            cerrarEditarGasto();
-        }
-    });
+    // El auto-poblado del formulario (botón oculto + auto-click) también corre en un
+    // setTimeout(0) desde un <script> anterior a este archivo — se espera un tick más
+    // para no confundir ese poblado inicial (dispara eventos "change" sintéticos en los
+    // selectores buscables) con una edición real del usuario.
+    setTimeout(function () {
+        formularioEdicion.addEventListener('input', function () { formularioSucio = true; });
+        formularioEdicion.addEventListener('change', function () { formularioSucio = true; });
+    }, 0);
 
-    document.querySelectorAll('.form-eliminar-gasto').forEach(function (formulario) {
-        formulario.addEventListener('submit', function (evento) {
-            if (!confirm('¿Eliminar este gasto? Esta acción no se puede deshacer.')) {
-                evento.preventDefault();
+    var modalConfirmar = document.getElementById('modal-confirmar-salir-edicion');
+    var botonSeguirEditando = document.getElementById('boton-seguir-editando-edicion');
+    var botonSalirSinGuardar = document.getElementById('boton-salir-sin-guardar-edicion');
+    var accionPendiente = null;
+
+    function abrirConfirmacion(callback) {
+        if (!formularioSucio) {
+            callback();
+            return;
+        }
+
+        accionPendiente = callback;
+
+        if (modalConfirmar) {
+            modalConfirmar.classList.add('abierto');
+        } else {
+            callback();
+        }
+    }
+
+    function cerrarConfirmacion() {
+        accionPendiente = null;
+
+        if (modalConfirmar) {
+            modalConfirmar.classList.remove('abierto');
+        }
+    }
+
+    if (botonSeguirEditando) {
+        botonSeguirEditando.addEventListener('click', cerrarConfirmacion);
+    }
+
+    if (botonSalirSinGuardar) {
+        botonSalirSinGuardar.addEventListener('click', function () {
+            var callback = accionPendiente;
+            formularioSucio = false;
+            cerrarConfirmacion();
+
+            if (callback) {
+                callback();
             }
         });
-    });
+    }
+
+    var enlaceVolver = document.querySelector('.barra-modulo-volver');
+
+    if (enlaceVolver) {
+        enlaceVolver.addEventListener('click', function (evento) {
+            if (formularioSucio) {
+                evento.preventDefault();
+                abrirConfirmacion(function () {
+                    window.location.href = enlaceVolver.href;
+                });
+            }
+        });
+    }
+
+    var botonNuevoItem = document.getElementById('boton-nuevo-item-desde-edicion');
+    var modalGasto = document.getElementById('modal-gasto');
+
+    if (botonNuevoItem && modalGasto) {
+        botonNuevoItem.addEventListener('click', function () {
+            abrirConfirmacion(function () {
+                modalGasto.classList.add('abierto');
+            });
+        });
+    }
 });
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -678,6 +832,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             asignar('editar-egreso-id', gasto.id);
+            asignar('editar-egreso-volver', gasto.volver || '');
             asignar('editar-egreso-autogestion_id', gasto.autogestion_id);
             asignar('editar-egreso-anio_presupuestal_id', gasto.anio_presupuestal_id);
             asignar('editar-egreso-categoria', gasto.categoria);
@@ -814,6 +969,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             asignar('editar-ingreso-id', ingreso.id);
+            asignar('editar-ingreso-volver', ingreso.volver || '');
             asignar('editar-ingreso-autogestion_id', ingreso.autogestion_id);
             asignar('editar-ingreso-anio_presupuestal_id', ingreso.anio_presupuestal_id);
             establecerValorBuscable('editar-ingreso-dependencia', ingreso.dependencia);
@@ -929,6 +1085,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             document.getElementById('editar-solicitud-id').value = solicitud.id;
+            document.getElementById('editar-solicitud-volver').value = solicitud.volver || '';
             document.getElementById('editar-solicitud-anio').value = solicitud.anio_presupuestal_id;
             establecerValorBuscable('editar-solicitud-facultad', solicitud.facultad);
 
@@ -1031,6 +1188,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 document.getElementById('editar-monitor-id').value = monitor.id;
+                document.getElementById('editar-monitor-volver').value = monitor.volver || '';
                 document.getElementById('editar-monitor-anio').value = monitor.anio_presupuestal_id;
                 establecerValorBuscable('editar-monitor-dependencia', monitor.dependencia);
 
@@ -1123,6 +1281,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 document.getElementById('editar-ops-id').value = ops.id;
+                document.getElementById('editar-ops-volver').value = ops.volver || '';
                 document.getElementById('editar-ops-anio').value = ops.anio_presupuestal_id;
                 document.getElementById('editar-ops-sede').value = ops.sede_id;
                 establecerValorBuscable('editar-ops-proyecto_id', ops.proyecto_id);
@@ -1219,6 +1378,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
 
                 document.getElementById('editar-peticion-id').value = peticion.id;
+                document.getElementById('editar-peticion-volver').value = peticion.volver || '';
                 document.getElementById('editar-peticion-anio').value = peticion.anio_presupuestal_id;
                 document.getElementById('editar-peticion-concepto').value = peticion.concepto;
                 document.getElementById('editar-peticion-rol').value = peticion.rol_destinatario_id || '';
@@ -2531,7 +2691,8 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // ---- Editar (uno o varios grupos a la vez) ----
+    // ---- Editar (uno o varios grupos a la vez): lista con un enlace "Editar" por ítem, que
+    // navega al formulario real de su módulo de origen (con el ítem pre-cargado) y vuelve aquí. ----
     if (botonEditar && modalEditarConsolidado) {
         var botonCerrarEditarConsolidado = document.getElementById('boton-cerrar-modal-editar-consolidado');
         var campoEditarTipoTexto = document.getElementById('editar-consolidado-tipo-texto');
@@ -2549,68 +2710,60 @@ document.addEventListener('DOMContentLoaded', function () {
             var seleccionados = obtenerSeleccionados();
             var items = itemsDeSeleccion(seleccionados);
             var tipos = tiposDeSeleccion(seleccionados);
+            var volver = encodeURIComponent(window.location.href);
 
             campoEditarTipoTexto.textContent = tipos.join(', ');
             cuerpoEditarConsolidado.innerHTML = '';
 
-            function celdaTexto(valor) {
-                var celda = document.createElement('td');
-                celda.textContent = (valor === null || valor === undefined || valor === '') ? '—' : valor;
-                return celda;
-            }
-
-            function celdaMoneda(valor) {
-                var celda = document.createElement('td');
-                celda.textContent = (valor === null || valor === undefined || valor === '')
-                    ? '—'
-                    : '$ ' + Number(valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                return celda;
+            if (items.length === 0) {
+                var filaVacia = document.createElement('tr');
+                filaVacia.innerHTML = '<td colspan="4">No hay elementos.</td>';
+                cuerpoEditarConsolidado.appendChild(filaVacia);
             }
 
             items.forEach(function (item) {
                 var fila = document.createElement('tr');
 
-                fila.appendChild(celdaTexto(item.tipo));
-                fila.appendChild(celdaTexto(item.dependencia || item.detalle));
-                fila.appendChild(celdaTexto(item.sede));
-                fila.appendChild(celdaTexto(item.linea));
-                fila.appendChild(celdaTexto(item.motor));
-                fila.appendChild(celdaTexto(item.proyecto));
-                fila.appendChild(celdaTexto(item.objeto_proyecto_paa));
-                fila.appendChild(celdaTexto(item.actividad));
-                fila.appendChild(celdaTexto(item.rubro));
-                fila.appendChild(celdaTexto(item.insumo));
-                fila.appendChild(celdaTexto(item.cantidad));
-                fila.appendChild(celdaMoneda(item.costo_unitario));
+                var celdaTipo = document.createElement('td');
+                celdaTipo.textContent = item.tipo || '—';
+                fila.appendChild(celdaTipo);
+
+                var celdaDetalle = document.createElement('td');
+                celdaDetalle.textContent = item.dependencia || item.detalle || '—';
+                fila.appendChild(celdaDetalle);
 
                 var celdaValor = document.createElement('td');
-
-                var campoOrigen = document.createElement('input');
-                campoOrigen.type = 'hidden';
-                campoOrigen.name = 'item_origen[]';
-                campoOrigen.value = item.origen || '';
-                celdaValor.appendChild(campoOrigen);
-
-                var campoOrigenId = document.createElement('input');
-                campoOrigenId.type = 'hidden';
-                campoOrigenId.name = 'item_origen_id[]';
-                campoOrigenId.value = item.origen_id || '';
-                celdaValor.appendChild(campoOrigenId);
-
-                var campoValor = document.createElement('input');
-                campoValor.type = 'number';
-                campoValor.name = 'item_valor[]';
-                campoValor.min = '0';
-                campoValor.step = '0.01';
-                campoValor.required = true;
-                campoValor.style.width = '100%';
-                campoValor.value = item.valor !== null && item.valor !== undefined ? item.valor : '';
-                celdaValor.appendChild(campoValor);
-
+                celdaValor.textContent = item.valor !== null && item.valor !== undefined && item.valor !== ''
+                    ? '$ ' + Number(item.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : '—';
                 fila.appendChild(celdaValor);
 
-                fila.appendChild(celdaTexto(item.meses));
-                fila.appendChild(celdaMoneda(item.techo));
+                var celdaAccion = document.createElement('td');
+
+                if (item.puede_editar) {
+                    var mapaTab = {
+                        gasto_extension: 'egresos', ingreso_extension: 'ingresos',
+                        gasto_postgrado: 'egresos', ingreso_postgrado: 'ingresos',
+                        gasto_unisalud: 'egresos', ingreso_unisalud: 'ingresos',
+                        gasto_sin_excedentes: 'egresos', ingreso_sin_excedentes: 'ingresos',
+                    };
+                    var mapaTipoSolicitud = { arl: 'arl', monitores: 'monitores', ops: 'ops', otros: 'otros' };
+
+                    var enlace = document.createElement('a');
+                    var rutaOrigen = item.ruta_origen || 'index.php?ruta=peticiones';
+                    var separador = rutaOrigen.indexOf('?') === -1 ? '?' : '&';
+                    enlace.href = rutaOrigen + separador + 'editar_id=' + encodeURIComponent(item.origen_id)
+                        + '&volver=' + volver
+                        + (mapaTab[item.origen] ? '&tab=' + mapaTab[item.origen] : '')
+                        + (mapaTipoSolicitud[item.origen] ? '&tipo_solicitud=' + mapaTipoSolicitud[item.origen] : '');
+                    enlace.className = 'boton-accion boton-accion-editar';
+                    enlace.textContent = 'Editar';
+                    celdaAccion.appendChild(enlace);
+                } else {
+                    celdaAccion.textContent = '—';
+                }
+
+                fila.appendChild(celdaAccion);
 
                 cuerpoEditarConsolidado.appendChild(fila);
             });
@@ -2771,6 +2924,187 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     });
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    var checkboxesArchivado = document.querySelectorAll('.checkbox-archivado');
+    var checkboxArchivadoTodos = document.getElementById('checkbox-archivado-todos');
+
+    if (checkboxesArchivado.length === 0 && !checkboxArchivadoTodos) {
+        return;
+    }
+
+    var barraAccionesArchivar = document.getElementById('barra-acciones-archivar');
+    var anioIdArchivado = barraAccionesArchivar ? barraAccionesArchivar.dataset.anioId : '';
+    var bandejaArchivado = barraAccionesArchivar ? barraAccionesArchivar.dataset.bandeja : '';
+
+    var botonArchivadoDuplicar = document.getElementById('boton-archivado-duplicar');
+    var botonArchivadoConsolidar = document.getElementById('boton-archivado-consolidar');
+    var botonArchivadoEnviar = document.getElementById('boton-archivado-enviar');
+
+    var modalEnviarArchivado = document.getElementById('modal-enviar-archivado');
+
+    function obtenerSeleccionadosArchivado() {
+        return Array.prototype.filter.call(checkboxesArchivado, function (casilla) {
+            return casilla.checked;
+        });
+    }
+
+    function actualizarBotonesArchivado() {
+        var seleccionados = obtenerSeleccionadosArchivado();
+        var hay = seleccionados.length > 0;
+
+        if (botonArchivadoDuplicar) {
+            botonArchivadoDuplicar.disabled = !hay;
+        }
+        if (botonArchivadoConsolidar) {
+            botonArchivadoConsolidar.disabled = !hay;
+        }
+        if (botonArchivadoEnviar) {
+            botonArchivadoEnviar.disabled = !hay;
+        }
+
+        if (checkboxArchivadoTodos) {
+            checkboxArchivadoTodos.checked = checkboxesArchivado.length > 0 && seleccionados.length === checkboxesArchivado.length;
+        }
+    }
+
+    checkboxesArchivado.forEach(function (casilla) {
+        casilla.addEventListener('change', actualizarBotonesArchivado);
+    });
+
+    if (checkboxArchivadoTodos) {
+        checkboxArchivadoTodos.addEventListener('change', function () {
+            checkboxesArchivado.forEach(function (casilla) {
+                casilla.checked = checkboxArchivadoTodos.checked;
+            });
+            actualizarBotonesArchivado();
+        });
+    }
+
+    actualizarBotonesArchivado();
+
+    function enviarFormularioArchivado(accion, seleccionados) {
+        var formulario = document.createElement('form');
+        formulario.method = 'POST';
+        formulario.action = 'index.php?ruta=peticiones';
+        formulario.style.display = 'none';
+
+        function agregarCampo(nombre, valor) {
+            var campo = document.createElement('input');
+            campo.type = 'hidden';
+            campo.name = nombre;
+            campo.value = valor;
+            formulario.appendChild(campo);
+        }
+
+        agregarCampo('accion', accion);
+        agregarCampo('vista', 'archivar');
+        agregarCampo('anio_id', anioIdArchivado || '');
+        agregarCampo('bandeja', bandejaArchivado || '');
+
+        seleccionados.forEach(function (casilla) {
+            agregarCampo('item_origen[]', casilla.dataset.origen || '');
+            agregarCampo('item_origen_id[]', casilla.dataset.origenId || '');
+        });
+
+        document.body.appendChild(formulario);
+        formulario.submit();
+    }
+
+    if (botonArchivadoDuplicar) {
+        botonArchivadoDuplicar.addEventListener('click', function () {
+            if (botonArchivadoDuplicar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosArchivado();
+
+            if (!window.confirm('¿Duplicar ' + seleccionados.length + ' ítem(s) seleccionado(s)? Se creará una copia de cada uno, también archivada.')) {
+                return;
+            }
+
+            enviarFormularioArchivado('duplicar_archivado', seleccionados);
+        });
+    }
+
+    if (botonArchivadoConsolidar) {
+        botonArchivadoConsolidar.addEventListener('click', function () {
+            if (botonArchivadoConsolidar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosArchivado();
+
+            if (!window.confirm('¿Consolidar ' + seleccionados.length + ' ítem(s) seleccionado(s)? Pasarán a "Consolidado por tipo" y dejarán de estar archivados.')) {
+                return;
+            }
+
+            enviarFormularioArchivado('consolidar_archivado', seleccionados);
+        });
+    }
+
+    if (botonArchivadoEnviar && modalEnviarArchivado) {
+        var botonCerrarEnviarArchivado = document.getElementById('boton-cerrar-modal-enviar-archivado');
+        var contenedorCamposItemsEnviarArchivado = document.getElementById('enviar-archivado-campos-items');
+        var campoDependenciaEnviarArchivado = document.getElementById('enviar-archivado-dependencia');
+        var campoRolEnviarArchivado = document.getElementById('enviar-archivado-rol');
+
+        var cerrarEnviarArchivado = function () {
+            modalEnviarArchivado.classList.remove('abierto');
+        };
+
+        botonArchivadoEnviar.addEventListener('click', function () {
+            if (botonArchivadoEnviar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosArchivado();
+            contenedorCamposItemsEnviarArchivado.innerHTML = '';
+
+            seleccionados.forEach(function (casilla) {
+                var campoOrigen = document.createElement('input');
+                campoOrigen.type = 'hidden';
+                campoOrigen.name = 'item_origen[]';
+                campoOrigen.value = casilla.dataset.origen || '';
+                contenedorCamposItemsEnviarArchivado.appendChild(campoOrigen);
+
+                var campoOrigenId = document.createElement('input');
+                campoOrigenId.type = 'hidden';
+                campoOrigenId.name = 'item_origen_id[]';
+                campoOrigenId.value = casilla.dataset.origenId || '';
+                contenedorCamposItemsEnviarArchivado.appendChild(campoOrigenId);
+            });
+
+            campoDependenciaEnviarArchivado.value = '';
+            campoRolEnviarArchivado.value = '';
+            campoDependenciaEnviarArchivado.dispatchEvent(new Event('change'));
+            campoRolEnviarArchivado.dispatchEvent(new Event('change'));
+
+            if (window.aplicarFiltroRolUsuario) {
+                window.aplicarFiltroRolUsuario(campoDependenciaEnviarArchivado);
+            }
+
+            modalEnviarArchivado.classList.add('abierto');
+            campoDependenciaEnviarArchivado.focus();
+        });
+
+        if (botonCerrarEnviarArchivado) {
+            botonCerrarEnviarArchivado.addEventListener('click', cerrarEnviarArchivado);
+        }
+
+        modalEnviarArchivado.addEventListener('click', function (evento) {
+            if (evento.target === modalEnviarArchivado) {
+                cerrarEnviarArchivado();
+            }
+        });
+
+        document.addEventListener('keydown', function (evento) {
+            if (evento.key === 'Escape') {
+                cerrarEnviarArchivado();
+            }
+        });
+    }
 });
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -3688,6 +4022,13 @@ document.addEventListener('DOMContentLoaded', function () {
                 var seleccionadas = obtenerSeleccionadas();
 
                 if (seleccionadas.length !== 1) {
+                    return;
+                }
+
+                if (envoltura.dataset.editarEnPagina) {
+                    var id = seleccionadas[0].dataset.id;
+                    var base = envoltura.dataset.accionForm || window.location.href;
+                    window.location.href = base + (base.indexOf('?') === -1 ? '?' : '&') + 'editar_id=' + encodeURIComponent(id);
                     return;
                 }
 

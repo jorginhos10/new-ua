@@ -9,13 +9,13 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
         <?php
         $barraTitulo = $bandeja !== null ? 'Peticiones — ' . $bandejas[$bandeja]['etiqueta'] : 'Peticiones recibidas';
         $barraBotonesSecundarios = [
-            [
-                'id' => null,
-                'icono' => 'exportar',
-                'etiqueta' => 'Autogestión y perfil de proyectos',
-                'tipo' => 'a',
-                'href' => 'index.php?ruta=consolidado-autogestion',
-            ],
+            // [
+            //     'id' => null,
+            //     'icono' => 'exportar',
+            //     'etiqueta' => 'Autogestión y perfil de proyectos',
+            //     'tipo' => 'a',
+            //     'href' => 'index.php?ruta=consolidado-autogestion',
+            // ],
         ];
         if ($bandeja !== null) {
             $barraBotonesSecundarios[] = [
@@ -68,6 +68,13 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <button type="button" id="boton-consolidado-editar" class="boton-accion boton-accion-editar" disabled>Editar</button>
                 <button type="button" id="boton-consolidado-redireccionar" class="boton-accion boton-accion-enviar" disabled>Redireccionar</button>
                 <button type="button" id="boton-consolidado-duplicar" class="boton-agregar" disabled>Duplicar</button>
+            </div>
+            <?php endif; ?>
+            <?php if ($vista === 'archivar'): ?>
+            <div class="grupo-acciones-encabezado" id="barra-acciones-archivar" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>">
+                <button type="button" id="boton-archivado-duplicar" class="boton-accion boton-accion-editar" disabled>Duplicar</button>
+                <button type="button" id="boton-archivado-consolidar" class="boton-accion boton-accion-enviar" disabled>Consolidar</button>
+                <button type="button" id="boton-archivado-enviar" class="boton-agregar" disabled>Enviar</button>
             </div>
             <?php endif; ?>
         </div>
@@ -347,6 +354,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th><input type="checkbox" id="checkbox-archivado-todos" <?= empty($archivados) ? 'disabled' : '' ?>></th>
                         <th>Tipo</th>
                         <th>Origen</th>
                         <th>Cantidad</th>
@@ -358,6 +366,14 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <tbody>
                     <?php foreach ($archivados as $item): ?>
                     <tr>
+                        <td>
+                            <input
+                                type="checkbox"
+                                class="checkbox-archivado"
+                                data-origen="<?= htmlspecialchars($item['origen']) ?>"
+                                data-origen-id="<?= (int) $item['origen_id'] ?>"
+                            >
+                        </td>
                         <td><?= htmlspecialchars($item['tipo']) ?></td>
                         <td><?= htmlspecialchars($item['detalle']) ?></td>
                         <td><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
@@ -380,7 +396,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     <?php endforeach; ?>
                     <?php if (empty($archivados)): ?>
                     <tr>
-                        <td colspan="6">No hay peticiones archivadas.</td>
+                        <td colspan="7">No hay peticiones archivadas.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
@@ -453,48 +469,28 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
         </div>
     </div>
 
-    <div id="modal-editar-consolidado" class="modal-fondo">
-        <div class="modal-caja modal-caja-ancha">
+    <div id="modal-editar-consolidado" class="modal-fondo" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>">
+        <div class="modal-caja">
             <div class="modal-cabecera">
                 <h2>Editar <span id="editar-consolidado-tipo-texto"></span></h2>
                 <button type="button" id="boton-cerrar-modal-editar-consolidado" class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
 
-            <p class="texto-atenuado">Solo puedes editar los ítems seleccionados porque todos pertenecen actualmente a tu dependencia (o a una dependencia hija tuya). Si alguno se redirecciona o cambia de dueño, dejarás de poder editarlo.</p>
+            <p class="texto-atenuado">Cada ítem se edita en el formulario real de su módulo de origen, con todos sus campos. Solo puedes editar los ítems que hoy son tuyos (o cualquiera si eres superadmin).</p>
 
-            <form method="POST" action="index.php?ruta=peticiones" class="form-necesidad">
-                <input type="hidden" name="accion" value="editar_consolidado_grupo">
-                <input type="hidden" name="vista" value="consolidado">
-                <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
-
-                <div class="tabla-scroll">
-                    <table class="tabla-usuarios">
-                        <thead>
-                            <tr>
-                                <th>Tipo</th>
-                                <th>Dependencia</th>
-                                <th>Sede</th>
-                                <th>Línea estratégica</th>
-                                <th>Motor de desarrollo</th>
-                                <th>Proyecto PDI</th>
-                                <th>Objeto/Proyecto (PAA)</th>
-                                <th>Actividad</th>
-                                <th>Rubro</th>
-                                <th>Insumo</th>
-                                <th>Cantidad</th>
-                                <th>Costo unitario</th>
-                                <th>Valor total</th>
-                                <th>Meses</th>
-                                <th>Techo presupuestal</th>
-                            </tr>
-                        </thead>
-                        <tbody id="editar-consolidado-cuerpo"></tbody>
-                    </table>
-                </div>
-
-                <button type="submit" class="boton-enviar">Guardar cambios</button>
-            </form>
+            <div class="tabla-scroll">
+                <table class="tabla-usuarios tabla-consolidado-detalle">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Detalle</th>
+                            <th>Valor</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="editar-consolidado-cuerpo"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -548,6 +544,60 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 </div>
 
                 <button type="submit" class="boton-enviar">Redireccionar</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-enviar-archivado" class="modal-fondo">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Enviar <span id="enviar-archivado-tipo-texto"></span></h2>
+                <button type="button" id="boton-cerrar-modal-enviar-archivado" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <form method="POST" action="index.php?ruta=peticiones" class="form-necesidad form-confirmar-envio" data-campo-dependencia="enviar-archivado-dependencia" data-campo-rol="enviar-archivado-rol">
+                <input type="hidden" name="accion" value="enviar_archivado">
+                <input type="hidden" name="vista" value="archivar">
+                <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
+                <div id="enviar-archivado-campos-items"></div>
+
+                <div class="campo">
+                    <label for="enviar-archivado-dependencia_buscador">Dependencia *</label>
+                    <?php
+                    $idPrefijoDependencia = '';
+                    $nombreCampoDependencia = 'dependencia_destino';
+                    $idBaseDependenciaOverride = 'enviar-archivado-dependencia';
+                    $dependenciasOpciones = $dependenciasSugeridas;
+                    $dependenciaDataSelectRol = 'enviar-archivado-rol';
+                    require __DIR__ . '/../parciales/selector-dependencia.php';
+                    ?>
+                </div>
+
+                <div class="campo">
+                    <label for="enviar-archivado-rol">Rol *</label>
+                    <select id="enviar-archivado-rol" name="rol_destinatario_id" required>
+                        <option value="">Selecciona un rol</option>
+                        <?php foreach ($roles as $rolOpcion): ?>
+                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="campo" style="display:none;">
+                    <label for="enviar-archivado-destinatario">¿A quién exactamente? *</label>
+                    <select
+                        id="enviar-archivado-destinatario"
+                        name="usuario_destinatario_id"
+                        class="selector-destinatario"
+                        data-campo-dependencia="enviar-archivado-dependencia"
+                        data-campo-rol="enviar-archivado-rol"
+                    >
+                        <option value="">Selecciona a quién enviarlo</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="boton-enviar">Enviar</button>
             </form>
         </div>
     </div>

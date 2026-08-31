@@ -16,6 +16,7 @@ require_once __DIR__ . '/../modelo/MenuPermiso.php';
 require_once __DIR__ . '/../modelo/Rol.php';
 require_once __DIR__ . '/../modelo/Mensaje.php';
 require_once __DIR__ . '/../modelo/TipoDependenciaRol.php';
+require_once __DIR__ . '/../modelo/PeticionArchivada.php';
 
 class GastoControlador
 {
@@ -152,6 +153,12 @@ class GastoControlador
         $gastos = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : [];
         $gastos = $this->filtrarPorPropietarioODestinatario($gastos, $usuarioActual, $dependenciasSugeridas);
 
+        $gastoParaEditar = null;
+        if (isset($_GET['editar_id']) && ctype_digit((string) $_GET['editar_id'])) {
+            $gastoParaEditar = $this->modeloGasto->obtenerPorId((int) $_GET['editar_id']);
+        }
+        $volverEdicion = $_GET['volver'] ?? '';
+
         $anioSeleccionado = null;
         foreach ($aniosActivos as $anioFila) {
             if ((int) $anioFila['id'] === $anioSeleccionadoId) {
@@ -252,7 +259,18 @@ class GastoControlador
             return ['No se pudo actualizar el gasto. Verifica el año, la sede, la línea, el motor, el proyecto y el rubro seleccionados.', ''];
         }
 
-        return ['', 'Gasto actualizado correctamente.'];
+        (new PeticionArchivada())->sincronizarDesdeOrigen(
+            'gasto_principal',
+            $id,
+            $datos['cantidad'] * $datos['costo_unitario'],
+            $datos['dependencia']
+        );
+
+        $destino = !empty($_POST['volver'])
+            ? $_POST['volver']
+            : 'index.php?ruta=gastos&anio_id=' . $datos['anio_presupuestal_id'];
+        header('Location: ' . $destino);
+        exit;
     }
 
     private function obtenerDependenciasPermitidas(): array

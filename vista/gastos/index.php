@@ -11,6 +11,7 @@ $nombresMesesCompletos = [
     9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
 ];
 $catalogosListos = !empty($sedes) && !empty($lineas) && !empty($motores) && !empty($proyectos) && !empty($rubros) && !empty($aniosActivos);
+$modoEdicion = $gastoParaEditar !== null;
 require __DIR__ . '/../parciales/encabezado.php';
 ?>
 
@@ -22,39 +23,52 @@ require __DIR__ . '/../parciales/encabezado.php';
                 'id' => 'boton-seleccionar-gastos',
                 'icono' => 'seleccionar',
                 'etiqueta' => 'Seleccionar elementos',
+                'disabled' => $modoEdicion,
             ],
             [
                 'id' => 'boton-editar-gastos',
                 'icono' => 'editar',
                 'etiqueta' => 'Editar seleccionado',
                 'disabled' => true,
-                'titulo_disabled' => 'Selecciona exactamente un elemento',
+                'titulo_disabled' => $modoEdicion ? 'Ya estás editando un elemento' : 'Selecciona exactamente un elemento',
             ],
             [
                 'id' => 'boton-duplicar-gastos',
                 'icono' => 'duplicar',
                 'etiqueta' => 'Duplicar seleccionados',
                 'disabled' => true,
-                'titulo_disabled' => 'Selecciona uno o más elementos',
+                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
             ],
             [
                 'id' => 'boton-eliminar-gastos',
                 'icono' => 'eliminar',
                 'etiqueta' => 'Eliminar seleccionados',
                 'disabled' => true,
-                'titulo_disabled' => 'Selecciona uno o más elementos',
+                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
             ],
             [
                 'id' => 'boton-abrir-modal-enviar-todo-gasto',
                 'icono' => 'enviar',
                 'etiqueta' => 'Enviar todos los gastos en borrador',
-                'disabled' => !$puedeEnviarTodo,
+                'disabled' => $modoEdicion || !$puedeEnviarTodo,
                 'titulo_disabled' => 'Disponible cuando se haya ejecutado el 100% del presupuesto',
             ],
         ];
-        $barraBotonPrincipal = $catalogosListos
-            ? ['id' => 'boton-abrir-modal-gasto', 'etiqueta' => '+ Agregar gasto']
+        if ($modoEdicion) {
+            $barraBotonesSecundarios[] = [
+                'id' => 'boton-nuevo-item-desde-edicion',
+                'icono' => 'nuevo',
+                'etiqueta' => 'Nuevo ítem',
+            ];
+        }
+        $barraBotonPrincipal = $modoEdicion
+            ? ['id' => 'boton-guardar-edicion-gasto', 'etiqueta' => 'Guardar', 'form' => 'form-editar-gasto']
+            : ($catalogosListos ? ['id' => 'boton-abrir-modal-gasto', 'etiqueta' => '+ Agregar gasto'] : null);
+        $barraEstado = $modoEdicion ? 'edicion' : 'creacion';
+        $barraRutaVolver = $modoEdicion
+            ? ($volverEdicion !== '' ? $volverEdicion : 'index.php?ruta=gastos&anio_id=' . $anioSeleccionadoId)
             : null;
+        $barraTextoVolver = ($modoEdicion && $volverEdicion !== '') ? 'Volver a Peticiones' : 'Volver a Gastos';
         require __DIR__ . '/../parciales/barra-modulo.php';
         ?>
 
@@ -121,6 +135,9 @@ require __DIR__ . '/../parciales/encabezado.php';
             </div>
         <?php endif; ?>
 
+        <?php if ($modoEdicion): ?>
+        <?php require __DIR__ . '/formulario-edicion.php'; ?>
+        <?php else: ?>
         <div
             class="tabla-scroll tabla-bulk-seleccionable"
             data-boton-seleccionar="boton-seleccionar-gastos"
@@ -130,6 +147,7 @@ require __DIR__ . '/../parciales/encabezado.php';
             data-accion-form="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>"
             data-accion-eliminar="eliminar_seleccionados"
             data-accion-duplicar="duplicar_seleccionados"
+            data-editar-en-pagina="1"
         >
             <table class="tabla-usuarios">
                 <thead>
@@ -168,11 +186,10 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td class="celda-acciones">
                             <?php if ($gasto['estado'] === 'borrador'): ?>
                             <div class="acciones-fila">
-                                <button
-                                    type="button"
-                                    class="boton-accion boton-accion-editar boton-editar-gasto boton-editar-fila-generico"
-                                    data-gasto="<?= htmlspecialchars(json_encode($gasto)) ?>"
-                                >Editar</button>
+                                <a
+                                    href="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>&editar_id=<?= (int) $gasto['id'] ?>"
+                                    class="boton-accion boton-accion-editar"
+                                >Editar</a>
                                 <form method="POST" action="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-eliminar-gasto">
                                     <input type="hidden" name="accion" value="eliminar">
                                     <input type="hidden" name="id" value="<?= (int) $gasto['id'] ?>">
@@ -207,6 +224,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 </tbody>
             </table>
         </div>
+        <?php endif; ?>
     </div>
 
     <?php if ($catalogosListos): ?>
@@ -333,131 +351,6 @@ require __DIR__ . '/../parciales/encabezado.php';
         </div>
     </div>
 
-    <div id="modal-editar-gasto" class="modal-fondo<?= !empty($error) && $accion === 'actualizar' ? ' abierto' : '' ?>">
-        <div class="modal-caja">
-            <div class="modal-cabecera">
-                <h2>Editar gasto</h2>
-                <button type="button" id="boton-cerrar-modal-editar-gasto" class="modal-cerrar" aria-label="Cerrar">&times;</button>
-            </div>
-
-            <?php if (!empty($error) && $accion === 'actualizar'): ?>
-            <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
-            <?php endif; ?>
-
-            <form method="POST" action="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-necesidad">
-                <input type="hidden" name="accion" value="actualizar">
-                <input type="hidden" name="id" id="editar-gasto-id" value="">
-
-                <div class="campo">
-                    <label for="editar-anio_presupuestal_id">Año presupuestal *</label>
-                    <select id="editar-anio_presupuestal_id" name="anio_presupuestal_id" required>
-                        <option value="">Selecciona un año</option>
-                        <?php foreach ($aniosActivos as $anioOpcion): ?>
-                        <option value="<?= (int) $anioOpcion['id'] ?>"><?= htmlspecialchars((string) $anioOpcion['anio']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-sede_id">Sede *</label>
-                    <select id="editar-sede_id" name="sede_id" required>
-                        <option value="">Selecciona una sede</option>
-                        <?php foreach ($sedes as $sede): ?>
-                        <option value="<?= (int) $sede['id'] ?>"><?= htmlspecialchars($sede['codigo'] . ' - ' . $sede['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="<?= (!$tieneHijas && $dependenciaPorDefecto !== null) ? 'editar-dependencia' : 'editar-dependencia_buscador' ?>">Dependencia *</label>
-                    <?php if (!$tieneHijas && $dependenciaPorDefecto !== null): ?>
-                    <select disabled>
-                        <option selected><?= htmlspecialchars($dependenciaPorDefecto) ?></option>
-                    </select>
-                    <input type="hidden" name="dependencia" id="editar-dependencia" value="<?= htmlspecialchars($dependenciaPorDefecto) ?>">
-                    <?php else: ?>
-                    <?php
-                    $idPrefijoDependencia = 'editar-';
-                    $nombreCampoDependencia = 'dependencia';
-                    $dependenciasOpciones = $dependenciasSugeridas;
-                    require __DIR__ . '/../parciales/selector-dependencia.php';
-                    ?>
-                    <?php endif; ?>
-                </div>
-
-                <?php $idPrefijoProyecto = 'editar-'; $proyectosPdi = $proyectos; require __DIR__ . '/../parciales/selector-proyecto-pdi.php'; ?>
-
-                <?php $idPrefijoContrato = 'editar-'; require __DIR__ . '/../parciales/selector-contrato-comun.php'; ?>
-
-                <div class="campo campo-ancho">
-                    <label for="editar-actividad">Actividad *</label>
-                    <input type="text" id="editar-actividad" name="actividad" placeholder="Diligenciar" required>
-                </div>
-
-                <div class="campo campo-ancho">
-                    <label for="editar-rubro_buscador">Rubro *</label>
-                    <div class="selector-buscable" id="editar-selector-rubro">
-                        <input type="text" id="editar-rubro_buscador" class="selector-buscable-input" placeholder="Buscar rubro..." autocomplete="off">
-                        <input type="hidden" name="rubro_id" id="editar-rubro_id">
-                        <div class="selector-buscable-lista" id="editar-rubro_lista">
-                            <?php foreach ($rubros as $rubro): ?>
-                            <div class="selector-buscable-opcion" data-id="<?= (int) $rubro['id'] ?>" data-texto="<?= htmlspecialchars($rubro['codigo'] . ' - ' . $rubro['descripcion']) ?>">
-                                <?= htmlspecialchars($rubro['codigo'] . ' - ' . $rubro['descripcion']) ?>
-                            </div>
-                            <?php endforeach; ?>
-                            <div class="selector-buscable-vacio">Sin resultados.</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-insumo">Insumo *</label>
-                    <input type="text" id="editar-insumo" name="insumo" placeholder="Diligenciar" required>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-cantidad">Cantidad *</label>
-                    <input type="number" id="editar-cantidad" name="cantidad" min="1" step="1" required>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-costo_unitario">Costo unitario *</label>
-                    <input type="number" id="editar-costo_unitario" name="costo_unitario" min="0" step="0.01" required>
-                </div>
-
-                <div class="campo campo-ancho">
-                    <label>Meses de ejecución *</label>
-                    <div class="calendario-meses-envoltorio">
-                        <div class="calendario-meses">
-                            <div class="calendario-meses-cabecera">Calendario</div>
-                            <div class="calendario-meses-grilla">
-                                <?php foreach ($nombresMesesCompletos as $numero => $nombre): ?>
-                                <label class="mes-celda">
-                                    <input type="checkbox" name="meses[]" value="<?= $numero ?>">
-                                    <span><?= htmlspecialchars($nombre) ?></span>
-                                </label>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-
-                        <div class="resumen-meses">
-                            <h3>Distribución del presupuesto</h3>
-                            <ul class="lista-meses-seleccionados">
-                                <li class="lista-meses-vacio">Selecciona los meses de ejecución.</li>
-                            </ul>
-                            <div class="resumen-meses-total">
-                                <span>Total</span>
-                                <span class="resumen-meses-total-valor">$0.00</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <button type="submit" class="boton-enviar">Guardar cambios</button>
-            </form>
-        </div>
-    </div>
-
     <div id="modal-enviar-todo-gasto" class="modal-fondo">
         <div class="modal-caja">
             <div class="modal-cabecera">
@@ -499,6 +392,24 @@ require __DIR__ . '/../parciales/encabezado.php';
 
     <script type="application/json" id="datos-roles-por-tipo"><?= json_encode($rolesPorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
     <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+
+    <?php endif; ?>
+
+    <?php if ($modoEdicion): ?>
+    <div id="modal-confirmar-salir-edicion" class="modal-fondo">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Cambios sin guardar</h2>
+            </div>
+
+            <p class="texto-atenuado">Tienes cambios sin guardar en este gasto. Si sales ahora se perderán.</p>
+
+            <div class="acciones-fila">
+                <button type="button" id="boton-seguir-editando-edicion" class="boton-accion boton-accion-editar">Seguir editando</button>
+                <button type="button" id="boton-salir-sin-guardar-edicion" class="boton-accion boton-accion-eliminar">Salir sin guardar</button>
+            </div>
+        </div>
+    </div>
     <?php endif; ?>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

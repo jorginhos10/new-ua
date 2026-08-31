@@ -530,6 +530,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <input type="hidden" name="accion" value="actualizar">
                 <input type="hidden" name="tab" value="arl">
                 <input type="hidden" name="id" id="editar-solicitud-id" value="">
+                <input type="hidden" name="volver" id="editar-solicitud-volver" value="">
 
                 <div class="campo">
                     <label for="editar-solicitud-anio">Año presupuestal *</label>
@@ -676,6 +677,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <input type="hidden" name="accion" value="actualizar_monitor">
                 <input type="hidden" name="tab" value="monitores">
                 <input type="hidden" name="id" id="editar-monitor-id" value="">
+                <input type="hidden" name="volver" id="editar-monitor-volver" value="">
 
                 <div class="campo">
                     <label for="editar-monitor-anio">Año presupuestal *</label>
@@ -846,6 +848,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <input type="hidden" name="accion" value="actualizar_ops">
                 <input type="hidden" name="tab" value="ops">
                 <input type="hidden" name="id" id="editar-ops-id" value="">
+                <input type="hidden" name="volver" id="editar-ops-volver" value="">
 
                 <div class="campo">
                     <label for="editar-ops-anio">Año presupuestal *</label>
@@ -1009,6 +1012,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <input type="hidden" name="accion" value="actualizar_peticion">
                 <input type="hidden" name="tab" value="otros">
                 <input type="hidden" name="id" id="editar-peticion-id" value="">
+                <input type="hidden" name="volver" id="editar-peticion-volver" value="">
 
                 <div class="campo">
                     <label for="editar-peticion-anio">Año presupuestal *</label>
@@ -1083,5 +1087,55 @@ require __DIR__ . '/../parciales/encabezado.php';
 
     <script type="application/json" id="datos-roles-por-tipo"><?= json_encode($rolesPorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
     <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+
+    <?php if ($solicitudArlParaEditarDesdePeticiones !== null): ?>
+    <button
+        type="button"
+        id="boton-editar-solicitud-desde-peticiones"
+        class="fila-menu-editar-solicitud boton-editar-fila-generico"
+        hidden
+        data-solicitud="<?= htmlspecialchars(json_encode($solicitudArlParaEditarDesdePeticiones + ['volver' => $volverAPeticiones], JSON_UNESCAPED_UNICODE)) ?>"
+    ></button>
+    <?php endif; ?>
+    <?php if ($solicitudMonitorParaEditarDesdePeticiones !== null): ?>
+    <button
+        type="button"
+        id="boton-editar-monitor-desde-peticiones"
+        class="fila-menu-editar-monitor boton-editar-fila-generico"
+        hidden
+        data-monitor="<?= htmlspecialchars(json_encode($solicitudMonitorParaEditarDesdePeticiones + ['volver' => $volverAPeticiones], JSON_UNESCAPED_UNICODE)) ?>"
+    ></button>
+    <?php endif; ?>
+    <?php if ($solicitudOpsParaEditarDesdePeticiones !== null): ?>
+    <button
+        type="button"
+        id="boton-editar-ops-desde-peticiones"
+        class="fila-menu-editar-ops boton-editar-fila-generico"
+        hidden
+        data-ops="<?= htmlspecialchars(json_encode($solicitudOpsParaEditarDesdePeticiones + ['volver' => $volverAPeticiones], JSON_UNESCAPED_UNICODE)) ?>"
+    ></button>
+    <?php endif; ?>
+    <?php if ($solicitudPeticionParaEditarDesdePeticiones !== null): ?>
+    <button
+        type="button"
+        id="boton-editar-peticion-desde-peticiones"
+        class="fila-menu-editar-peticion boton-editar-fila-generico"
+        hidden
+        data-peticion="<?= htmlspecialchars(json_encode($solicitudPeticionParaEditarDesdePeticiones + ['volver' => $volverAPeticiones], JSON_UNESCAPED_UNICODE)) ?>"
+    ></button>
+    <?php endif; ?>
+    <?php if ($solicitudArlParaEditarDesdePeticiones !== null || $solicitudMonitorParaEditarDesdePeticiones !== null || $solicitudOpsParaEditarDesdePeticiones !== null || $solicitudPeticionParaEditarDesdePeticiones !== null): ?>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var boton = document.getElementById('boton-editar-solicitud-desde-peticiones')
+                || document.getElementById('boton-editar-monitor-desde-peticiones')
+                || document.getElementById('boton-editar-ops-desde-peticiones')
+                || document.getElementById('boton-editar-peticion-desde-peticiones');
+            if (boton) {
+                boton.click();
+            }
+        });
+    </script>
+    <?php endif; ?>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

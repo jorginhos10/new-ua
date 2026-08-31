@@ -77,6 +77,8 @@ if ($tipoFiltro !== '') {
                         'cantidad' => $fila['cantidad'],
                         'valor' => $fila['valor_total'],
                         'ruta_ver' => $fila['ruta_ver'],
+                        'ruta_origen' => $fila['ruta_origen'] ?? 'index.php?ruta=peticiones',
+                        'puede_editar' => !empty($fila['puede_editar']),
                         'sede' => $fila['sede'],
                         'linea' => $fila['linea'],
                         'motor' => $fila['motor'],
@@ -157,47 +159,28 @@ if ($tipoFiltro !== '') {
         </div>
     </div>
 
-    <div id="modal-editar-consolidado" class="modal-fondo">
-        <div class="modal-caja modal-caja-ancha">
+    <div id="modal-editar-consolidado" class="modal-fondo" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="">
+        <div class="modal-caja">
             <div class="modal-cabecera">
                 <h2>Editar <span id="editar-consolidado-tipo-texto"></span></h2>
                 <button type="button" id="boton-cerrar-modal-editar-consolidado" class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
 
-            <p class="texto-atenuado">Solo puedes editar los ítems seleccionados porque todos pertenecen actualmente a tu dependencia (o a una dependencia hija tuya). Si alguno se redirecciona o cambia de dueño, dejarás de poder editarlo.</p>
+            <p class="texto-atenuado">Cada ítem se edita en el formulario real de su módulo de origen, con todos sus campos. Solo puedes editar los ítems que hoy son tuyos (o cualquiera si eres superadmin).</p>
 
-            <form method="POST" action="index.php?ruta=consolidado-detalle" class="form-necesidad">
-                <input type="hidden" name="accion" value="editar_consolidado_grupo">
-                <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                <input type="hidden" name="tipo_filtro" value="<?= htmlspecialchars($tipoFiltro) ?>">
-
-                <div class="tabla-scroll">
-                    <table class="tabla-usuarios">
-                        <thead>
-                            <tr>
-                                <th>Tipo</th>
-                                <th>Dependencia</th>
-                                <th>Sede</th>
-                                <th>Línea estratégica</th>
-                                <th>Motor de desarrollo</th>
-                                <th>Proyecto PDI</th>
-                                <th>Objeto/Proyecto (PAA)</th>
-                                <th>Actividad</th>
-                                <th>Rubro</th>
-                                <th>Insumo</th>
-                                <th>Cantidad</th>
-                                <th>Costo unitario</th>
-                                <th>Valor total</th>
-                                <th>Meses</th>
-                                <th>Techo presupuestal</th>
-                            </tr>
-                        </thead>
-                        <tbody id="editar-consolidado-cuerpo"></tbody>
-                    </table>
-                </div>
-
-                <button type="submit" class="boton-enviar">Guardar cambios</button>
-            </form>
+            <div class="tabla-scroll">
+                <table class="tabla-usuarios tabla-consolidado-detalle">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Detalle</th>
+                            <th>Valor</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="editar-consolidado-cuerpo"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 

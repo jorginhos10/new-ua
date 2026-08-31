@@ -13,16 +13,21 @@
  * - $barraTituloExtra (string|null, HTML crudo, opcional)
  * - $barraEstado ('creacion'|'consulta'|'edicion', opcional, por defecto 'creacion')
  * - $barraRutaVolver (string|null, opcional): href de la zona 1
+ * - $barraTextoVolver (string, opcional, por defecto 'Volver a Peticiones'): tooltip/title
+ *   del ícono de la zona 1 — sobreescribir cuando "volver" no es a Peticiones (ej. un
+ *   módulo en su propio estado "edición" nativo, sin venir de un deep-link).
  * - $barraBotonesSecundarios (array, opcional): filas ['id'=>?, 'icono'=>string, 'etiqueta'=>string,
  *   'tipo'=>'button'|'a' (por defecto 'button'), 'href'=>?string, 'disabled'=>bool (por defecto false),
  *   'titulo_disabled'=>?string]
  * - $barraBotonPrincipal (array|null, opcional): ['id'=>?, 'etiqueta'=>string, 'tipo'=>'button'|'a'
- *   (por defecto 'button'), 'href'=>?string, 'disabled'=>bool (por defecto false)]
+ *   (por defecto 'button'), 'href'=>?string, 'disabled'=>bool (por defecto false), 'form'=>?string
+ *   (id de un <form> externo a enviar — usa type="submit" + form="..." en vez de un botón simple)]
  */
 
 $barraEstado = $barraEstado ?? 'creacion';
 $barraTituloExtra = $barraTituloExtra ?? null;
 $barraRutaVolver = $barraRutaVolver ?? null;
+$barraTextoVolver = $barraTextoVolver ?? 'Volver a Peticiones';
 $barraBotonesSecundarios = $barraBotonesSecundarios ?? [];
 $barraBotonPrincipal = $barraBotonPrincipal ?? null;
 
@@ -42,7 +47,7 @@ $barraIconos = [
 <div class="cabecera-modulo barra-modulo">
     <div class="barra-modulo-zona1-y-2">
         <?php if ($barraEstado !== 'creacion' && $barraRutaVolver !== null): ?>
-        <a href="<?= htmlspecialchars($barraRutaVolver) ?>" class="boton-icono-accion barra-modulo-volver" data-tooltip="Volver a Peticiones" title="Volver a Peticiones">
+        <a href="<?= htmlspecialchars($barraRutaVolver) ?>" class="boton-icono-accion barra-modulo-volver" data-tooltip="<?= htmlspecialchars($barraTextoVolver) ?>" title="<?= htmlspecialchars($barraTextoVolver) ?>">
             <?= $barraIconos['volver'] ?>
         </a>
         <?php endif; ?>
@@ -94,8 +99,9 @@ $barraIconos = [
         ><?= htmlspecialchars($barraBotonPrincipal['etiqueta']) ?></a>
         <?php else: ?>
         <button
-            type="button"
+            type="<?= !empty($barraBotonPrincipal['form']) ? 'submit' : 'button' ?>"
             <?= !empty($barraBotonPrincipal['id']) ? 'id="' . htmlspecialchars($barraBotonPrincipal['id']) . '"' : '' ?>
+            <?= !empty($barraBotonPrincipal['form']) ? 'form="' . htmlspecialchars($barraBotonPrincipal['form']) . '"' : '' ?>
             class="boton-agregar"
             <?= !empty($barraBotonPrincipal['disabled']) ? 'disabled' : '' ?>
         ><?= htmlspecialchars($barraBotonPrincipal['etiqueta']) ?></button>
@@ -103,4 +109,4 @@ $barraIconos = [
         <?php endif; ?>
     </div>
 </div>
-<?php unset($barraTitulo, $barraTituloExtra, $barraEstado, $barraRutaVolver, $barraBotonesSecundarios, $barraBotonPrincipal, $barraIconos); ?>
+<?php unset($barraTitulo, $barraTituloExtra, $barraEstado, $barraRutaVolver, $barraTextoVolver, $barraBotonesSecundarios, $barraBotonPrincipal, $barraIconos); ?>

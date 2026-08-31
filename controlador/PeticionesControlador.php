@@ -200,14 +200,22 @@ class PeticionesControlador
                 [$errorEliminar, $exitoEliminar] = $this->eliminarPendiente();
                 $_SESSION['peticiones_flash_error'] = $errorEliminar;
                 $_SESSION['peticiones_flash_exito'] = $exitoEliminar;
-            } elseif ($accion === 'editar_consolidado_grupo') {
-                [$errorEditar, $exitoEditar] = $this->editarConsolidadoGrupo();
-                $_SESSION['peticiones_flash_error'] = $errorEditar;
-                $_SESSION['peticiones_flash_exito'] = $exitoEditar;
             } elseif ($accion === 'duplicar_consolidado') {
                 [$errorDuplicar, $exitoDuplicar] = $this->duplicarConsolidadoGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorDuplicar;
                 $_SESSION['peticiones_flash_exito'] = $exitoDuplicar;
+            } elseif ($accion === 'consolidar_archivado') {
+                [$errorConsolidarArch, $exitoConsolidarArch] = $this->consolidarArchivadoGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorConsolidarArch;
+                $_SESSION['peticiones_flash_exito'] = $exitoConsolidarArch;
+            } elseif ($accion === 'duplicar_archivado') {
+                [$errorDuplicarArch, $exitoDuplicarArch] = $this->duplicarArchivadoGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorDuplicarArch;
+                $_SESSION['peticiones_flash_exito'] = $exitoDuplicarArch;
+            } elseif ($accion === 'enviar_archivado') {
+                [$errorEnviarArch, $exitoEnviarArch] = $this->enviarArchivadoGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorEnviarArch;
+                $_SESSION['peticiones_flash_exito'] = $exitoEnviarArch;
             }
 
             $vistaDestino = $_POST['vista'] ?? 'pendientes';
@@ -304,6 +312,8 @@ class PeticionesControlador
                 'cantidad' => $item['cantidad'],
                 'valor' => $item['valor'],
                 'ruta_ver' => $item['ruta_ver'],
+                'ruta_origen' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones',
+                'puede_editar' => $filaDetalle['puede_editar'] ?? false,
                 'dependencia' => $filaDetalle['dependencia'] ?? $item['detalle'],
                 'sede' => $filaDetalle['sede'] ?? null,
                 'linea' => $filaDetalle['linea'] ?? null,
@@ -367,9 +377,7 @@ class PeticionesControlador
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $accion = $_POST['accion'] ?? '';
 
-            if ($accion === 'editar_consolidado_grupo') {
-                [$_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']] = $this->editarConsolidadoGrupo();
-            } elseif ($accion === 'redireccionar_consolidado') {
+            if ($accion === 'redireccionar_consolidado') {
                 [$_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']] = $this->redireccionarConsolidado();
             } elseif ($accion === 'duplicar_consolidado') {
                 [$_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']] = $this->duplicarConsolidadoGrupo();
@@ -653,7 +661,8 @@ class PeticionesControlador
                 'meses' => '—',
                 'techo' => $techo !== null ? (float) $techo : null,
                 'ruta_ver' => $item['ruta_ver'],
-                'puede_editar' => $this->esPropietarioActualDeItem($item),
+                'ruta_origen' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones',
+                'puede_editar' => $this->esPropietarioActualDeItem($item) || $this->esSuperAdminRaiz(),
             ];
 
             if ($gastoOriginal !== null) {
@@ -984,66 +993,6 @@ class PeticionesControlador
     }
 
     /**
-     * Edita el "valor" de todos los ítems de un grupo consolidado a la vez — solo si el usuario
-     * actual es, en este momento, el dueño de CADA ítem del grupo (mismo criterio que habilita el
-     * botón Editar). Valida todo antes de aplicar cualquier cambio, para que no queden ítems a medio
-     * actualizar si alguno falla.
-     */
-    /**
-     * Edita el "valor" de una selección arbitraria de ítems consolidados (uno o varios tipos a la
-     * vez) — solo si el usuario actual es, en este momento, el dueño de CADA ítem seleccionado.
-     * Valida todo antes de aplicar cualquier cambio, para que no queden ítems a medio actualizar
-     * si alguno falla.
-     */
-    private function editarConsolidadoGrupo(): array
-    {
-        $origenes = $_POST['item_origen'] ?? [];
-        $origenIds = $_POST['item_origen_id'] ?? [];
-        $valores = $_POST['item_valor'] ?? [];
-
-        if (empty($origenes)) {
-            return ['No seleccionaste ningún ítem para editar.', ''];
-        }
-
-        $aprobadosPorClave = $this->obtenerAprobadosPorClave();
-        $cambios = [];
-
-        foreach ($origenes as $indice => $origen) {
-            $origen = trim((string) $origen);
-            $origenId = (int) ($origenIds[$indice] ?? 0);
-            $valorTexto = trim((string) ($valores[$indice] ?? ''));
-            $clave = $origen . ':' . $origenId;
-
-            if (!isset($aprobadosPorClave[$clave])) {
-                return ['Uno o más ítems seleccionados ya no existen. Recarga la página.', ''];
-            }
-
-            if (!$this->esPropietarioActualDeItem($aprobadosPorClave[$clave])) {
-                return ['Ya no tienes permiso para editar uno o más ítems seleccionados. Recarga la página.', ''];
-            }
-
-            if ($valorTexto === '' || !is_numeric($valorTexto) || (float) $valorTexto < 0) {
-                return ['Todos los valores deben ser números válidos.', ''];
-            }
-
-            $valorAnterior = $aprobadosPorClave[$clave]['valor'] !== null ? (float) $aprobadosPorClave[$clave]['valor'] : null;
-            $cambios[] = ['origen' => $origen, 'origen_id' => $origenId, 'valor' => (float) $valorTexto, 'valor_anterior' => $valorAnterior];
-        }
-
-        foreach ($cambios as $cambio) {
-            $this->modeloArchivada->actualizarValor($cambio['origen'], $cambio['origen_id'], $cambio['valor']);
-            $this->modeloHistorial->registrar(
-                $cambio['origen'],
-                $cambio['origen_id'],
-                'editada',
-                'Valor cambiado de $' . number_format($cambio['valor_anterior'] ?? 0, 2) . ' a $' . number_format($cambio['valor'], 2)
-            );
-        }
-
-        return ['', 'Se actualizaron ' . count($cambios) . ' ítem(s).'];
-    }
-
-    /**
      * Redirecciona una selección arbitraria de ítems consolidados (uno o varios tipos a la vez) a
      * otra dependencia/rol. No exige propiedad actual del ítem — igual que el comportamiento
      * original por tipo, cualquiera con acceso a Consolidado puede redireccionar.
@@ -1128,7 +1077,7 @@ class PeticionesControlador
             return ['No seleccionaste ningún ítem para duplicar.', ''];
         }
 
-        $aprobadosPorClave = $this->obtenerAprobadosPorClave();
+        $aprobadosPorClave = $this->obtenerPorAccionYClave('aprobada');
         $itemsValidados = [];
 
         foreach ($origenes as $indice => $origen) {
@@ -1180,14 +1129,194 @@ class PeticionesControlador
         return ['', 'Se duplicaron ' . $duplicados . ' ítem(s).'];
     }
 
-    private function obtenerAprobadosPorClave(): array
+    /**
+     * Consolida una selección arbitraria de ítems archivados: no hace falta reenviar tipo/detalle/
+     * cantidad/valor porque ya están guardados en la fila archivada — solo se re-archiva la misma
+     * fila cambiando accion a 'aprobada' (mismo upsert por origen+origen_id que ya usa `archivar()`).
+     */
+    private function consolidarArchivadoGrupo(): array
     {
-        $aprobadosPorClave = [];
-        foreach ($this->modeloArchivada->obtenerPorAccion('aprobada') as $fila) {
-            $aprobadosPorClave[$fila['origen'] . ':' . $fila['origen_id']] = $fila;
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem para consolidar.', ''];
         }
 
-        return $aprobadosPorClave;
+        $archivadosPorClave = $this->obtenerPorAccionYClave('archivada');
+        $consolidados = 0;
+
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+            $clave = $origen . ':' . $origenId;
+
+            if (!isset($archivadosPorClave[$clave])) {
+                continue;
+            }
+
+            $item = $archivadosPorClave[$clave];
+
+            $this->modeloArchivada->archivar([
+                'origen' => $item['origen'],
+                'origen_id' => (int) $item['origen_id'],
+                'accion' => 'aprobada',
+                'tipo' => $item['tipo'],
+                'detalle' => $item['detalle'],
+                'cantidad' => $item['cantidad'],
+                'valor' => $item['valor'],
+                'ruta_ver' => $item['ruta_ver'],
+                'ruta_origen' => $item['ruta_origen'],
+            ]);
+
+            $this->modeloHistorial->registrar($item['origen'], (int) $item['origen_id'], 'aprobada', 'Consolidado desde Archivo');
+
+            $consolidados++;
+        }
+
+        if ($consolidados === 0) {
+            return ['No se pudo consolidar ningún ítem.', ''];
+        }
+
+        return ['', 'Se consolidaron ' . $consolidados . ' ítem(s).'];
+    }
+
+    /**
+     * Igual que `duplicarConsolidadoGrupo()`, pero para ítems archivados: la copia se archiva de
+     * nuevo con accion='archivada' (se queda en Archivo, no salta a Consolidado).
+     */
+    private function duplicarArchivadoGrupo(): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem para duplicar.', ''];
+        }
+
+        $archivadosPorClave = $this->obtenerPorAccionYClave('archivada');
+        $itemsValidados = [];
+
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+            $clave = $origen . ':' . $origenId;
+
+            if (isset($archivadosPorClave[$clave])) {
+                $itemsValidados[] = $archivadosPorClave[$clave];
+            }
+        }
+
+        $duplicados = 0;
+
+        foreach ($itemsValidados as $item) {
+            $nuevoId = $this->duplicarRegistroOrigen($item['origen'], (int) $item['origen_id']);
+
+            if ($nuevoId === null) {
+                continue;
+            }
+
+            $this->modeloArchivada->archivar([
+                'origen' => $item['origen'],
+                'origen_id' => $nuevoId,
+                'accion' => 'archivada',
+                'tipo' => $item['tipo'],
+                'detalle' => $item['detalle'],
+                'cantidad' => $item['cantidad'],
+                'valor' => $item['valor'],
+                'ruta_ver' => $this->construirRutaVer($item['origen'], $nuevoId),
+                'ruta_origen' => $this->construirRutaOrigen($item['origen']),
+            ]);
+
+            $this->modeloHistorial->registrar($item['origen'], (int) $item['origen_id'], 'duplicada', 'Se duplicó desde Archivo, nuevo id ' . $nuevoId);
+
+            $duplicados++;
+        }
+
+        if ($duplicados === 0) {
+            return ['No se pudo duplicar ningún ítem.', ''];
+        }
+
+        return ['', 'Se duplicaron ' . $duplicados . ' ítem(s).'];
+    }
+
+    /**
+     * Igual que `redireccionarConsolidado()`, pero para ítems archivados: al enviarlos pasan a
+     * 'redireccionada', lo que ya los "desarchiva" (dejan de tener accion='archivada').
+     */
+    private function enviarArchivadoGrupo(): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+        $dependenciaNombre = trim($_POST['dependencia_destino'] ?? '');
+        $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem para enviar.', ''];
+        }
+
+        if ($dependenciaNombre === '') {
+            return ['Selecciona la dependencia a la que se enviará.', ''];
+        }
+
+        $rol = $rolDestinatarioId > 0 ? $this->modeloRol->obtenerPorId($rolDestinatarioId) : null;
+
+        if ($rol === null) {
+            return ['Selecciona el rol al que se enviará.', ''];
+        }
+
+        $dependencia = $this->modeloDependencia->obtenerPorNombre($dependenciaNombre);
+        $destinatarios = $dependencia !== null
+            ? $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependencia['id'], $rolDestinatarioId)
+            : [];
+
+        if (empty($destinatarios)) {
+            return ['No se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '" para notificar.', ''];
+        }
+
+        if (count($destinatarios) > 1) {
+            $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
+            $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
+
+            if (empty($destinatarios)) {
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '". Selecciona a quién remitir la petición.', ''];
+            }
+        }
+
+        $pares = [];
+        foreach ($origenes as $indice => $origen) {
+            $pares[] = ['origen' => trim((string) $origen), 'origen_id' => (int) ($origenIds[$indice] ?? 0)];
+        }
+
+        $cantidadItems = $this->modeloArchivada->redireccionarItems($pares, $dependenciaNombre, 'archivada');
+
+        if ($cantidadItems === 0) {
+            return ['No hay ítems seleccionados para enviar.', ''];
+        }
+
+        foreach ($pares as $par) {
+            $this->modeloHistorial->registrar($par['origen'], $par['origen_id'], 'redireccionada', 'Enviado desde Archivo a ' . $dependenciaNombre);
+        }
+
+        $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
+        $asunto = 'Petición archivada enviada';
+        $cuerpo = 'Se te enviaron ' . $cantidadItems . ' ítem(s) archivado(s) para tu gestión en "' . $dependenciaNombre . '".';
+
+        foreach ($destinatarios as $destinatario) {
+            $this->modeloMensaje->crear($remitenteId, (int) $destinatario['id'], $asunto, $cuerpo);
+        }
+
+        return ['', 'Se enviaron ' . $cantidadItems . ' ítem(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaNombre . '").'];
+    }
+
+    private function obtenerPorAccionYClave(string $accion): array
+    {
+        $filasPorClave = [];
+        foreach ($this->modeloArchivada->obtenerPorAccion($accion) as $fila) {
+            $filasPorClave[$fila['origen'] . ':' . $fila['origen_id']] = $fila;
+        }
+
+        return $filasPorClave;
     }
 
     private function duplicarRegistroOrigen(string $origen, int $origenId): ?int

@@ -12,6 +12,7 @@ require_once __DIR__ . '/../modelo/Sede.php';
 require_once __DIR__ . '/../modelo/Proyecto.php';
 require_once __DIR__ . '/../modelo/Estamento.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
+require_once __DIR__ . '/../modelo/PeticionArchivada.php';
 
 class PerfilProyectosControlador
 {
@@ -78,6 +79,8 @@ class PerfilProyectosControlador
             [$error, $exito] = $this->enviarTodo();
         } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_proyecto') {
             [$error, $exito] = $this->crearProyecto();
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'actualizar_proyecto') {
+            [$error, $exito] = $this->actualizarProyecto();
         } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'eliminar_seleccionados') {
             [$error, $exito] = $this->eliminarSeleccionados();
         } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'duplicar_seleccionados') {
@@ -98,6 +101,12 @@ class PerfilProyectosControlador
         $avaladores = $this->obtenerAvaladores();
         $aniosVigencia = $this->obtenerAniosVigencia();
         $puedeEnviarTodo = !empty(array_filter($necesidades, static fn (array $n): bool => ($n['estado'] ?? 'borrador') === 'borrador'));
+
+        $proyectoParaEditarDesdePeticiones = null;
+        if (isset($_GET['editar_id']) && ctype_digit((string) $_GET['editar_id'])) {
+            $proyectoParaEditarDesdePeticiones = $this->modeloNecesidad->obtenerPorId((int) $_GET['editar_id']);
+        }
+        $volverAPeticiones = $_GET['volver'] ?? '';
 
         require __DIR__ . '/../vista/perfil-proyectos/index.php';
     }
@@ -251,6 +260,74 @@ class PerfilProyectosControlador
         $this->modeloNecesidad->crear($datos, (int) ($_SESSION['usuario_id'] ?? 0));
 
         return ['', 'Proyecto registrado correctamente.'];
+    }
+
+    private function actualizarProyecto(): array
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+
+        if ($id <= 0 || $this->modeloNecesidad->obtenerPorId($id) === null) {
+            return ['El proyecto que intentas editar no existe.', ''];
+        }
+
+        $datos = [];
+
+        foreach ($_POST as $campo => $valor) {
+            $datos[$campo] = is_string($valor) ? trim($valor) : $valor;
+        }
+
+        foreach (self::CAMPOS_REQUERIDOS_PROYECTO as $campo) {
+            if (($datos[$campo] ?? '') === '') {
+                return ['Todos los campos obligatorios deben diligenciarse.', ''];
+            }
+        }
+
+        if (!is_numeric($datos['valor']) || (float) $datos['valor'] < 0) {
+            return ['El valor debe ser un número válido.', ''];
+        }
+
+        if (!is_numeric($datos['vigencia'])) {
+            return ['Selecciona una vigencia válida.', ''];
+        }
+
+        if (isset($datos['beneficiarios_cantidad']) && $datos['beneficiarios_cantidad'] !== '') {
+            if (!is_numeric($datos['beneficiarios_cantidad']) || (int) $datos['beneficiarios_cantidad'] < 0) {
+                return ['Los beneficiarios deben ser un número entero válido.', ''];
+            }
+            $datos['beneficiarios_cantidad'] = (int) $datos['beneficiarios_cantidad'];
+        } else {
+            $datos['beneficiarios_cantidad'] = '';
+        }
+
+        $lineaElegida = $this->modeloLineaInversion->obtenerPorCodigo($datos['linea_inversion']);
+
+        if ($lineaElegida === null) {
+            return ['Selecciona una línea de inversión válida.', ''];
+        }
+
+        $sublinea = $this->modeloSublineaInversion->obtenerPorCodigo($datos['sublinea_inversion']);
+
+        if ($sublinea === null || (int) $sublinea['linea_inversion_id'] !== (int) $lineaElegida['id']) {
+            return ['La sublínea de inversión seleccionada no pertenece a la línea elegida.', ''];
+        }
+
+        $datos['sede_id'] = (int) $datos['sede_id'];
+        $datos['estamento_solicitante_id'] = (int) $datos['estamento_solicitante_id'];
+        $datos['responsable_usuario_id'] = (int) $datos['responsable_usuario_id'];
+        $datos['proyecto_pdi_id'] = !empty($datos['proyecto_id']) ? (int) $datos['proyecto_id'] : null;
+        $datos['vigencia'] = (int) $datos['vigencia'];
+        $datos['beneficiarios_estamentos'] = array_map('intval', $_POST['beneficiarios_estamentos'] ?? []);
+
+        $this->modeloNecesidad->actualizar($id, $datos);
+
+        (new PeticionArchivada())->sincronizarDesdeOrigen('necesidad', $id, (float) $datos['valor'], $datos['dependencia']);
+
+        if (!empty($_POST['volver'])) {
+            header('Location: ' . $_POST['volver']);
+            exit;
+        }
+
+        return ['', 'Proyecto actualizado correctamente.'];
     }
 
     private function eliminarSeleccionados(): array

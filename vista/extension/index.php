@@ -570,6 +570,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <input type="hidden" name="accion" value="actualizar">
                 <input type="hidden" name="id" id="editar-egreso-id" value="">
                 <input type="hidden" name="autogestion_id" id="editar-egreso-autogestion_id" value="">
+                <input type="hidden" name="volver" id="editar-egreso-volver" value="">
 
                 <div class="campo">
                     <label for="editar-egreso-anio_presupuestal_id">Año presupuestal *</label>
@@ -705,6 +706,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <input type="hidden" name="accion" value="actualizar">
                 <input type="hidden" name="id" id="editar-ingreso-id" value="">
                 <input type="hidden" name="autogestion_id" id="editar-ingreso-autogestion_id" value="">
+                <input type="hidden" name="volver" id="editar-ingreso-volver" value="">
 
                 <div class="campo">
                     <label for="editar-ingreso-anio_presupuestal_id">Año presupuestal *</label>
@@ -825,5 +827,34 @@ require __DIR__ . '/../parciales/encabezado.php';
     </div>
 
     <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+
+    <?php if ($egresoParaEditarDesdePeticiones !== null): ?>
+    <button
+        type="button"
+        id="boton-editar-egreso-desde-peticiones"
+        class="boton-editar-egreso boton-editar-fila-generico"
+        hidden
+        data-gasto="<?= htmlspecialchars(json_encode($egresoParaEditarDesdePeticiones + ['volver' => $volverAPeticiones])) ?>"
+    ></button>
+    <?php endif; ?>
+    <?php if ($ingresoParaEditarDesdePeticiones !== null): ?>
+    <button
+        type="button"
+        id="boton-editar-ingreso-desde-peticiones"
+        class="boton-editar-ingreso boton-editar-fila-generico"
+        hidden
+        data-ingreso="<?= htmlspecialchars(json_encode($ingresoParaEditarDesdePeticiones + ['volver' => $volverAPeticiones])) ?>"
+    ></button>
+    <?php endif; ?>
+    <?php if ($egresoParaEditarDesdePeticiones !== null || $ingresoParaEditarDesdePeticiones !== null): ?>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var boton = document.getElementById('boton-editar-egreso-desde-peticiones') || document.getElementById('boton-editar-ingreso-desde-peticiones');
+            if (boton) {
+                boton.click();
+            }
+        });
+    </script>
+    <?php endif; ?>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

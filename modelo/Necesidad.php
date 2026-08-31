@@ -73,6 +73,51 @@ class Necesidad
         return $necesidadId;
     }
 
+    public function actualizar(int $id, array $datos): bool
+    {
+        $consulta = $this->db->prepare(
+            'UPDATE necesidades_academicas SET
+                vigencia = :vigencia, nombre_necesidad = :nombre_necesidad, descripcion = :descripcion,
+                justificacion = :justificacion, estamento_solicitante_id = :estamento_solicitante_id,
+                beneficiarios_cantidad = :beneficiarios_cantidad, linea_inversion = :linea_inversion,
+                sublinea_inversion = :sublinea_inversion, detalle_inversion = :detalle_inversion,
+                sede_id = :sede_id, dependencia = :dependencia, programa_academico = :programa_academico,
+                proyecto_pdi_id = :proyecto_pdi_id, articulacion_plan = :articulacion_plan,
+                espacio_intervenir = :espacio_intervenir, requisitos_normativos = :requisitos_normativos,
+                valor = :valor, fuente_financiacion = :fuente_financiacion,
+                responsable_usuario_id = :responsable_usuario_id, observaciones = :observaciones
+             WHERE id = :id'
+        );
+
+        $resultado = $consulta->execute([
+            'id' => $id,
+            'vigencia' => $datos['vigencia'],
+            'nombre_necesidad' => $datos['nombre_necesidad'],
+            'descripcion' => $datos['descripcion'] ?: null,
+            'justificacion' => $datos['justificacion'] ?: null,
+            'estamento_solicitante_id' => $datos['estamento_solicitante_id'] ?: null,
+            'beneficiarios_cantidad' => $datos['beneficiarios_cantidad'] !== '' ? $datos['beneficiarios_cantidad'] : null,
+            'linea_inversion' => $datos['linea_inversion'],
+            'sublinea_inversion' => $datos['sublinea_inversion'],
+            'detalle_inversion' => $datos['detalle_inversion'] ?: null,
+            'sede_id' => $datos['sede_id'],
+            'dependencia' => $datos['dependencia'],
+            'programa_academico' => $datos['programa_academico'] ?: null,
+            'proyecto_pdi_id' => $datos['proyecto_pdi_id'] ?: null,
+            'articulacion_plan' => $datos['articulacion_plan'] ?: null,
+            'espacio_intervenir' => $datos['espacio_intervenir'] ?: null,
+            'requisitos_normativos' => $datos['requisitos_normativos'] ?: null,
+            'valor' => $datos['valor'],
+            'fuente_financiacion' => $datos['fuente_financiacion'],
+            'responsable_usuario_id' => $datos['responsable_usuario_id'],
+            'observaciones' => $datos['observaciones'] ?: null,
+        ]);
+
+        $this->guardarBeneficiariosEstamentos($id, $datos['beneficiarios_estamentos'] ?? []);
+
+        return $resultado;
+    }
+
     private function guardarBeneficiariosEstamentos(int $necesidadId, array $estamentoIds): void
     {
         $this->db->prepare('DELETE FROM necesidad_beneficiarios_estamentos WHERE necesidad_id = :necesidad_id')
