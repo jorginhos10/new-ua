@@ -153,6 +153,43 @@ class PeticionArchivada
         return $total;
     }
 
+    /**
+     * Igual que `archivar()` (mismo upsert por origen+origen_id), pero forzando
+     * accion='redireccionada' y el destino — sirve para redireccionar ítems que pueden
+     * no tener todavía ninguna fila (a diferencia de `redireccionarItems()`, que exige
+     * una fila previa con un accion concreto).
+     */
+    public function redireccionarDirecto(array $datos, string $dependenciaDestino): bool
+    {
+        $consulta = $this->db->prepare(
+            'INSERT INTO peticiones_archivadas
+                (origen, origen_id, accion, tipo, detalle, cantidad, valor, ruta_ver, ruta_origen, redireccionado_a_dependencia)
+             VALUES
+                (:origen, :origen_id, \'redireccionada\', :tipo, :detalle, :cantidad, :valor, :ruta_ver, :ruta_origen, :destino)
+             ON DUPLICATE KEY UPDATE
+                accion = \'redireccionada\',
+                tipo = VALUES(tipo),
+                detalle = VALUES(detalle),
+                cantidad = VALUES(cantidad),
+                valor = VALUES(valor),
+                ruta_ver = VALUES(ruta_ver),
+                ruta_origen = VALUES(ruta_origen),
+                redireccionado_a_dependencia = VALUES(redireccionado_a_dependencia)'
+        );
+
+        return $consulta->execute([
+            'origen' => $datos['origen'],
+            'origen_id' => $datos['origen_id'],
+            'tipo' => $datos['tipo'],
+            'detalle' => $datos['detalle'],
+            'cantidad' => $datos['cantidad'],
+            'valor' => $datos['valor'],
+            'ruta_ver' => $datos['ruta_ver'],
+            'ruta_origen' => $datos['ruta_origen'] ?? null,
+            'destino' => $dependenciaDestino,
+        ]);
+    }
+
     public function obtenerRedireccionadas(): array
     {
         $consulta = $this->db->query("SELECT * FROM peticiones_archivadas WHERE accion = 'redireccionada' ORDER BY archivado_en DESC");

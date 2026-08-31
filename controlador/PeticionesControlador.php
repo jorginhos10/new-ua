@@ -200,10 +200,10 @@ class PeticionesControlador
                 [$errorEliminar, $exitoEliminar] = $this->eliminarPendiente();
                 $_SESSION['peticiones_flash_error'] = $errorEliminar;
                 $_SESSION['peticiones_flash_exito'] = $exitoEliminar;
-            } elseif ($accion === 'duplicar_consolidado') {
-                [$errorDuplicar, $exitoDuplicar] = $this->duplicarConsolidadoGrupo();
-                $_SESSION['peticiones_flash_error'] = $errorDuplicar;
-                $_SESSION['peticiones_flash_exito'] = $exitoDuplicar;
+            } elseif ($accion === 'archivar_consolidado') {
+                [$errorArchivarCons, $exitoArchivarCons] = $this->archivarConsolidadoGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorArchivarCons;
+                $_SESSION['peticiones_flash_exito'] = $exitoArchivarCons;
             } elseif ($accion === 'consolidar_archivado') {
                 [$errorConsolidarArch, $exitoConsolidarArch] = $this->consolidarArchivadoGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorConsolidarArch;
@@ -216,6 +216,18 @@ class PeticionesControlador
                 [$errorEnviarArch, $exitoEnviarArch] = $this->enviarArchivadoGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorEnviarArch;
                 $_SESSION['peticiones_flash_exito'] = $exitoEnviarArch;
+            } elseif ($accion === 'consolidar_enviado') {
+                [$errorConsolidarEnv, $exitoConsolidarEnv] = $this->consolidarEnviadoGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorConsolidarEnv;
+                $_SESSION['peticiones_flash_exito'] = $exitoConsolidarEnv;
+            } elseif ($accion === 'duplicar_enviado') {
+                [$errorDuplicarEnv, $exitoDuplicarEnv] = $this->duplicarEnviadoGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorDuplicarEnv;
+                $_SESSION['peticiones_flash_exito'] = $exitoDuplicarEnv;
+            } elseif ($accion === 'enviar_enviado') {
+                [$errorEnviarEnv, $exitoEnviarEnv] = $this->enviarEnviadoGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorEnviarEnv;
+                $_SESSION['peticiones_flash_exito'] = $exitoEnviarEnv;
             }
 
             $vistaDestino = $_POST['vista'] ?? 'pendientes';
@@ -1063,22 +1075,22 @@ class PeticionesControlador
     }
 
     /**
-     * Duplica una selección arbitraria de ítems consolidados (uno o varios tipos a la vez): crea
-     * una copia exacta del registro de origen (incluyendo sus conceptos, en ingresos) y lo archiva
-     * de nuevo como aprobado, para que aparezca como un ítem nuevo separado. Solo si el usuario
-     * actual es, en este momento, el dueño de CADA ítem seleccionado.
+     * Archiva una selección arbitraria de ítems consolidados: no hace falta reenviar tipo/detalle/
+     * cantidad/valor porque ya están guardados en la fila aprobada — solo se re-archiva la misma
+     * fila cambiando accion a 'archivada' (mismo upsert por origen+origen_id que ya usa `archivar()`).
+     * Inverso de `consolidarArchivadoGrupo()`.
      */
-    private function duplicarConsolidadoGrupo(): array
+    private function archivarConsolidadoGrupo(): array
     {
         $origenes = $_POST['item_origen'] ?? [];
         $origenIds = $_POST['item_origen_id'] ?? [];
 
         if (empty($origenes)) {
-            return ['No seleccionaste ningún ítem para duplicar.', ''];
+            return ['No seleccionaste ningún ítem para archivar.', ''];
         }
 
         $aprobadosPorClave = $this->obtenerPorAccionYClave('aprobada');
-        $itemsValidados = [];
+        $archivados = 0;
 
         foreach ($origenes as $indice => $origen) {
             $origen = trim((string) $origen);
@@ -1086,47 +1098,33 @@ class PeticionesControlador
             $clave = $origen . ':' . $origenId;
 
             if (!isset($aprobadosPorClave[$clave])) {
-                return ['Uno o más ítems seleccionados ya no existen. Recarga la página.', ''];
-            }
-
-            if (!$this->esPropietarioActualDeItem($aprobadosPorClave[$clave])) {
-                return ['Ya no tienes permiso para duplicar uno o más ítems seleccionados. Recarga la página.', ''];
-            }
-
-            $itemsValidados[] = $aprobadosPorClave[$clave];
-        }
-
-        $duplicados = 0;
-
-        foreach ($itemsValidados as $item) {
-            $nuevoId = $this->duplicarRegistroOrigen($item['origen'], (int) $item['origen_id']);
-
-            if ($nuevoId === null) {
                 continue;
             }
 
+            $item = $aprobadosPorClave[$clave];
+
             $this->modeloArchivada->archivar([
                 'origen' => $item['origen'],
-                'origen_id' => $nuevoId,
-                'accion' => 'aprobada',
+                'origen_id' => (int) $item['origen_id'],
+                'accion' => 'archivada',
                 'tipo' => $item['tipo'],
                 'detalle' => $item['detalle'],
                 'cantidad' => $item['cantidad'],
                 'valor' => $item['valor'],
-                'ruta_ver' => $this->construirRutaVer($item['origen'], $nuevoId),
-                'ruta_origen' => $this->construirRutaOrigen($item['origen']),
+                'ruta_ver' => $item['ruta_ver'],
+                'ruta_origen' => $item['ruta_origen'],
             ]);
 
-            $this->modeloHistorial->registrar($item['origen'], (int) $item['origen_id'], 'duplicada', 'Se duplicó, nuevo id ' . $nuevoId);
+            $this->modeloHistorial->registrar($item['origen'], (int) $item['origen_id'], 'archivada', 'Archivado desde Consolidado');
 
-            $duplicados++;
+            $archivados++;
         }
 
-        if ($duplicados === 0) {
-            return ['No se pudo duplicar ningún ítem.', ''];
+        if ($archivados === 0) {
+            return ['No se pudo archivar ningún ítem.', ''];
         }
 
-        return ['', 'Se duplicaron ' . $duplicados . ' ítem(s).'];
+        return ['', 'Se archivaron ' . $archivados . ' ítem(s).'];
     }
 
     /**
@@ -1307,6 +1305,195 @@ class PeticionesControlador
         }
 
         return ['', 'Se enviaron ' . $cantidadItems . ' ítem(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaNombre . '").'];
+    }
+
+    /**
+     * Lee el snapshot (tipo/detalle/cantidad/valor/ruta_ver) que el cliente envió por cada ítem
+     * seleccionado en Enviadas — a diferencia de Consolidado/Archivo, estos ítems pueden no tener
+     * todavía ninguna fila en `peticiones_archivadas`, así que el controlador no tiene de dónde
+     * recuperar esos datos por su cuenta; el navegador ya los tiene (los mismos que se renderizaron
+     * en la tabla), y viajan como arrays paralelos a item_origen[]/item_origen_id[].
+     */
+    private function leerSnapshotEnviados(): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+        $tipos = $_POST['item_tipo'] ?? [];
+        $detalles = $_POST['item_detalle'] ?? [];
+        $cantidades = $_POST['item_cantidad'] ?? [];
+        $valores = $_POST['item_valor'] ?? [];
+        $rutasVer = $_POST['item_ruta_ver'] ?? [];
+        $accionesActuales = $_POST['item_accion_actual'] ?? [];
+
+        $items = [];
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+
+            if (!isset(self::TABLAS_ORIGEN[$origen])) {
+                continue;
+            }
+
+            $items[] = [
+                'origen' => $origen,
+                'origen_id' => (int) ($origenIds[$indice] ?? 0),
+                'tipo' => (string) ($tipos[$indice] ?? ''),
+                'detalle' => (string) ($detalles[$indice] ?? ''),
+                'cantidad' => ($cantidades[$indice] ?? '') !== '' ? (string) $cantidades[$indice] : null,
+                'valor' => ($valores[$indice] ?? '') !== '' ? (float) $valores[$indice] : null,
+                'ruta_ver' => (string) ($rutasVer[$indice] ?? 'index.php?ruta=peticiones'),
+                'accion_actual' => ($accionesActuales[$indice] ?? '') !== '' ? (string) $accionesActuales[$indice] : null,
+            ];
+        }
+
+        return $items;
+    }
+
+    /**
+     * Consolida una selección arbitraria de ítems de Enviadas, sin importar su estado actual
+     * (pendiente/archivado/redireccionado): upsert directo a accion='aprobada' vía `archivar()`.
+     */
+    private function consolidarEnviadoGrupo(): array
+    {
+        $items = $this->leerSnapshotEnviados();
+
+        if (empty($items)) {
+            return ['No seleccionaste ningún ítem para consolidar.', ''];
+        }
+
+        foreach ($items as $item) {
+            $this->modeloArchivada->archivar([
+                'origen' => $item['origen'],
+                'origen_id' => $item['origen_id'],
+                'accion' => 'aprobada',
+                'tipo' => $item['tipo'],
+                'detalle' => $item['detalle'],
+                'cantidad' => $item['cantidad'],
+                'valor' => $item['valor'],
+                'ruta_ver' => $item['ruta_ver'],
+                'ruta_origen' => $this->construirRutaOrigen($item['origen']),
+            ]);
+
+            $this->modeloHistorial->registrar($item['origen'], $item['origen_id'], 'aprobada', 'Consolidado desde Enviadas');
+        }
+
+        return ['', 'Se consolidaron ' . count($items) . ' ítem(s).'];
+    }
+
+    /**
+     * Igual que `duplicarConsolidadoGrupo()`/`duplicarArchivadoGrupo()`, pero para ítems de
+     * Enviadas: la copia queda en el mismo estado que tenía el original (o sin fila propia, si el
+     * original todavía no tenía ninguna).
+     */
+    private function duplicarEnviadoGrupo(): array
+    {
+        $items = $this->leerSnapshotEnviados();
+
+        if (empty($items)) {
+            return ['No seleccionaste ningún ítem para duplicar.', ''];
+        }
+
+        $duplicados = 0;
+
+        foreach ($items as $item) {
+            $nuevoId = $this->duplicarRegistroOrigen($item['origen'], $item['origen_id']);
+
+            if ($nuevoId === null) {
+                continue;
+            }
+
+            if ($item['accion_actual'] !== null) {
+                $this->modeloArchivada->archivar([
+                    'origen' => $item['origen'],
+                    'origen_id' => $nuevoId,
+                    'accion' => $item['accion_actual'],
+                    'tipo' => $item['tipo'],
+                    'detalle' => $item['detalle'],
+                    'cantidad' => $item['cantidad'],
+                    'valor' => $item['valor'],
+                    'ruta_ver' => $this->construirRutaVer($item['origen'], $nuevoId),
+                    'ruta_origen' => $this->construirRutaOrigen($item['origen']),
+                ]);
+            }
+
+            $this->modeloHistorial->registrar($item['origen'], $item['origen_id'], 'duplicada', 'Se duplicó desde Enviadas, nuevo id ' . $nuevoId);
+
+            $duplicados++;
+        }
+
+        if ($duplicados === 0) {
+            return ['No se pudo duplicar ningún ítem.', ''];
+        }
+
+        return ['', 'Se duplicaron ' . $duplicados . ' ítem(s).'];
+    }
+
+    /**
+     * Igual que `redireccionarConsolidado()`/`enviarArchivadoGrupo()`, pero para ítems de Enviadas:
+     * usa `redireccionarDirecto()` (upsert) en vez de `redireccionarItems()` (UPDATE) porque estos
+     * ítems pueden no tener todavía ninguna fila en `peticiones_archivadas`.
+     */
+    private function enviarEnviadoGrupo(): array
+    {
+        $items = $this->leerSnapshotEnviados();
+        $dependenciaNombre = trim($_POST['dependencia_destino'] ?? '');
+        $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
+
+        if (empty($items)) {
+            return ['No seleccionaste ningún ítem para enviar.', ''];
+        }
+
+        if ($dependenciaNombre === '') {
+            return ['Selecciona la dependencia a la que se enviará.', ''];
+        }
+
+        $rol = $rolDestinatarioId > 0 ? $this->modeloRol->obtenerPorId($rolDestinatarioId) : null;
+
+        if ($rol === null) {
+            return ['Selecciona el rol al que se enviará.', ''];
+        }
+
+        $dependencia = $this->modeloDependencia->obtenerPorNombre($dependenciaNombre);
+        $destinatarios = $dependencia !== null
+            ? $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependencia['id'], $rolDestinatarioId)
+            : [];
+
+        if (empty($destinatarios)) {
+            return ['No se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '" para notificar.', ''];
+        }
+
+        if (count($destinatarios) > 1) {
+            $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
+            $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
+
+            if (empty($destinatarios)) {
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '". Selecciona a quién remitir la petición.', ''];
+            }
+        }
+
+        foreach ($items as $item) {
+            $this->modeloArchivada->redireccionarDirecto([
+                'origen' => $item['origen'],
+                'origen_id' => $item['origen_id'],
+                'tipo' => $item['tipo'],
+                'detalle' => $item['detalle'],
+                'cantidad' => $item['cantidad'],
+                'valor' => $item['valor'],
+                'ruta_ver' => $item['ruta_ver'],
+                'ruta_origen' => $this->construirRutaOrigen($item['origen']),
+            ], $dependenciaNombre);
+
+            $this->modeloHistorial->registrar($item['origen'], $item['origen_id'], 'redireccionada', 'Enviado desde Enviadas a ' . $dependenciaNombre);
+        }
+
+        $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
+        $asunto = 'Petición enviada';
+        $cuerpo = 'Se te enviaron ' . count($items) . ' ítem(s) para tu gestión en "' . $dependenciaNombre . '".';
+
+        foreach ($destinatarios as $destinatario) {
+            $this->modeloMensaje->crear($remitenteId, (int) $destinatario['id'], $asunto, $cuerpo);
+        }
+
+        return ['', 'Se enviaron ' . count($items) . ' ítem(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaNombre . '").'];
     }
 
     private function obtenerPorAccionYClave(string $accion): array
@@ -1805,6 +1992,7 @@ class PeticionesControlador
                 'valor' => $valor,
                 'ruta_ver' => $rutaVer,
                 'estado_enviada' => $estado,
+                'accion_actual' => $accion,
             ];
         };
 

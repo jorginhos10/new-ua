@@ -2589,12 +2589,15 @@ document.addEventListener('DOMContentLoaded', function () {
     var botonVer = document.getElementById('boton-consolidado-ver');
     var botonEditar = document.getElementById('boton-consolidado-editar');
     var botonRedireccionar = document.getElementById('boton-consolidado-redireccionar');
-    var botonDuplicar = document.getElementById('boton-consolidado-duplicar');
+    var botonArchivar = document.getElementById('boton-consolidado-archivar');
+
+    var barraAccionesConsolidado = document.getElementById('barra-acciones-consolidado');
+    var anioIdConsolidado = barraAccionesConsolidado ? barraAccionesConsolidado.dataset.anioId : '';
+    var bandejaConsolidado = barraAccionesConsolidado ? barraAccionesConsolidado.dataset.bandeja : '';
 
     var modalVerConsolidado = document.getElementById('modal-ver-consolidado');
     var modalEditarConsolidado = document.getElementById('modal-editar-consolidado');
     var modalRedireccionarConsolidado = document.getElementById('modal-redireccionar-consolidado');
-    var modalDuplicarConsolidado = document.getElementById('modal-duplicar-consolidado');
 
     function obtenerSeleccionados() {
         return Array.prototype.filter.call(checkboxes, function (casilla) {
@@ -2649,8 +2652,8 @@ document.addEventListener('DOMContentLoaded', function () {
         if (botonRedireccionar) {
             botonRedireccionar.disabled = !ningunoRedireccionado;
         }
-        if (botonDuplicar) {
-            botonDuplicar.disabled = !todosEditables;
+        if (botonArchivar) {
+            botonArchivar.disabled = !ningunoRedireccionado;
         }
 
         if (checkboxTodos) {
@@ -2945,73 +2948,46 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // ---- Duplicar (uno o varios grupos a la vez) ----
-    if (botonDuplicar && modalDuplicarConsolidado) {
-        var botonCerrarDuplicarConsolidado = document.getElementById('boton-cerrar-modal-duplicar-consolidado');
-        var campoDuplicarTipoTexto = document.getElementById('duplicar-consolidado-tipo-texto');
-        var cuerpoDuplicarConsolidado = document.getElementById('duplicar-consolidado-cuerpo');
-        var contenedorCamposItemsDuplicar = document.getElementById('duplicar-consolidado-campos-items');
-
-        var cerrarDuplicarConsolidado = function () {
-            modalDuplicarConsolidado.classList.remove('abierto');
-        };
-
-        botonDuplicar.addEventListener('click', function () {
-            if (botonDuplicar.disabled) {
+    // ---- Archivar (uno o varios grupos a la vez): re-archiva la misma fila con accion='archivada',
+    // sin modal — no requiere elegir dependencia/rol. ----
+    if (botonArchivar) {
+        botonArchivar.addEventListener('click', function () {
+            if (botonArchivar.disabled) {
                 return;
             }
 
             var seleccionados = obtenerSeleccionados();
             var items = itemsDeSeleccion(seleccionados);
-            var tipos = tiposDeSeleccion(seleccionados);
 
-            campoDuplicarTipoTexto.textContent = tipos.join(', ');
-            cuerpoDuplicarConsolidado.innerHTML = '';
-            contenedorCamposItemsDuplicar.innerHTML = '';
+            if (!window.confirm('¿Archivar ' + items.length + ' ítem(s) seleccionado(s)? Pasarán a "Archivados" y dejarán de estar consolidados.')) {
+                return;
+            }
+
+            var formulario = document.createElement('form');
+            formulario.method = 'POST';
+            formulario.action = 'index.php?ruta=peticiones';
+            formulario.style.display = 'none';
+
+            function agregarCampo(nombre, valor) {
+                var campo = document.createElement('input');
+                campo.type = 'hidden';
+                campo.name = nombre;
+                campo.value = valor;
+                formulario.appendChild(campo);
+            }
+
+            agregarCampo('accion', 'archivar_consolidado');
+            agregarCampo('vista', 'consolidado');
+            agregarCampo('anio_id', anioIdConsolidado || '');
+            agregarCampo('bandeja', bandejaConsolidado || '');
 
             items.forEach(function (item) {
-                var fila = document.createElement('tr');
-
-                var celdaTipo = document.createElement('td');
-                celdaTipo.textContent = item.tipo || '—';
-                fila.appendChild(celdaTipo);
-
-                var celdaDetalle = document.createElement('td');
-                celdaDetalle.textContent = item.detalle || '—';
-                fila.appendChild(celdaDetalle);
-
-                var celdaValor = document.createElement('td');
-                celdaValor.textContent = item.valor !== null && item.valor !== undefined && item.valor !== ''
-                    ? '$ ' + Number(item.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : '—';
-                fila.appendChild(celdaValor);
-
-                cuerpoDuplicarConsolidado.appendChild(fila);
-
-                var campoOrigen = document.createElement('input');
-                campoOrigen.type = 'hidden';
-                campoOrigen.name = 'item_origen[]';
-                campoOrigen.value = item.origen || '';
-                contenedorCamposItemsDuplicar.appendChild(campoOrigen);
-
-                var campoOrigenId = document.createElement('input');
-                campoOrigenId.type = 'hidden';
-                campoOrigenId.name = 'item_origen_id[]';
-                campoOrigenId.value = item.origen_id || '';
-                contenedorCamposItemsDuplicar.appendChild(campoOrigenId);
+                agregarCampo('item_origen[]', item.origen || '');
+                agregarCampo('item_origen_id[]', item.origen_id || '');
             });
 
-            modalDuplicarConsolidado.classList.add('abierto');
-        });
-
-        if (botonCerrarDuplicarConsolidado) {
-            botonCerrarDuplicarConsolidado.addEventListener('click', cerrarDuplicarConsolidado);
-        }
-
-        modalDuplicarConsolidado.addEventListener('click', function (evento) {
-            if (evento.target === modalDuplicarConsolidado) {
-                cerrarDuplicarConsolidado();
-            }
+            document.body.appendChild(formulario);
+            formulario.submit();
         });
     }
 
@@ -3019,7 +2995,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (evento.key !== 'Escape') {
             return;
         }
-        [modalVerConsolidado, modalEditarConsolidado, modalRedireccionarConsolidado, modalDuplicarConsolidado].forEach(function (modal) {
+        [modalVerConsolidado, modalEditarConsolidado, modalRedireccionarConsolidado].forEach(function (modal) {
             if (modal) {
                 modal.classList.remove('abierto');
             }
@@ -3039,10 +3015,12 @@ document.addEventListener('DOMContentLoaded', function () {
     var anioIdArchivado = barraAccionesArchivar ? barraAccionesArchivar.dataset.anioId : '';
     var bandejaArchivado = barraAccionesArchivar ? barraAccionesArchivar.dataset.bandeja : '';
 
+    var botonArchivadoVer = document.getElementById('boton-archivado-ver');
     var botonArchivadoDuplicar = document.getElementById('boton-archivado-duplicar');
     var botonArchivadoConsolidar = document.getElementById('boton-archivado-consolidar');
     var botonArchivadoEnviar = document.getElementById('boton-archivado-enviar');
 
+    var modalVerArchivado = document.getElementById('modal-ver-archivado');
     var modalEnviarArchivado = document.getElementById('modal-enviar-archivado');
 
     function obtenerSeleccionadosArchivado() {
@@ -3055,6 +3033,9 @@ document.addEventListener('DOMContentLoaded', function () {
         var seleccionados = obtenerSeleccionadosArchivado();
         var hay = seleccionados.length > 0;
 
+        if (botonArchivadoVer) {
+            botonArchivadoVer.disabled = !hay;
+        }
         if (botonArchivadoDuplicar) {
             botonArchivadoDuplicar.disabled = !hay;
         }
@@ -3084,6 +3065,78 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     actualizarBotonesArchivado();
+
+    // ---- Ver (uno o varios ítems a la vez): igual que el Ver de Consolidado, pero sin JSON
+    // agrupado — cada checkbox ya trae sus propios datos planos. ----
+    if (botonArchivadoVer && modalVerArchivado) {
+        var botonCerrarVerArchivado = document.getElementById('boton-cerrar-modal-ver-archivado');
+        var cuerpoVerArchivado = document.getElementById('ver-archivado-cuerpo');
+
+        var cerrarVerArchivado = function () {
+            modalVerArchivado.classList.remove('abierto');
+        };
+
+        botonArchivadoVer.addEventListener('click', function () {
+            if (botonArchivadoVer.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosArchivado();
+            cuerpoVerArchivado.innerHTML = '';
+
+            seleccionados.forEach(function (casilla) {
+                var fila = document.createElement('tr');
+
+                var celdaTipo = document.createElement('td');
+                celdaTipo.textContent = casilla.dataset.tipo || '—';
+                fila.appendChild(celdaTipo);
+
+                var celdaDetalle = document.createElement('td');
+                celdaDetalle.textContent = casilla.dataset.detalle || '—';
+                fila.appendChild(celdaDetalle);
+
+                var celdaCantidad = document.createElement('td');
+                celdaCantidad.textContent = casilla.dataset.cantidad || '—';
+                fila.appendChild(celdaCantidad);
+
+                var celdaValor = document.createElement('td');
+                celdaValor.textContent = casilla.dataset.valor
+                    ? '$ ' + Number(casilla.dataset.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : '—';
+                fila.appendChild(celdaValor);
+
+                var celdaAccion = document.createElement('td');
+                if (casilla.dataset.rutaVer) {
+                    var enlace = document.createElement('a');
+                    enlace.href = casilla.dataset.rutaVer;
+                    enlace.className = 'boton-accion boton-accion-ver';
+                    enlace.textContent = 'Ver';
+                    celdaAccion.appendChild(enlace);
+                }
+                fila.appendChild(celdaAccion);
+
+                cuerpoVerArchivado.appendChild(fila);
+            });
+
+            modalVerArchivado.classList.add('abierto');
+        });
+
+        if (botonCerrarVerArchivado) {
+            botonCerrarVerArchivado.addEventListener('click', cerrarVerArchivado);
+        }
+
+        modalVerArchivado.addEventListener('click', function (evento) {
+            if (evento.target === modalVerArchivado) {
+                cerrarVerArchivado();
+            }
+        });
+
+        document.addEventListener('keydown', function (evento) {
+            if (evento.key === 'Escape') {
+                cerrarVerArchivado();
+            }
+        });
+    }
 
     function enviarFormularioArchivado(accion, seleccionados) {
         var formulario = document.createElement('form');
@@ -3203,6 +3256,273 @@ document.addEventListener('DOMContentLoaded', function () {
         document.addEventListener('keydown', function (evento) {
             if (evento.key === 'Escape') {
                 cerrarEnviarArchivado();
+            }
+        });
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    var checkboxesEnviado = document.querySelectorAll('.checkbox-enviado');
+    var checkboxEnviadoTodos = document.getElementById('checkbox-enviado-todos');
+
+    if (checkboxesEnviado.length === 0 && !checkboxEnviadoTodos) {
+        return;
+    }
+
+    var barraAccionesEnviadas = document.getElementById('barra-acciones-enviadas');
+    var anioIdEnviado = barraAccionesEnviadas ? barraAccionesEnviadas.dataset.anioId : '';
+    var bandejaEnviado = barraAccionesEnviadas ? barraAccionesEnviadas.dataset.bandeja : '';
+
+    var botonEnviadoVer = document.getElementById('boton-enviado-ver');
+    var botonEnviadoDuplicar = document.getElementById('boton-enviado-duplicar');
+    var botonEnviadoConsolidar = document.getElementById('boton-enviado-consolidar');
+    var botonEnviadoEnviar = document.getElementById('boton-enviado-enviar');
+
+    var modalVerEnviado = document.getElementById('modal-ver-enviado');
+    var modalEnviarEnviado = document.getElementById('modal-enviar-enviado');
+
+    function obtenerSeleccionadosEnviado() {
+        return Array.prototype.filter.call(checkboxesEnviado, function (casilla) {
+            return casilla.checked;
+        });
+    }
+
+    function actualizarBotonesEnviado() {
+        var seleccionados = obtenerSeleccionadosEnviado();
+        var hay = seleccionados.length > 0;
+
+        if (botonEnviadoVer) {
+            botonEnviadoVer.disabled = !hay;
+        }
+        if (botonEnviadoDuplicar) {
+            botonEnviadoDuplicar.disabled = !hay;
+        }
+        if (botonEnviadoConsolidar) {
+            botonEnviadoConsolidar.disabled = !hay;
+        }
+        if (botonEnviadoEnviar) {
+            botonEnviadoEnviar.disabled = !hay;
+        }
+
+        if (checkboxEnviadoTodos) {
+            checkboxEnviadoTodos.checked = checkboxesEnviado.length > 0 && seleccionados.length === checkboxesEnviado.length;
+        }
+    }
+
+    checkboxesEnviado.forEach(function (casilla) {
+        casilla.addEventListener('change', actualizarBotonesEnviado);
+    });
+
+    if (checkboxEnviadoTodos) {
+        checkboxEnviadoTodos.addEventListener('change', function () {
+            checkboxesEnviado.forEach(function (casilla) {
+                casilla.checked = checkboxEnviadoTodos.checked;
+            });
+            actualizarBotonesEnviado();
+        });
+    }
+
+    actualizarBotonesEnviado();
+
+    // ---- Ver (uno o varios ítems a la vez) ----
+    if (botonEnviadoVer && modalVerEnviado) {
+        var botonCerrarVerEnviado = document.getElementById('boton-cerrar-modal-ver-enviado');
+        var cuerpoVerEnviado = document.getElementById('ver-enviado-cuerpo');
+
+        var cerrarVerEnviado = function () {
+            modalVerEnviado.classList.remove('abierto');
+        };
+
+        botonEnviadoVer.addEventListener('click', function () {
+            if (botonEnviadoVer.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosEnviado();
+            cuerpoVerEnviado.innerHTML = '';
+
+            seleccionados.forEach(function (casilla) {
+                var fila = document.createElement('tr');
+
+                var celdaTipo = document.createElement('td');
+                celdaTipo.textContent = casilla.dataset.tipo || '—';
+                fila.appendChild(celdaTipo);
+
+                var celdaDetalle = document.createElement('td');
+                celdaDetalle.textContent = casilla.dataset.detalle || '—';
+                fila.appendChild(celdaDetalle);
+
+                var celdaCantidad = document.createElement('td');
+                celdaCantidad.textContent = casilla.dataset.cantidad || '—';
+                fila.appendChild(celdaCantidad);
+
+                var celdaValor = document.createElement('td');
+                celdaValor.textContent = casilla.dataset.valor
+                    ? '$ ' + Number(casilla.dataset.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : '—';
+                fila.appendChild(celdaValor);
+
+                var celdaAccion = document.createElement('td');
+                if (casilla.dataset.rutaVer) {
+                    var enlace = document.createElement('a');
+                    enlace.href = casilla.dataset.rutaVer;
+                    enlace.className = 'boton-accion boton-accion-ver';
+                    enlace.textContent = 'Ver';
+                    celdaAccion.appendChild(enlace);
+                }
+                fila.appendChild(celdaAccion);
+
+                cuerpoVerEnviado.appendChild(fila);
+            });
+
+            modalVerEnviado.classList.add('abierto');
+        });
+
+        if (botonCerrarVerEnviado) {
+            botonCerrarVerEnviado.addEventListener('click', cerrarVerEnviado);
+        }
+
+        modalVerEnviado.addEventListener('click', function (evento) {
+            if (evento.target === modalVerEnviado) {
+                cerrarVerEnviado();
+            }
+        });
+
+        document.addEventListener('keydown', function (evento) {
+            if (evento.key === 'Escape') {
+                cerrarVerEnviado();
+            }
+        });
+    }
+
+    function enviarFormularioEnviado(accion, seleccionados) {
+        var formulario = document.createElement('form');
+        formulario.method = 'POST';
+        formulario.action = 'index.php?ruta=peticiones';
+        formulario.style.display = 'none';
+
+        function agregarCampo(nombre, valor) {
+            var campo = document.createElement('input');
+            campo.type = 'hidden';
+            campo.name = nombre;
+            campo.value = valor;
+            formulario.appendChild(campo);
+        }
+
+        agregarCampo('accion', accion);
+        agregarCampo('vista', 'enviadas');
+        agregarCampo('anio_id', anioIdEnviado || '');
+        agregarCampo('bandeja', bandejaEnviado || '');
+
+        seleccionados.forEach(function (casilla) {
+            agregarCampo('item_origen[]', casilla.dataset.origen || '');
+            agregarCampo('item_origen_id[]', casilla.dataset.origenId || '');
+            agregarCampo('item_tipo[]', casilla.dataset.tipo || '');
+            agregarCampo('item_detalle[]', casilla.dataset.detalle || '');
+            agregarCampo('item_cantidad[]', casilla.dataset.cantidad || '');
+            agregarCampo('item_valor[]', casilla.dataset.valor || '');
+            agregarCampo('item_ruta_ver[]', casilla.dataset.rutaVer || '');
+            agregarCampo('item_accion_actual[]', casilla.dataset.accionActual || '');
+        });
+
+        document.body.appendChild(formulario);
+        formulario.submit();
+    }
+
+    if (botonEnviadoDuplicar) {
+        botonEnviadoDuplicar.addEventListener('click', function () {
+            if (botonEnviadoDuplicar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosEnviado();
+
+            if (!window.confirm('¿Duplicar ' + seleccionados.length + ' ítem(s) seleccionado(s)? Se creará una copia de cada uno, en el mismo estado que tiene hoy.')) {
+                return;
+            }
+
+            enviarFormularioEnviado('duplicar_enviado', seleccionados);
+        });
+    }
+
+    if (botonEnviadoConsolidar) {
+        botonEnviadoConsolidar.addEventListener('click', function () {
+            if (botonEnviadoConsolidar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosEnviado();
+
+            if (!window.confirm('¿Consolidar ' + seleccionados.length + ' ítem(s) seleccionado(s)? Pasarán a "Consolidado por tipo".')) {
+                return;
+            }
+
+            enviarFormularioEnviado('consolidar_enviado', seleccionados);
+        });
+    }
+
+    if (botonEnviadoEnviar && modalEnviarEnviado) {
+        var botonCerrarEnviarEnviado = document.getElementById('boton-cerrar-modal-enviar-enviado');
+        var contenedorCamposItemsEnviarEnviado = document.getElementById('enviar-enviado-campos-items');
+        var campoDependenciaEnviarEnviado = document.getElementById('enviar-enviado-dependencia');
+        var campoRolEnviarEnviado = document.getElementById('enviar-enviado-rol');
+
+        var cerrarEnviarEnviado = function () {
+            modalEnviarEnviado.classList.remove('abierto');
+        };
+
+        botonEnviadoEnviar.addEventListener('click', function () {
+            if (botonEnviadoEnviar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosEnviado();
+            contenedorCamposItemsEnviarEnviado.innerHTML = '';
+
+            function agregarCampoEnviar(nombre, valor) {
+                var campo = document.createElement('input');
+                campo.type = 'hidden';
+                campo.name = nombre;
+                campo.value = valor;
+                contenedorCamposItemsEnviarEnviado.appendChild(campo);
+            }
+
+            seleccionados.forEach(function (casilla) {
+                agregarCampoEnviar('item_origen[]', casilla.dataset.origen || '');
+                agregarCampoEnviar('item_origen_id[]', casilla.dataset.origenId || '');
+                agregarCampoEnviar('item_tipo[]', casilla.dataset.tipo || '');
+                agregarCampoEnviar('item_detalle[]', casilla.dataset.detalle || '');
+                agregarCampoEnviar('item_cantidad[]', casilla.dataset.cantidad || '');
+                agregarCampoEnviar('item_valor[]', casilla.dataset.valor || '');
+                agregarCampoEnviar('item_ruta_ver[]', casilla.dataset.rutaVer || '');
+            });
+
+            campoDependenciaEnviarEnviado.value = '';
+            campoRolEnviarEnviado.value = '';
+            campoDependenciaEnviarEnviado.dispatchEvent(new Event('change'));
+            campoRolEnviarEnviado.dispatchEvent(new Event('change'));
+
+            if (window.aplicarFiltroRolUsuario) {
+                window.aplicarFiltroRolUsuario(campoDependenciaEnviarEnviado);
+            }
+
+            modalEnviarEnviado.classList.add('abierto');
+            campoDependenciaEnviarEnviado.focus();
+        });
+
+        if (botonCerrarEnviarEnviado) {
+            botonCerrarEnviarEnviado.addEventListener('click', cerrarEnviarEnviado);
+        }
+
+        modalEnviarEnviado.addEventListener('click', function (evento) {
+            if (evento.target === modalEnviarEnviado) {
+                cerrarEnviarEnviado();
+            }
+        });
+
+        document.addEventListener('keydown', function (evento) {
+            if (evento.key === 'Escape') {
+                cerrarEnviarEnviado();
             }
         });
     }

@@ -186,7 +186,9 @@ class PerfilProyectosControlador
             exit;
         }
 
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
         $necesidades = $this->modeloNecesidad->obtenerTodas();
+        $necesidades = $this->filtrarPorPropietarioODestinatario($necesidades, $usuarioActual);
 
         header('Content-Type: text/csv; charset=UTF-8');
         header('Content-Disposition: attachment; filename="perfil-proyectos-' . date('Y-m-d') . '.csv"');

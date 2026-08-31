@@ -63,18 +63,27 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=enviadas" class="pestana<?= $vista === 'enviadas' ? ' activa' : '' ?>">Enviadas</a>
             </div>
             <?php if ($vista === 'consolidado'): ?>
-            <div class="grupo-acciones-encabezado" id="barra-acciones-consolidado">
+            <div class="grupo-acciones-encabezado" id="barra-acciones-consolidado" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>">
                 <button type="button" id="boton-consolidado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
                 <button type="button" id="boton-consolidado-editar" class="boton-accion boton-accion-editar" disabled>Editar</button>
-                <button type="button" id="boton-consolidado-redireccionar" class="boton-accion boton-accion-enviar" disabled>Redireccionar</button>
-                <button type="button" id="boton-consolidado-duplicar" class="boton-agregar" disabled>Duplicar</button>
+                <button type="button" id="boton-consolidado-archivar" class="boton-accion boton-accion-editar" disabled>Archivar</button>
+                <button type="button" id="boton-consolidado-redireccionar" class="boton-agregar" disabled>Enviar</button>
             </div>
             <?php endif; ?>
             <?php if ($vista === 'archivar'): ?>
             <div class="grupo-acciones-encabezado" id="barra-acciones-archivar" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>">
+                <button type="button" id="boton-archivado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
                 <button type="button" id="boton-archivado-duplicar" class="boton-accion boton-accion-editar" disabled>Duplicar</button>
                 <button type="button" id="boton-archivado-consolidar" class="boton-accion boton-accion-enviar" disabled>Consolidar</button>
                 <button type="button" id="boton-archivado-enviar" class="boton-agregar" disabled>Enviar</button>
+            </div>
+            <?php endif; ?>
+            <?php if ($vista === 'enviadas'): ?>
+            <div class="grupo-acciones-encabezado" id="barra-acciones-enviadas" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>">
+                <button type="button" id="boton-enviado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
+                <button type="button" id="boton-enviado-duplicar" class="boton-accion boton-accion-editar" disabled>Duplicar</button>
+                <button type="button" id="boton-enviado-consolidar" class="boton-accion boton-accion-enviar" disabled>Consolidar</button>
+                <button type="button" id="boton-enviado-enviar" class="boton-agregar" disabled>Enviar</button>
             </div>
             <?php endif; ?>
         </div>
@@ -372,6 +381,11 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                                 class="checkbox-archivado"
                                 data-origen="<?= htmlspecialchars($item['origen']) ?>"
                                 data-origen-id="<?= (int) $item['origen_id'] ?>"
+                                data-tipo="<?= htmlspecialchars($item['tipo']) ?>"
+                                data-detalle="<?= htmlspecialchars($item['detalle']) ?>"
+                                data-cantidad="<?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '' ?>"
+                                data-valor="<?= $item['valor'] !== null ? (float) $item['valor'] : '' ?>"
+                                data-ruta-ver="<?= htmlspecialchars($item['ruta_ver']) ?>"
                             >
                         </td>
                         <td><?= htmlspecialchars($item['tipo']) ?></td>
@@ -403,11 +417,12 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             </table>
         </div>
         <?php else: ?>
-        <p class="texto-atenuado">Lo que tu dependencia (o sus hijas) ya envió, con su estado actual. Vista de solo lectura.</p>
+        <p class="texto-atenuado">Lo que tu dependencia (o sus hijas) ya envió, con su estado actual.</p>
         <div class="tabla-scroll">
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th><input type="checkbox" id="checkbox-enviado-todos" <?= empty($enviadas) ? 'disabled' : '' ?>></th>
                         <th>Tipo</th>
                         <th>Enviado a</th>
                         <th>Estado</th>
@@ -419,6 +434,20 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <tbody>
                     <?php foreach ($enviadas as $item): ?>
                     <tr>
+                        <td>
+                            <input
+                                type="checkbox"
+                                class="checkbox-enviado"
+                                data-origen="<?= htmlspecialchars($item['origen']) ?>"
+                                data-origen-id="<?= (int) $item['origen_id'] ?>"
+                                data-tipo="<?= htmlspecialchars($item['tipo']) ?>"
+                                data-detalle="<?= htmlspecialchars($item['detalle']) ?>"
+                                data-cantidad="<?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '' ?>"
+                                data-valor="<?= $item['valor'] !== null ? (float) $item['valor'] : '' ?>"
+                                data-ruta-ver="<?= htmlspecialchars($item['ruta_ver']) ?>"
+                                data-accion-actual="<?= $item['accion_actual'] !== null ? htmlspecialchars($item['accion_actual']) : '' ?>"
+                            >
+                        </td>
                         <td><?= htmlspecialchars($item['tipo']) ?></td>
                         <td><?= htmlspecialchars($item['detalle']) ?></td>
                         <td><?= htmlspecialchars($item['estado_enviada']) ?></td>
@@ -431,7 +460,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     <?php endforeach; ?>
                     <?php if (empty($enviadas)): ?>
                     <tr>
-                        <td colspan="6">No has enviado nada todavía.</td>
+                        <td colspan="7">No has enviado nada todavía.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
@@ -602,14 +631,12 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
         </div>
     </div>
 
-    <div id="modal-duplicar-consolidado" class="modal-fondo">
+    <div id="modal-ver-archivado" class="modal-fondo">
         <div class="modal-caja">
             <div class="modal-cabecera">
-                <h2>Duplicar <span id="duplicar-consolidado-tipo-texto"></span></h2>
-                <button type="button" id="boton-cerrar-modal-duplicar-consolidado" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+                <h2>Detalle de los ítems seleccionados</h2>
+                <button type="button" id="boton-cerrar-modal-ver-archivado" class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
-
-            <p class="texto-atenuado">Se creará una copia exacta de cada ítem seleccionado (incluyendo sus conceptos, si aplica), como un ítem nuevo separado dentro del mismo tipo.</p>
 
             <div class="tabla-scroll">
                 <table class="tabla-usuarios tabla-consolidado-detalle">
@@ -617,21 +644,91 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                         <tr>
                             <th>Tipo</th>
                             <th>Detalle</th>
+                            <th>Cantidad</th>
                             <th>Valor</th>
+                            <th></th>
                         </tr>
                     </thead>
-                    <tbody id="duplicar-consolidado-cuerpo"></tbody>
+                    <tbody id="ver-archivado-cuerpo"></tbody>
                 </table>
             </div>
+        </div>
+    </div>
 
-            <form method="POST" action="index.php?ruta=peticiones" class="form-necesidad">
-                <input type="hidden" name="accion" value="duplicar_consolidado">
-                <input type="hidden" name="vista" value="consolidado">
+    <div id="modal-ver-enviado" class="modal-fondo">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Detalle de los ítems seleccionados</h2>
+                <button type="button" id="boton-cerrar-modal-ver-enviado" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <div class="tabla-scroll">
+                <table class="tabla-usuarios tabla-consolidado-detalle">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Detalle</th>
+                            <th>Cantidad</th>
+                            <th>Valor</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ver-enviado-cuerpo"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-enviar-enviado" class="modal-fondo">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Enviar <span id="enviar-enviado-tipo-texto"></span></h2>
+                <button type="button" id="boton-cerrar-modal-enviar-enviado" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <form method="POST" action="index.php?ruta=peticiones" class="form-necesidad form-confirmar-envio" data-campo-dependencia="enviar-enviado-dependencia" data-campo-rol="enviar-enviado-rol">
+                <input type="hidden" name="accion" value="enviar_enviado">
+                <input type="hidden" name="vista" value="enviadas">
                 <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
                 <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
-                <div id="duplicar-consolidado-campos-items"></div>
+                <div id="enviar-enviado-campos-items"></div>
 
-                <button type="submit" class="boton-enviar">Duplicar</button>
+                <div class="campo">
+                    <label for="enviar-enviado-dependencia_buscador">Dependencia *</label>
+                    <?php
+                    $idPrefijoDependencia = '';
+                    $nombreCampoDependencia = 'dependencia_destino';
+                    $idBaseDependenciaOverride = 'enviar-enviado-dependencia';
+                    $dependenciasOpciones = $dependenciasSugeridas;
+                    $dependenciaDataSelectRol = 'enviar-enviado-rol';
+                    require __DIR__ . '/../parciales/selector-dependencia.php';
+                    ?>
+                </div>
+
+                <div class="campo">
+                    <label for="enviar-enviado-rol">Rol *</label>
+                    <select id="enviar-enviado-rol" name="rol_destinatario_id" required>
+                        <option value="">Selecciona un rol</option>
+                        <?php foreach ($roles as $rolOpcion): ?>
+                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="campo" style="display:none;">
+                    <label for="enviar-enviado-destinatario">¿A quién exactamente? *</label>
+                    <select
+                        id="enviar-enviado-destinatario"
+                        name="usuario_destinatario_id"
+                        class="selector-destinatario"
+                        data-campo-dependencia="enviar-enviado-dependencia"
+                        data-campo-rol="enviar-enviado-rol"
+                    >
+                        <option value="">Selecciona a quién enviarlo</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="boton-enviar">Enviar</button>
             </form>
         </div>
     </div>
