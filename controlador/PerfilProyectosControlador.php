@@ -102,11 +102,11 @@ class PerfilProyectosControlador
         $aniosVigencia = $this->obtenerAniosVigencia();
         $puedeEnviarTodo = !empty(array_filter($necesidades, static fn (array $n): bool => ($n['estado'] ?? 'borrador') === 'borrador'));
 
-        $proyectoParaEditarDesdePeticiones = null;
+        $proyectoParaEditar = null;
         if (isset($_GET['editar_id']) && ctype_digit((string) $_GET['editar_id'])) {
-            $proyectoParaEditarDesdePeticiones = $this->modeloNecesidad->obtenerPorId((int) $_GET['editar_id']);
+            $proyectoParaEditar = $this->modeloNecesidad->obtenerPorId((int) $_GET['editar_id']);
         }
-        $volverAPeticiones = $_GET['volver'] ?? '';
+        $volverEdicion = $_GET['volver'] ?? '';
 
         require __DIR__ . '/../vista/perfil-proyectos/index.php';
     }
@@ -322,12 +322,9 @@ class PerfilProyectosControlador
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('necesidad', $id, (float) $datos['valor'], $datos['dependencia']);
 
-        if (!empty($_POST['volver'])) {
-            header('Location: ' . $_POST['volver']);
-            exit;
-        }
-
-        return ['', 'Proyecto actualizado correctamente.'];
+        $destino = !empty($_POST['volver']) ? $_POST['volver'] : 'index.php?ruta=perfil-proyectos';
+        header('Location: ' . $destino);
+        exit;
     }
 
     private function eliminarSeleccionados(): array

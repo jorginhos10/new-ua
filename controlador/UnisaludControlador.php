@@ -180,16 +180,16 @@ class UnisaludControlador
 
         $dependenciasTodas = $this->modeloDependencia->obtenerActivasParaEnvio();
 
-        $egresoParaEditarDesdePeticiones = null;
-        $ingresoParaEditarDesdePeticiones = null;
+        $egresoParaEditar = null;
+        $ingresoParaEditar = null;
         if (isset($_GET['editar_id']) && ctype_digit((string) $_GET['editar_id'])) {
             if ($tab === 'egresos') {
-                $egresoParaEditarDesdePeticiones = $this->modeloGasto->obtenerPorId((int) $_GET['editar_id']);
+                $egresoParaEditar = $this->modeloGasto->obtenerPorId((int) $_GET['editar_id']);
             } else {
-                $ingresoParaEditarDesdePeticiones = $this->modeloIngreso->obtenerPorId((int) $_GET['editar_id']);
+                $ingresoParaEditar = $this->modeloIngreso->obtenerPorId((int) $_GET['editar_id']);
             }
         }
-        $volverAPeticiones = $_GET['volver'] ?? '';
+        $volverEdicion = $_GET['volver'] ?? '';
 
         $anioSeleccionado = null;
         foreach ($aniosActivos as $anioFila) {
@@ -305,12 +305,11 @@ class UnisaludControlador
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('gasto_unisalud', $id, $nuevoValor, $datos['dependencia']);
 
-        if (!empty($_POST['volver'])) {
-            header('Location: ' . $_POST['volver']);
-            exit;
-        }
-
-        return ['', 'Egreso actualizado correctamente.'];
+        $destino = !empty($_POST['volver'])
+            ? $_POST['volver']
+            : 'index.php?ruta=unisalud&tab=egresos&anio_id=' . $datos['anio_presupuestal_id'];
+        header('Location: ' . $destino);
+        exit;
     }
 
     private function validarLimiteCategoria(int $anioPresupuestalId, string $categoria, float $nuevoValor, float $totalIngresos, float $valorExcluido = 0.0): string
@@ -583,12 +582,11 @@ class UnisaludControlador
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('ingreso_unisalud', $id, $cabecera['valor_total'], $cabecera['dependencia']);
 
-        if (!empty($_POST['volver'])) {
-            header('Location: ' . $_POST['volver']);
-            exit;
-        }
-
-        return ['', 'Ingreso actualizado correctamente.'];
+        $destino = !empty($_POST['volver'])
+            ? $_POST['volver']
+            : 'index.php?ruta=unisalud&tab=ingresos&anio_id=' . $cabecera['anio_presupuestal_id'];
+        header('Location: ' . $destino);
+        exit;
     }
 
     private function eliminarIngreso(): array

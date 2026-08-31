@@ -214,24 +214,26 @@ class SolicitudControlador
         $rolesPorTipo = $this->modeloTipoDependenciaRol->obtenerMapaCompleto();
         $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
 
-        $solicitudArlParaEditarDesdePeticiones = null;
-        $solicitudMonitorParaEditarDesdePeticiones = null;
-        $solicitudOpsParaEditarDesdePeticiones = null;
-        $solicitudPeticionParaEditarDesdePeticiones = null;
+        $arlParaEditar = null;
+        $monitorParaEditar = null;
+        $opsParaEditar = null;
+        $peticionParaEditar = null;
         if (isset($_GET['editar_id']) && ctype_digit((string) $_GET['editar_id'])) {
             $editarIdSolicitud = (int) $_GET['editar_id'];
             $tipoSolicitud = $_GET['tipo_solicitud'] ?? '';
             if ($tipoSolicitud === 'arl') {
-                $solicitudArlParaEditarDesdePeticiones = $this->modeloSolicitud->obtenerPorId($editarIdSolicitud);
+                $arlParaEditar = $this->modeloSolicitud->obtenerPorId($editarIdSolicitud);
             } elseif ($tipoSolicitud === 'monitores') {
-                $solicitudMonitorParaEditarDesdePeticiones = $this->modeloMonitor->obtenerPorId($editarIdSolicitud);
+                $monitorParaEditar = $this->modeloMonitor->obtenerPorId($editarIdSolicitud);
             } elseif ($tipoSolicitud === 'ops') {
-                $solicitudOpsParaEditarDesdePeticiones = $this->modeloOps->obtenerPorId($editarIdSolicitud);
+                $opsParaEditar = $this->modeloOps->obtenerPorId($editarIdSolicitud);
             } elseif ($tipoSolicitud === 'otros') {
-                $solicitudPeticionParaEditarDesdePeticiones = $this->modeloPeticion->obtenerPorId($editarIdSolicitud);
+                $peticionParaEditar = $this->modeloPeticion->obtenerPorId($editarIdSolicitud);
             }
         }
-        $volverAPeticiones = $_GET['volver'] ?? '';
+        $volverEdicion = $_GET['volver'] ?? '';
+        $tipoSolicitudEdicion = $_GET['tipo_solicitud'] ?? '';
+        $modoEdicion = $arlParaEditar !== null || $monitorParaEditar !== null || $opsParaEditar !== null || $peticionParaEditar !== null;
 
         require __DIR__ . '/../vista/solicitudes/index.php';
     }
@@ -308,12 +310,11 @@ class SolicitudControlador
         }
         (new PeticionArchivada())->sincronizarDesdeOrigen('arl', $id, $valorTotalArl, $datos['facultad']);
 
-        if (!empty($_POST['volver'])) {
-            header('Location: ' . $_POST['volver']);
-            exit;
-        }
-
-        return ['', 'Solicitud actualizada correctamente.'];
+        $destino = !empty($_POST['volver'])
+            ? $_POST['volver']
+            : 'index.php?ruta=solicitudes&tab=arl&anio_id=' . $datos['anio_presupuestal_id'];
+        header('Location: ' . $destino);
+        exit;
     }
 
     private function validarRolDestinatario(): array
@@ -537,12 +538,11 @@ class SolicitudControlador
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('monitores', $id, null, $datos['dependencia']);
 
-        if (!empty($_POST['volver'])) {
-            header('Location: ' . $_POST['volver']);
-            exit;
-        }
-
-        return ['', 'Solicitud de monitores actualizada correctamente.'];
+        $destino = !empty($_POST['volver'])
+            ? $_POST['volver']
+            : 'index.php?ruta=solicitudes&tab=monitores&anio_id=' . $datos['anio_presupuestal_id'];
+        header('Location: ' . $destino);
+        exit;
     }
 
     private function calcularDatosMonitor(): array
@@ -686,12 +686,11 @@ class SolicitudControlador
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('ops', $id, $datos['valor'] * $datos['cantidad'], $datos['dependencia']);
 
-        if (!empty($_POST['volver'])) {
-            header('Location: ' . $_POST['volver']);
-            exit;
-        }
-
-        return ['', 'Solicitud OPS actualizada correctamente.'];
+        $destino = !empty($_POST['volver'])
+            ? $_POST['volver']
+            : 'index.php?ruta=solicitudes&tab=ops&anio_id=' . $datos['anio_presupuestal_id'];
+        header('Location: ' . $destino);
+        exit;
     }
 
     private function calcularDatosOps(): array
@@ -851,12 +850,11 @@ class SolicitudControlador
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('otros', $id, $datos['valor_s1'] + $datos['valor_s2'], $datos['concepto']);
 
-        if (!empty($_POST['volver'])) {
-            header('Location: ' . $_POST['volver']);
-            exit;
-        }
-
-        return ['', 'Petición actualizada correctamente.'];
+        $destino = !empty($_POST['volver'])
+            ? $_POST['volver']
+            : 'index.php?ruta=solicitudes&tab=otros&anio_id=' . $datos['anio_presupuestal_id'];
+        header('Location: ' . $destino);
+        exit;
     }
 
     private function calcularDatosPeticion(): array

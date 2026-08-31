@@ -373,15 +373,10 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
-    var modalEditarProyecto = document.getElementById('modal-editar-proyecto');
-    var botonCerrarEditarProyecto = document.getElementById('boton-cerrar-modal-editar-proyecto');
+    var formularioEditarProyecto = document.getElementById('form-editar-proyecto');
 
-    if (!modalEditarProyecto) {
+    if (!formularioEditarProyecto) {
         return;
-    }
-
-    function cerrarEditarProyecto() {
-        modalEditarProyecto.classList.remove('abierto');
     }
 
     document.querySelectorAll('.boton-editar-proyecto').forEach(function (boton) {
@@ -438,26 +433,91 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('editar-proyecto-fuente_financiacion').value = necesidad.fuente_financiacion || '';
             document.getElementById('editar-proyecto-responsable_usuario_id').value = necesidad.responsable_usuario_id || '';
             document.getElementById('editar-proyecto-observaciones').value = necesidad.observaciones || '';
-
-            modalEditarProyecto.classList.add('abierto');
         });
     });
+});
 
-    if (botonCerrarEditarProyecto) {
-        botonCerrarEditarProyecto.addEventListener('click', cerrarEditarProyecto);
+document.addEventListener('DOMContentLoaded', function () {
+    var formularioEdicion = document.getElementById('form-editar-proyecto');
+
+    if (!formularioEdicion) {
+        return;
     }
 
-    modalEditarProyecto.addEventListener('click', function (evento) {
-        if (evento.target === modalEditarProyecto) {
-            cerrarEditarProyecto();
-        }
-    });
+    var formularioSucio = false;
 
-    document.addEventListener('keydown', function (evento) {
-        if (evento.key === 'Escape') {
-            cerrarEditarProyecto();
+    setTimeout(function () {
+        formularioEdicion.addEventListener('input', function () { formularioSucio = true; });
+        formularioEdicion.addEventListener('change', function () { formularioSucio = true; });
+    }, 0);
+
+    var modalConfirmar = document.getElementById('modal-confirmar-salir-edicion');
+    var botonSeguirEditando = document.getElementById('boton-seguir-editando-edicion');
+    var botonSalirSinGuardar = document.getElementById('boton-salir-sin-guardar-edicion');
+    var accionPendiente = null;
+
+    function abrirConfirmacion(callback) {
+        if (!formularioSucio) {
+            callback();
+            return;
         }
-    });
+
+        accionPendiente = callback;
+
+        if (modalConfirmar) {
+            modalConfirmar.classList.add('abierto');
+        } else {
+            callback();
+        }
+    }
+
+    function cerrarConfirmacion() {
+        accionPendiente = null;
+
+        if (modalConfirmar) {
+            modalConfirmar.classList.remove('abierto');
+        }
+    }
+
+    if (botonSeguirEditando) {
+        botonSeguirEditando.addEventListener('click', cerrarConfirmacion);
+    }
+
+    if (botonSalirSinGuardar) {
+        botonSalirSinGuardar.addEventListener('click', function () {
+            var callback = accionPendiente;
+            formularioSucio = false;
+            cerrarConfirmacion();
+
+            if (callback) {
+                callback();
+            }
+        });
+    }
+
+    var enlaceVolver = document.querySelector('.barra-modulo-volver');
+
+    if (enlaceVolver) {
+        enlaceVolver.addEventListener('click', function (evento) {
+            if (formularioSucio) {
+                evento.preventDefault();
+                abrirConfirmacion(function () {
+                    window.location.href = enlaceVolver.href;
+                });
+            }
+        });
+    }
+
+    var botonNuevoItem = document.getElementById('boton-nuevo-item-desde-edicion');
+    var modalProyecto = document.getElementById('modal-crear-proyecto');
+
+    if (botonNuevoItem && modalProyecto) {
+        botonNuevoItem.addEventListener('click', function () {
+            abrirConfirmacion(function () {
+                modalProyecto.classList.add('abierto');
+            });
+        });
+    }
 });
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -801,13 +861,21 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
-    var modalEditarEgreso = document.getElementById('modal-editar-egreso');
+    document.querySelectorAll('.form-eliminar-egreso').forEach(function (formulario) {
+        formulario.addEventListener('submit', function (evento) {
+            if (!confirm('¿Eliminar este egreso? Esta acción no se puede deshacer.')) {
+                evento.preventDefault();
+            }
+        });
+    });
+});
 
-    if (!modalEditarEgreso) {
+document.addEventListener('DOMContentLoaded', function () {
+    var formularioEditarEgreso = document.getElementById('form-editar-egreso');
+
+    if (!formularioEditarEgreso) {
         return;
     }
-
-    var botonCerrarEditarEgreso = document.getElementById('boton-cerrar-modal-editar-egreso');
 
     function asignar(id, valor) {
         var campo = document.getElementById(id);
@@ -896,7 +964,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             var mesesSeleccionados = gasto.meses ? gasto.meses.split(',') : [];
-            var envoltorio = modalEditarEgreso.querySelector('.calendario-meses-envoltorio');
+            var envoltorio = formularioEditarEgreso.querySelector('.calendario-meses-envoltorio');
 
             if (envoltorio) {
                 envoltorio.querySelectorAll('input[name="meses[]"]').forEach(function (casilla) {
@@ -907,30 +975,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     envoltorio.actualizarDistribucion();
                 }
             }
-
-            modalEditarEgreso.classList.add('abierto');
         });
     });
+});
 
-    if (botonCerrarEditarEgreso) {
-        botonCerrarEditarEgreso.addEventListener('click', cerrarEditarEgreso);
-    }
-
-    modalEditarEgreso.addEventListener('click', function (evento) {
-        if (evento.target === modalEditarEgreso) {
-            cerrarEditarEgreso();
-        }
-    });
-
-    document.addEventListener('keydown', function (evento) {
-        if (evento.key === 'Escape') {
-            cerrarEditarEgreso();
-        }
-    });
-
-    document.querySelectorAll('.form-eliminar-egreso').forEach(function (formulario) {
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.form-eliminar-ingreso').forEach(function (formulario) {
         formulario.addEventListener('submit', function (evento) {
-            if (!confirm('¿Eliminar este egreso? Esta acción no se puede deshacer.')) {
+            if (!confirm('¿Eliminar este ingreso? Esta acción no se puede deshacer.')) {
                 evento.preventDefault();
             }
         });
@@ -938,13 +990,11 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
-    var modalEditarIngreso = document.getElementById('modal-editar-ingreso');
+    var formularioEditarIngreso = document.getElementById('form-editar-ingreso');
 
-    if (!modalEditarIngreso) {
+    if (!formularioEditarIngreso) {
         return;
     }
-
-    var botonCerrarEditarIngreso = document.getElementById('boton-cerrar-modal-editar-ingreso');
 
     function asignar(id, valor) {
         var campo = document.getElementById(id);
@@ -952,10 +1002,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (campo && valor !== undefined) {
             campo.value = valor;
         }
-    }
-
-    function cerrarEditarIngreso() {
-        modalEditarIngreso.classList.remove('abierto');
     }
 
     document.querySelectorAll('.boton-editar-ingreso').forEach(function (boton) {
@@ -976,7 +1022,7 @@ document.addEventListener('DOMContentLoaded', function () {
             asignar('editar-ingreso-concepto_adicional', ingreso.concepto_adicional);
             asignar('editar-ingreso-valor_adicional', ingreso.valor_adicional);
 
-            var contenedorFilas = modalEditarIngreso.querySelector('.filas-conceptos');
+            var contenedorFilas = formularioEditarIngreso.querySelector('.filas-conceptos');
 
             if (contenedorFilas) {
                 var filaBase = contenedorFilas.querySelector('.fila-concepto');
@@ -994,34 +1040,91 @@ document.addEventListener('DOMContentLoaded', function () {
                     contenedorFilas.appendChild(filaNueva);
                 });
             }
-
-            modalEditarIngreso.classList.add('abierto');
         });
     });
+});
 
-    if (botonCerrarEditarIngreso) {
-        botonCerrarEditarIngreso.addEventListener('click', cerrarEditarIngreso);
+document.addEventListener('DOMContentLoaded', function () {
+    var formularioEdicion = document.getElementById('form-editar-egreso') || document.getElementById('form-editar-ingreso');
+
+    if (!formularioEdicion) {
+        return;
     }
 
-    modalEditarIngreso.addEventListener('click', function (evento) {
-        if (evento.target === modalEditarIngreso) {
-            cerrarEditarIngreso();
-        }
-    });
+    var formularioSucio = false;
 
-    document.addEventListener('keydown', function (evento) {
-        if (evento.key === 'Escape') {
-            cerrarEditarIngreso();
-        }
-    });
+    setTimeout(function () {
+        formularioEdicion.addEventListener('input', function () { formularioSucio = true; });
+        formularioEdicion.addEventListener('change', function () { formularioSucio = true; });
+    }, 0);
 
-    document.querySelectorAll('.form-eliminar-ingreso').forEach(function (formulario) {
-        formulario.addEventListener('submit', function (evento) {
-            if (!confirm('¿Eliminar este ingreso? Esta acción no se puede deshacer.')) {
-                evento.preventDefault();
+    var modalConfirmar = document.getElementById('modal-confirmar-salir-edicion');
+    var botonSeguirEditando = document.getElementById('boton-seguir-editando-edicion');
+    var botonSalirSinGuardar = document.getElementById('boton-salir-sin-guardar-edicion');
+    var accionPendiente = null;
+
+    function abrirConfirmacion(callback) {
+        if (!formularioSucio) {
+            callback();
+            return;
+        }
+
+        accionPendiente = callback;
+
+        if (modalConfirmar) {
+            modalConfirmar.classList.add('abierto');
+        } else {
+            callback();
+        }
+    }
+
+    function cerrarConfirmacion() {
+        accionPendiente = null;
+
+        if (modalConfirmar) {
+            modalConfirmar.classList.remove('abierto');
+        }
+    }
+
+    if (botonSeguirEditando) {
+        botonSeguirEditando.addEventListener('click', cerrarConfirmacion);
+    }
+
+    if (botonSalirSinGuardar) {
+        botonSalirSinGuardar.addEventListener('click', function () {
+            var callback = accionPendiente;
+            formularioSucio = false;
+            cerrarConfirmacion();
+
+            if (callback) {
+                callback();
             }
         });
-    });
+    }
+
+    var enlaceVolver = document.querySelector('.barra-modulo-volver');
+
+    if (enlaceVolver) {
+        enlaceVolver.addEventListener('click', function (evento) {
+            if (formularioSucio) {
+                evento.preventDefault();
+                abrirConfirmacion(function () {
+                    window.location.href = enlaceVolver.href;
+                });
+            }
+        });
+    }
+
+    var botonNuevoItem = document.getElementById('boton-nuevo-item-desde-edicion');
+    var modalGasto = document.getElementById('modal-gasto');
+
+    if (botonNuevoItem && modalGasto) {
+        botonNuevoItem.addEventListener('click', function () {
+            abrirConfirmacion(function () {
+                modalGasto.classList.add('abierto');
+            });
+        });
+    }
 });
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -1063,18 +1166,23 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
-    var modalEditar = document.getElementById('modal-editar-solicitud');
+    document.querySelectorAll('.form-eliminar-solicitud').forEach(function (formulario) {
+        formulario.addEventListener('submit', function (evento) {
+            if (!confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) {
+                evento.preventDefault();
+            }
+        });
+    });
+});
 
-    if (!modalEditar) {
+document.addEventListener('DOMContentLoaded', function () {
+    var formularioEditarArl = document.getElementById('form-editar-solicitud-arl');
+
+    if (!formularioEditarArl) {
         return;
     }
 
-    var botonCerrarEditar = document.getElementById('boton-cerrar-modal-editar-solicitud');
     var numerosRomanos = ['I', 'II', 'III', 'IV', 'V'];
-
-    function cerrarEditar() {
-        modalEditar.classList.remove('abierto');
-    }
 
     document.querySelectorAll('.fila-menu-editar-solicitud').forEach(function (boton) {
         boton.addEventListener('click', function () {
@@ -1108,35 +1216,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     campoValor.value = parseFloat(solicitud['riesgo' + nivel + '_valor'] || 0).toFixed(2);
                 }
             });
-
-            modalEditar.classList.add('abierto');
         });
     });
-
-    if (botonCerrarEditar) {
-        botonCerrarEditar.addEventListener('click', cerrarEditar);
-    }
-
-    modalEditar.addEventListener('click', function (evento) {
-        if (evento.target === modalEditar) {
-            cerrarEditar();
-        }
-    });
-
-    document.addEventListener('keydown', function (evento) {
-        if (evento.key === 'Escape') {
-            cerrarEditar();
-        }
-    });
-
-    document.querySelectorAll('.form-eliminar-solicitud').forEach(function (formulario) {
-        formulario.addEventListener('submit', function (evento) {
-            if (!confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) {
-                evento.preventDefault();
-            }
-        });
-    });
-
 });
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -1170,15 +1251,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    var modalEditarMonitor = document.getElementById('modal-editar-monitor');
+    var formularioEditarMonitor = document.getElementById('form-editar-monitor');
 
-    if (modalEditarMonitor) {
-        var botonCerrarEditarMonitor = document.getElementById('boton-cerrar-modal-editar-monitor');
-
-        function cerrarEditarMonitor() {
-            modalEditarMonitor.classList.remove('abierto');
-        }
-
+    if (formularioEditarMonitor) {
         document.querySelectorAll('.fila-menu-editar-monitor').forEach(function (boton) {
             boton.addEventListener('click', function () {
                 try {
@@ -1200,25 +1275,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.getElementById('editar-monitor-tipo').value = monitor.tipo;
                 document.getElementById('editar-monitor-semestre1').value = monitor.monitores_semestre1 || 0;
                 document.getElementById('editar-monitor-semestre2').value = monitor.monitores_semestre2 || 0;
-
-                modalEditarMonitor.classList.add('abierto');
             });
-        });
-
-        if (botonCerrarEditarMonitor) {
-            botonCerrarEditarMonitor.addEventListener('click', cerrarEditarMonitor);
-        }
-
-        modalEditarMonitor.addEventListener('click', function (evento) {
-            if (evento.target === modalEditarMonitor) {
-                cerrarEditarMonitor();
-            }
-        });
-
-        document.addEventListener('keydown', function (evento) {
-            if (evento.key === 'Escape') {
-                cerrarEditarMonitor();
-            }
         });
     }
 
@@ -1263,15 +1320,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    var modalEditarOps = document.getElementById('modal-editar-ops');
+    var formularioEditarOps = document.getElementById('form-editar-ops');
 
-    if (modalEditarOps) {
-        var botonCerrarEditarOps = document.getElementById('boton-cerrar-modal-editar-ops');
-
-        function cerrarEditarOps() {
-            modalEditarOps.classList.remove('abierto');
-        }
-
+    if (formularioEditarOps) {
         document.querySelectorAll('.fila-menu-editar-ops').forEach(function (boton) {
             boton.addEventListener('click', function () {
                 try {
@@ -1297,25 +1348,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.getElementById('editar-ops-valor').value = ops.valor || 0;
                 document.getElementById('editar-ops-cantidad').value = ops.cantidad;
                 document.getElementById('editar-ops-observaciones').value = ops.observaciones || '';
-
-                modalEditarOps.classList.add('abierto');
             });
-        });
-
-        if (botonCerrarEditarOps) {
-            botonCerrarEditarOps.addEventListener('click', cerrarEditarOps);
-        }
-
-        modalEditarOps.addEventListener('click', function (evento) {
-            if (evento.target === modalEditarOps) {
-                cerrarEditarOps();
-            }
-        });
-
-        document.addEventListener('keydown', function (evento) {
-            if (evento.key === 'Escape') {
-                cerrarEditarOps();
-            }
         });
     }
 
@@ -1360,15 +1393,9 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    var modalEditarPeticion = document.getElementById('modal-editar-peticion');
+    var formularioEditarPeticion = document.getElementById('form-editar-peticion');
 
-    if (modalEditarPeticion) {
-        var botonCerrarEditarPeticion = document.getElementById('boton-cerrar-modal-editar-peticion');
-
-        function cerrarEditarPeticion() {
-            modalEditarPeticion.classList.remove('abierto');
-        }
-
+    if (formularioEditarPeticion) {
         document.querySelectorAll('.fila-menu-editar-peticion').forEach(function (boton) {
             boton.addEventListener('click', function () {
                 try {
@@ -1386,25 +1413,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.getElementById('editar-peticion-valor-s1').value = peticion.valor_s1 || 0;
                 document.getElementById('editar-peticion-semestre2').value = peticion.semestre2 || 0;
                 document.getElementById('editar-peticion-valor-s2').value = peticion.valor_s2 || 0;
-
-                modalEditarPeticion.classList.add('abierto');
             });
-        });
-
-        if (botonCerrarEditarPeticion) {
-            botonCerrarEditarPeticion.addEventListener('click', cerrarEditarPeticion);
-        }
-
-        modalEditarPeticion.addEventListener('click', function (evento) {
-            if (evento.target === modalEditarPeticion) {
-                cerrarEditarPeticion();
-            }
-        });
-
-        document.addEventListener('keydown', function (evento) {
-            if (evento.key === 'Escape') {
-                cerrarEditarPeticion();
-            }
         });
     }
 
@@ -1416,6 +1425,98 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+});
+
+document.addEventListener('DOMContentLoaded', function () {
+    var formularioEdicion = document.getElementById('form-editar-solicitud-arl')
+        || document.getElementById('form-editar-monitor')
+        || document.getElementById('form-editar-ops')
+        || document.getElementById('form-editar-peticion');
+
+    if (!formularioEdicion) {
+        return;
+    }
+
+    var formularioSucio = false;
+
+    setTimeout(function () {
+        formularioEdicion.addEventListener('input', function () { formularioSucio = true; });
+        formularioEdicion.addEventListener('change', function () { formularioSucio = true; });
+    }, 0);
+
+    var modalConfirmar = document.getElementById('modal-confirmar-salir-edicion');
+    var botonSeguirEditando = document.getElementById('boton-seguir-editando-edicion');
+    var botonSalirSinGuardar = document.getElementById('boton-salir-sin-guardar-edicion');
+    var accionPendiente = null;
+
+    function abrirConfirmacion(callback) {
+        if (!formularioSucio) {
+            callback();
+            return;
+        }
+
+        accionPendiente = callback;
+
+        if (modalConfirmar) {
+            modalConfirmar.classList.add('abierto');
+        } else {
+            callback();
+        }
+    }
+
+    function cerrarConfirmacion() {
+        accionPendiente = null;
+
+        if (modalConfirmar) {
+            modalConfirmar.classList.remove('abierto');
+        }
+    }
+
+    if (botonSeguirEditando) {
+        botonSeguirEditando.addEventListener('click', cerrarConfirmacion);
+    }
+
+    if (botonSalirSinGuardar) {
+        botonSalirSinGuardar.addEventListener('click', function () {
+            var callback = accionPendiente;
+            formularioSucio = false;
+            cerrarConfirmacion();
+
+            if (callback) {
+                callback();
+            }
+        });
+    }
+
+    var enlaceVolver = document.querySelector('.barra-modulo-volver');
+
+    if (enlaceVolver) {
+        enlaceVolver.addEventListener('click', function (evento) {
+            if (formularioSucio) {
+                evento.preventDefault();
+                abrirConfirmacion(function () {
+                    window.location.href = enlaceVolver.href;
+                });
+            }
+        });
+    }
+
+    var botonNuevoItem = document.getElementById('boton-nuevo-item-desde-edicion');
+    var mapaModalCrear = {
+        'form-editar-solicitud-arl': 'modal-solicitud',
+        'form-editar-monitor': 'modal-monitor',
+        'form-editar-ops': 'modal-ops',
+        'form-editar-peticion': 'modal-peticion',
+    };
+    var modalCrear = document.getElementById(mapaModalCrear[formularioEdicion.id] || '');
+
+    if (botonNuevoItem && modalCrear) {
+        botonNuevoItem.addEventListener('click', function () {
+            abrirConfirmacion(function () {
+                modalCrear.classList.add('abierto');
+            });
+        });
+    }
 });
 
 document.addEventListener('DOMContentLoaded', function () {

@@ -13,6 +13,7 @@ $nombresMesesCompletos = [
 $catalogosListosEgreso = !empty($sedes) && !empty($lineas) && !empty($motores) && !empty($proyectos) && !empty($rubros) && !empty($aniosActivos);
 $catalogosListosIngreso = !empty($aniosActivos);
 $catalogosListos = $tab === 'ingresos' ? $catalogosListosIngreso : $catalogosListosEgreso;
+$modoEdicion = $egresoParaEditar !== null || $ingresoParaEditar !== null;
 require __DIR__ . '/../parciales/encabezado.php';
 ?>
 
@@ -24,39 +25,52 @@ require __DIR__ . '/../parciales/encabezado.php';
                 'id' => 'boton-seleccionar-postgrado',
                 'icono' => 'seleccionar',
                 'etiqueta' => 'Seleccionar elementos',
+                'disabled' => $modoEdicion,
             ],
             [
                 'id' => 'boton-editar-postgrado',
                 'icono' => 'editar',
                 'etiqueta' => 'Editar seleccionado',
                 'disabled' => true,
-                'titulo_disabled' => 'Selecciona exactamente un elemento',
+                'titulo_disabled' => $modoEdicion ? 'Ya estás editando un elemento' : 'Selecciona exactamente un elemento',
             ],
             [
                 'id' => 'boton-duplicar-postgrado',
                 'icono' => 'duplicar',
                 'etiqueta' => 'Duplicar seleccionados',
                 'disabled' => true,
-                'titulo_disabled' => 'Selecciona uno o más elementos',
+                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
             ],
             [
                 'id' => 'boton-eliminar-postgrado',
                 'icono' => 'eliminar',
                 'etiqueta' => 'Eliminar seleccionados',
                 'disabled' => true,
-                'titulo_disabled' => 'Selecciona uno o más elementos',
+                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
             ],
             [
                 'id' => 'boton-abrir-modal-enviar-todo-postgrado',
                 'icono' => 'enviar',
                 'etiqueta' => 'Enviar todos los ingresos y egresos en borrador',
-                'disabled' => !$puedeEnviarTodo,
+                'disabled' => $modoEdicion || !$puedeEnviarTodo,
                 'titulo_disabled' => 'Disponible cuando el total de egresos sea igual al total de ingresos del año',
             ],
         ];
-        $barraBotonPrincipal = $catalogosListos
-            ? ['id' => 'boton-abrir-modal-gasto', 'etiqueta' => '+ Agregar ' . ($tab === 'ingresos' ? 'ingreso' : 'egreso')]
+        if ($modoEdicion) {
+            $barraBotonesSecundarios[] = [
+                'id' => 'boton-nuevo-item-desde-edicion',
+                'icono' => 'nuevo',
+                'etiqueta' => 'Nuevo ítem',
+            ];
+        }
+        $barraBotonPrincipal = $modoEdicion
+            ? ['id' => 'boton-guardar-edicion-postgrado', 'etiqueta' => 'Guardar', 'form' => $egresoParaEditar !== null ? 'form-editar-egreso' : 'form-editar-ingreso']
+            : ($catalogosListos ? ['id' => 'boton-abrir-modal-gasto', 'etiqueta' => '+ Agregar ' . ($tab === 'ingresos' ? 'ingreso' : 'egreso')] : null);
+        $barraEstado = $modoEdicion ? 'edicion' : 'creacion';
+        $barraRutaVolver = $modoEdicion
+            ? ($volverEdicion !== '' ? $volverEdicion : 'index.php?ruta=postgrado&tab=' . $tab . '&anio_id=' . $anioSeleccionadoId)
             : null;
+        $barraTextoVolver = ($modoEdicion && $volverEdicion !== '') ? 'Volver a Peticiones' : 'Volver a Postgrado';
         require __DIR__ . '/../parciales/barra-modulo.php';
         ?>
         </div>
@@ -149,7 +163,9 @@ require __DIR__ . '/../parciales/encabezado.php';
             </div>
         <?php endif; ?>
 
-        <?php if ($tab === 'egresos'): ?>
+        <?php if ($modoEdicion): ?>
+        <?php require __DIR__ . '/' . ($egresoParaEditar !== null ? 'formulario-edicion-egreso.php' : 'formulario-edicion-ingreso.php'); ?>
+        <?php elseif ($tab === 'egresos'): ?>
         <div
             class="tabla-scroll tabla-bulk-seleccionable"
             data-boton-seleccionar="boton-seleccionar-postgrado"
@@ -159,6 +175,7 @@ require __DIR__ . '/../parciales/encabezado.php';
             data-accion-form="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>"
             data-accion-eliminar="eliminar_seleccionados"
             data-accion-duplicar="duplicar_seleccionados"
+            data-editar-en-pagina="1"
             data-tab="egresos"
         >
             <table class="tabla-usuarios">
@@ -199,11 +216,10 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td class="celda-acciones">
                             <?php if ($gasto['tipo_automatico'] === null && $gasto['estado'] === 'borrador'): ?>
                             <div class="acciones-fila">
-                                <button
-                                    type="button"
-                                    class="boton-accion boton-accion-editar boton-editar-egreso boton-editar-fila-generico"
-                                    data-gasto="<?= htmlspecialchars(json_encode($gasto)) ?>"
-                                >Editar</button>
+                                <a
+                                    href="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&editar_id=<?= (int) $gasto['id'] ?>"
+                                    class="boton-accion boton-accion-editar"
+                                >Editar</a>
                                 <form method="POST" action="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-eliminar-egreso">
                                     <input type="hidden" name="tab" value="egresos">
                                     <input type="hidden" name="accion" value="eliminar">
@@ -266,6 +282,7 @@ require __DIR__ . '/../parciales/encabezado.php';
             data-accion-form="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>"
             data-accion-eliminar="eliminar_seleccionados"
             data-accion-duplicar="duplicar_seleccionados"
+            data-editar-en-pagina="1"
             data-tab="ingresos"
         >
             <table class="tabla-usuarios">
@@ -292,11 +309,10 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td class="celda-acciones">
                             <?php if ($ingreso['estado'] === 'borrador'): ?>
                             <div class="acciones-fila">
-                                <button
-                                    type="button"
-                                    class="boton-accion boton-accion-editar boton-editar-ingreso boton-editar-fila-generico"
-                                    data-ingreso="<?= htmlspecialchars(json_encode($ingreso)) ?>"
-                                >Editar</button>
+                                <a
+                                    href="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>&editar_id=<?= (int) $ingreso['id'] ?>"
+                                    class="boton-accion boton-accion-editar"
+                                >Editar</a>
                                 <form method="POST" action="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-eliminar-ingreso">
                                     <input type="hidden" name="tab" value="ingresos">
                                     <input type="hidden" name="accion" value="eliminar">
@@ -545,219 +561,6 @@ require __DIR__ . '/../parciales/encabezado.php';
     </div>
     <?php endif; ?>
 
-    <?php if ($catalogosListosEgreso): ?>
-    <div id="modal-editar-egreso" class="modal-fondo">
-        <div class="modal-caja">
-            <div class="modal-cabecera">
-                <h2>Editar egreso</h2>
-                <button type="button" id="boton-cerrar-modal-editar-egreso" class="modal-cerrar" aria-label="Cerrar">&times;</button>
-            </div>
-
-            <form method="POST" action="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-necesidad">
-                <input type="hidden" name="tab" value="egresos">
-                <input type="hidden" name="accion" value="actualizar">
-                <input type="hidden" name="id" id="editar-egreso-id" value="">
-                <input type="hidden" name="volver" id="editar-egreso-volver" value="">
-
-                <div class="campo">
-                    <label for="editar-egreso-anio_presupuestal_id">Año presupuestal *</label>
-                    <select id="editar-egreso-anio_presupuestal_id" name="anio_presupuestal_id" required>
-                        <option value="">Selecciona un año</option>
-                        <?php foreach ($aniosActivos as $anioOpcion): ?>
-                        <option value="<?= (int) $anioOpcion['id'] ?>"><?= htmlspecialchars((string) $anioOpcion['anio']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-egreso-categoria">Categoría *</label>
-                    <select id="editar-egreso-categoria" name="categoria" required>
-                        <option value="">Selecciona una categoría</option>
-                        <?php foreach ($categoriasEgreso as $categoriaOpcion): ?>
-                        <option value="<?= htmlspecialchars($categoriaOpcion) ?>"><?= htmlspecialchars($categoriaOpcion) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-egreso-sede_id">Sede *</label>
-                    <select id="editar-egreso-sede_id" name="sede_id" required>
-                        <option value="">Selecciona una sede</option>
-                        <?php foreach ($sedes as $sede): ?>
-                        <option value="<?= (int) $sede['id'] ?>"><?= htmlspecialchars($sede['codigo'] . ' - ' . $sede['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="<?= (!$tieneHijas && $dependenciaPorDefecto !== null) ? 'editar-egreso-dependencia' : 'editar-egreso-dependencia_buscador' ?>">Dependencia *</label>
-                    <?php if (!$tieneHijas && $dependenciaPorDefecto !== null): ?>
-                    <select disabled>
-                        <option selected><?= htmlspecialchars($dependenciaPorDefecto) ?></option>
-                    </select>
-                    <input type="hidden" name="dependencia" id="editar-egreso-dependencia" value="<?= htmlspecialchars($dependenciaPorDefecto) ?>">
-                    <?php else: ?>
-                    <?php
-                    $idPrefijoDependencia = 'editar-egreso-';
-                    $nombreCampoDependencia = 'dependencia';
-                    $dependenciasOpciones = $dependenciasSugeridas;
-                    require __DIR__ . '/../parciales/selector-dependencia.php';
-                    ?>
-                    <?php endif; ?>
-                </div>
-
-                <?php $idPrefijoProyecto = 'editar-egreso-'; $proyectosPdi = $proyectos; require __DIR__ . '/../parciales/selector-proyecto-pdi.php'; ?>
-
-                <?php $idPrefijoContrato = 'editar-egreso-'; require __DIR__ . '/../parciales/selector-contrato-comun.php'; ?>
-
-                <div class="campo campo-ancho">
-                    <label for="editar-egreso-actividad">Actividad *</label>
-                    <input type="text" id="editar-egreso-actividad" name="actividad" placeholder="Diligenciar" required>
-                </div>
-
-                <div class="campo campo-ancho">
-                    <label for="editar-egreso-rubro_buscador">Rubro *</label>
-                    <div class="selector-buscable" id="editar-egreso-selector-rubro">
-                        <input type="text" id="editar-egreso-rubro_buscador" class="selector-buscable-input" placeholder="Buscar rubro..." autocomplete="off">
-                        <input type="hidden" name="rubro_id" id="editar-egreso-rubro_id">
-                        <div class="selector-buscable-lista" id="editar-egreso-rubro_lista">
-                            <?php foreach ($rubros as $rubro): ?>
-                            <div class="selector-buscable-opcion" data-id="<?= (int) $rubro['id'] ?>" data-texto="<?= htmlspecialchars($rubro['codigo'] . ' - ' . $rubro['descripcion']) ?>">
-                                <?= htmlspecialchars($rubro['codigo'] . ' - ' . $rubro['descripcion']) ?>
-                            </div>
-                            <?php endforeach; ?>
-                            <div class="selector-buscable-vacio">Sin resultados.</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-egreso-insumo">Insumo *</label>
-                    <input type="text" id="editar-egreso-insumo" name="insumo" placeholder="Diligenciar" required>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-egreso-cantidad">Cantidad *</label>
-                    <input type="number" id="editar-egreso-cantidad" name="cantidad" min="1" step="1" required>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-egreso-costo_unitario">Costo unitario *</label>
-                    <input type="number" id="editar-egreso-costo_unitario" name="costo_unitario" min="0" step="0.01" required>
-                </div>
-
-                <div class="campo campo-ancho">
-                    <label>Meses de ejecución *</label>
-                    <div class="calendario-meses-envoltorio">
-                        <div class="calendario-meses">
-                            <div class="calendario-meses-cabecera">Calendario</div>
-                            <div class="calendario-meses-grilla">
-                                <?php foreach ($nombresMesesCompletos as $numero => $nombre): ?>
-                                <label class="mes-celda">
-                                    <input type="checkbox" name="meses[]" value="<?= $numero ?>">
-                                    <span><?= htmlspecialchars($nombre) ?></span>
-                                </label>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
-
-                        <div class="resumen-meses">
-                            <h3>Distribución del presupuesto</h3>
-                            <ul class="lista-meses-seleccionados">
-                                <li class="lista-meses-vacio">Selecciona los meses de ejecución.</li>
-                            </ul>
-                            <div class="resumen-meses-total">
-                                <span>Total</span>
-                                <span class="resumen-meses-total-valor">$0.00</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <button type="submit" class="boton-enviar">Guardar cambios</button>
-            </form>
-        </div>
-    </div>
-    <?php endif; ?>
-
-    <?php if ($catalogosListosIngreso): ?>
-    <div id="modal-editar-ingreso" class="modal-fondo">
-        <div class="modal-caja">
-            <div class="modal-cabecera">
-                <h2>Editar ingreso</h2>
-                <button type="button" id="boton-cerrar-modal-editar-ingreso" class="modal-cerrar" aria-label="Cerrar">&times;</button>
-            </div>
-
-            <form method="POST" action="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-necesidad">
-                <input type="hidden" name="tab" value="ingresos">
-                <input type="hidden" name="accion" value="actualizar">
-                <input type="hidden" name="id" id="editar-ingreso-id" value="">
-                <input type="hidden" name="volver" id="editar-ingreso-volver" value="">
-
-                <div class="campo">
-                    <label for="editar-ingreso-anio_presupuestal_id">Año presupuestal *</label>
-                    <select id="editar-ingreso-anio_presupuestal_id" name="anio_presupuestal_id" required>
-                        <option value="">Selecciona un año</option>
-                        <?php foreach ($aniosActivos as $anioOpcion): ?>
-                        <option value="<?= (int) $anioOpcion['id'] ?>"><?= htmlspecialchars((string) $anioOpcion['anio']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="<?= (!$tieneHijas && $dependenciaPorDefecto !== null) ? 'editar-ingreso-dependencia' : 'editar-ingreso-dependencia_buscador' ?>">Dependencia *</label>
-                    <?php if (!$tieneHijas && $dependenciaPorDefecto !== null): ?>
-                    <select disabled>
-                        <option selected><?= htmlspecialchars($dependenciaPorDefecto) ?></option>
-                    </select>
-                    <input type="hidden" name="dependencia" id="editar-ingreso-dependencia" value="<?= htmlspecialchars($dependenciaPorDefecto) ?>">
-                    <?php else: ?>
-                    <?php
-                    $idPrefijoDependencia = 'editar-ingreso-';
-                    $nombreCampoDependencia = 'dependencia';
-                    $dependenciasOpciones = $dependenciasSugeridas;
-                    require __DIR__ . '/../parciales/selector-dependencia.php';
-                    ?>
-                    <?php endif; ?>
-                </div>
-
-                <div class="campo campo-ancho">
-                    <label>Conceptos *</label>
-                    <div class="filas-conceptos" id="editar-filas-conceptos">
-                        <div class="fila-concepto">
-                            <div class="campo">
-                                <label>Concepto</label>
-                                <input type="text" name="concepto[]" placeholder="Ej. Matrícula">
-                            </div>
-                            <div class="campo">
-                                <label>Cantidad</label>
-                                <input type="number" name="cantidad_concepto[]" min="1" step="1">
-                            </div>
-                            <div class="campo">
-                                <label>Valor unitario</label>
-                                <input type="number" name="valor_concepto[]" min="0" step="0.01">
-                            </div>
-                            <button type="button" class="boton-quitar-fila" aria-label="Quitar concepto">&times;</button>
-                        </div>
-                    </div>
-                    <button type="button" class="boton-agregar-fila">+ Agregar concepto</button>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-ingreso-concepto_adicional">Concepto adicional</label>
-                    <input type="text" id="editar-ingreso-concepto_adicional" name="concepto_adicional" placeholder="Opcional">
-                </div>
-
-                <div class="campo">
-                    <label for="editar-ingreso-valor_adicional">Valor adicional</label>
-                    <input type="number" id="editar-ingreso-valor_adicional" name="valor_adicional" min="0" step="0.01" placeholder="0.00">
-                </div>
-
-                <button type="submit" class="boton-enviar">Guardar cambios</button>
-            </form>
-        </div>
-    </div>
-    <?php endif; ?>
 
     <div id="modal-enviar-todo-postgrado" class="modal-fondo">
         <div class="modal-caja">
@@ -813,33 +616,21 @@ require __DIR__ . '/../parciales/encabezado.php';
 
     <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
 
-    <?php if ($egresoParaEditarDesdePeticiones !== null): ?>
-    <button
-        type="button"
-        id="boton-editar-egreso-desde-peticiones"
-        class="boton-editar-egreso boton-editar-fila-generico"
-        hidden
-        data-gasto="<?= htmlspecialchars(json_encode($egresoParaEditarDesdePeticiones + ['volver' => $volverAPeticiones])) ?>"
-    ></button>
-    <?php endif; ?>
-    <?php if ($ingresoParaEditarDesdePeticiones !== null): ?>
-    <button
-        type="button"
-        id="boton-editar-ingreso-desde-peticiones"
-        class="boton-editar-ingreso boton-editar-fila-generico"
-        hidden
-        data-ingreso="<?= htmlspecialchars(json_encode($ingresoParaEditarDesdePeticiones + ['volver' => $volverAPeticiones])) ?>"
-    ></button>
-    <?php endif; ?>
-    <?php if ($egresoParaEditarDesdePeticiones !== null || $ingresoParaEditarDesdePeticiones !== null): ?>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            var boton = document.getElementById('boton-editar-egreso-desde-peticiones') || document.getElementById('boton-editar-ingreso-desde-peticiones');
-            if (boton) {
-                boton.click();
-            }
-        });
-    </script>
+    <?php if ($modoEdicion): ?>
+    <div id="modal-confirmar-salir-edicion" class="modal-fondo">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Cambios sin guardar</h2>
+            </div>
+
+            <p class="texto-atenuado">Tienes cambios sin guardar en este ítem. Si sales ahora se perderán.</p>
+
+            <div class="acciones-fila">
+                <button type="button" id="boton-seguir-editando-edicion" class="boton-accion boton-accion-editar">Seguir editando</button>
+                <button type="button" id="boton-salir-sin-guardar-edicion" class="boton-accion boton-accion-eliminar">Salir sin guardar</button>
+            </div>
+        </div>
+    </div>
     <?php endif; ?>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

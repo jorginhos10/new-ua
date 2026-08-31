@@ -23,32 +23,48 @@ require __DIR__ . '/../parciales/encabezado.php';
                 'id' => "boton-seleccionar-{$sufijoTab}",
                 'icono' => 'seleccionar',
                 'etiqueta' => 'Seleccionar elementos',
+                'disabled' => $modoEdicion,
             ],
             [
                 'id' => "boton-editar-{$sufijoTab}",
                 'icono' => 'editar',
                 'etiqueta' => 'Editar seleccionado',
                 'disabled' => true,
-                'titulo_disabled' => 'Selecciona exactamente un elemento',
+                'titulo_disabled' => $modoEdicion ? 'Ya estás editando un elemento' : 'Selecciona exactamente un elemento',
             ],
             [
                 'id' => "boton-duplicar-{$sufijoTab}",
                 'icono' => 'duplicar',
                 'etiqueta' => 'Duplicar seleccionados',
                 'disabled' => true,
-                'titulo_disabled' => 'Selecciona uno o más elementos',
+                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
             ],
             [
                 'id' => "boton-eliminar-{$sufijoTab}",
                 'icono' => 'eliminar',
                 'etiqueta' => 'Eliminar seleccionados',
                 'disabled' => true,
-                'titulo_disabled' => 'Selecciona uno o más elementos',
+                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
             ],
         ];
+        if ($modoEdicion) {
+            $barraBotonesSecundarios[] = [
+                'id' => 'boton-nuevo-item-desde-edicion',
+                'icono' => 'nuevo',
+                'etiqueta' => 'Nuevo ítem',
+            ];
+        }
         $barraBotonPrincipal = null;
 
-        if ($tab === 'arl' && $catalogosListos) {
+        if ($modoEdicion) {
+            $mapaFormEdicion = [
+                'arl' => 'form-editar-solicitud-arl',
+                'monitores' => 'form-editar-monitor',
+                'ops' => 'form-editar-ops',
+                'otros' => 'form-editar-peticion',
+            ];
+            $barraBotonPrincipal = ['id' => 'boton-guardar-edicion-solicitud', 'etiqueta' => 'Guardar', 'form' => $mapaFormEdicion[$tab] ?? 'form-editar-solicitud-arl'];
+        } elseif ($tab === 'arl' && $catalogosListos) {
             $barraBotonPrincipal = ['id' => 'boton-abrir-modal-solicitud', 'etiqueta' => '+ Agregar solicitud'];
         } elseif ($tab === 'monitores' && $catalogosListos) {
             $barraBotonPrincipal = ['id' => 'boton-abrir-modal-monitor', 'etiqueta' => '+ Agregar solicitud'];
@@ -58,6 +74,11 @@ require __DIR__ . '/../parciales/encabezado.php';
             $barraBotonPrincipal = ['id' => 'boton-abrir-modal-peticion', 'etiqueta' => '+ Agregar solicitud'];
         }
 
+        $barraEstado = $modoEdicion ? 'edicion' : 'creacion';
+        $barraRutaVolver = $modoEdicion
+            ? ($volverEdicion !== '' ? $volverEdicion : 'index.php?ruta=solicitudes&tab=' . $tab . '&anio_id=' . $anioSeleccionadoId)
+            : null;
+        $barraTextoVolver = ($modoEdicion && $volverEdicion !== '') ? 'Volver a Peticiones' : 'Volver a Solicitudes';
         require __DIR__ . '/../parciales/barra-modulo.php';
         ?>
         <p>Son de carácter informativo.</p>
@@ -100,16 +121,27 @@ require __DIR__ . '/../parciales/encabezado.php';
             </form>
         <?php endif; ?>
 
-        <?php if ($tab === 'arl'): ?>
+        <?php if ($modoEdicion): ?>
+        <?php
+        $mapaPartialEdicion = [
+            'arl' => 'formulario-edicion-arl.php',
+            'monitores' => 'formulario-edicion-monitor.php',
+            'ops' => 'formulario-edicion-ops.php',
+            'otros' => 'formulario-edicion-peticion.php',
+        ];
+        require __DIR__ . '/' . ($mapaPartialEdicion[$tab] ?? 'formulario-edicion-arl.php');
+        ?>
+        <?php elseif ($tab === 'arl'): ?>
         <div
             class="tabla-scroll tabla-bulk-seleccionable"
             data-boton-seleccionar="boton-seleccionar-arl"
             data-boton-editar="boton-editar-arl"
             data-boton-duplicar="boton-duplicar-arl"
             data-boton-eliminar="boton-eliminar-arl"
-            data-accion-form="index.php?ruta=solicitudes&anio_id=<?= (int) $anioSeleccionadoId ?>"
+            data-accion-form="index.php?ruta=solicitudes&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=arl"
             data-accion-eliminar="eliminar_seleccionados"
             data-accion-duplicar="duplicar_seleccionados"
+            data-editar-en-pagina="1"
             data-tab="arl"
         >
             <table class="tabla-usuarios">
@@ -150,11 +182,10 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     class="boton-accion boton-accion-ver"
                                 >Ver</a>
                                 <?php if ($solicitud['estado'] === 'borrador'): ?>
-                                <button
-                                    type="button"
-                                    class="boton-accion boton-accion-editar fila-menu-editar-solicitud boton-editar-fila-generico"
-                                    data-solicitud="<?= htmlspecialchars(json_encode($solicitud, JSON_UNESCAPED_UNICODE)) ?>"
-                                >Editar</button>
+                                <a
+                                    href="index.php?ruta=solicitudes&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=arl&editar_id=<?= (int) $solicitud['id'] ?>"
+                                    class="boton-accion boton-accion-editar"
+                                >Editar</a>
                                 <form
                                     method="POST"
                                     action="index.php?ruta=solicitudes"
@@ -194,9 +225,10 @@ require __DIR__ . '/../parciales/encabezado.php';
             data-boton-editar="boton-editar-monitores"
             data-boton-duplicar="boton-duplicar-monitores"
             data-boton-eliminar="boton-eliminar-monitores"
-            data-accion-form="index.php?ruta=solicitudes&tab=monitores&anio_id=<?= (int) $anioSeleccionadoId ?>"
+            data-accion-form="index.php?ruta=solicitudes&tab=monitores&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=monitores"
             data-accion-eliminar="eliminar_monitor_seleccionados"
             data-accion-duplicar="duplicar_monitor_seleccionados"
+            data-editar-en-pagina="1"
             data-tab="monitores"
         >
             <table class="tabla-usuarios">
@@ -234,11 +266,10 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     class="boton-accion boton-accion-ver"
                                 >Ver</a>
                                 <?php if ($solicitudMonitor['estado'] === 'borrador'): ?>
-                                <button
-                                    type="button"
-                                    class="boton-accion boton-accion-editar fila-menu-editar-monitor boton-editar-fila-generico"
-                                    data-monitor="<?= htmlspecialchars(json_encode($solicitudMonitor, JSON_UNESCAPED_UNICODE)) ?>"
-                                >Editar</button>
+                                <a
+                                    href="index.php?ruta=solicitudes&tab=monitores&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=monitores&editar_id=<?= (int) $solicitudMonitor['id'] ?>"
+                                    class="boton-accion boton-accion-editar"
+                                >Editar</a>
                                 <form
                                     method="POST"
                                     action="index.php?ruta=solicitudes"
@@ -278,9 +309,10 @@ require __DIR__ . '/../parciales/encabezado.php';
             data-boton-editar="boton-editar-ops"
             data-boton-duplicar="boton-duplicar-ops"
             data-boton-eliminar="boton-eliminar-ops"
-            data-accion-form="index.php?ruta=solicitudes&tab=ops&anio_id=<?= (int) $anioSeleccionadoId ?>"
+            data-accion-form="index.php?ruta=solicitudes&tab=ops&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=ops"
             data-accion-eliminar="eliminar_ops_seleccionados"
             data-accion-duplicar="duplicar_ops_seleccionados"
+            data-editar-en-pagina="1"
             data-tab="ops"
         >
             <table class="tabla-usuarios">
@@ -322,11 +354,10 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     class="boton-accion boton-accion-ver"
                                 >Ver</a>
                                 <?php if ($solicitudOps['estado'] === 'borrador'): ?>
-                                <button
-                                    type="button"
-                                    class="boton-accion boton-accion-editar fila-menu-editar-ops boton-editar-fila-generico"
-                                    data-ops="<?= htmlspecialchars(json_encode($solicitudOps, JSON_UNESCAPED_UNICODE)) ?>"
-                                >Editar</button>
+                                <a
+                                    href="index.php?ruta=solicitudes&tab=ops&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=ops&editar_id=<?= (int) $solicitudOps['id'] ?>"
+                                    class="boton-accion boton-accion-editar"
+                                >Editar</a>
                                 <form
                                     method="POST"
                                     action="index.php?ruta=solicitudes"
@@ -366,9 +397,10 @@ require __DIR__ . '/../parciales/encabezado.php';
             data-boton-editar="boton-editar-otros"
             data-boton-duplicar="boton-duplicar-otros"
             data-boton-eliminar="boton-eliminar-otros"
-            data-accion-form="index.php?ruta=solicitudes&tab=otros&anio_id=<?= (int) $anioSeleccionadoId ?>"
+            data-accion-form="index.php?ruta=solicitudes&tab=otros&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=otros"
             data-accion-eliminar="eliminar_peticion_seleccionados"
             data-accion-duplicar="duplicar_peticion_seleccionados"
+            data-editar-en-pagina="1"
             data-tab="otros"
         >
             <table class="tabla-usuarios">
@@ -405,11 +437,10 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     class="boton-accion boton-accion-ver"
                                 >Ver</a>
                                 <?php if ($solicitudPeticion['estado'] === 'borrador'): ?>
-                                <button
-                                    type="button"
-                                    class="boton-accion boton-accion-editar fila-menu-editar-peticion boton-editar-fila-generico"
-                                    data-peticion="<?= htmlspecialchars(json_encode($solicitudPeticion, JSON_UNESCAPED_UNICODE)) ?>"
-                                >Editar</button>
+                                <a
+                                    href="index.php?ruta=solicitudes&tab=otros&anio_id=<?= (int) $anioSeleccionadoId ?>&tipo_solicitud=otros&editar_id=<?= (int) $solicitudPeticion['id'] ?>"
+                                    class="boton-accion boton-accion-editar"
+                                >Editar</a>
                                 <form method="POST" action="index.php?ruta=solicitudes" class="form-enviar-solicitud">
                                     <input type="hidden" name="accion" value="enviar_peticion">
                                     <input type="hidden" name="tab" value="otros">
@@ -517,88 +548,6 @@ require __DIR__ . '/../parciales/encabezado.php';
         </div>
     </div>
 
-    <div id="modal-editar-solicitud" class="modal-fondo">
-        <div class="modal-caja">
-            <div class="modal-cabecera">
-                <h2>Editar solicitud — ARL de estudiantes en prácticas</h2>
-                <button type="button" id="boton-cerrar-modal-editar-solicitud" class="modal-cerrar" aria-label="Cerrar">&times;</button>
-            </div>
-
-            <form method="POST" action="index.php?ruta=solicitudes" id="form-editar-solicitud-arl" class="form-necesidad"
-                data-smlv-por-anio="<?= htmlspecialchars(json_encode($smlvPorAnio)) ?>"
-                data-porcentajes-riesgo="<?= htmlspecialchars(json_encode($porcentajesRiesgo)) ?>">
-                <input type="hidden" name="accion" value="actualizar">
-                <input type="hidden" name="tab" value="arl">
-                <input type="hidden" name="id" id="editar-solicitud-id" value="">
-                <input type="hidden" name="volver" id="editar-solicitud-volver" value="">
-
-                <div class="campo">
-                    <label for="editar-solicitud-anio">Año presupuestal *</label>
-                    <select id="editar-solicitud-anio" name="anio_presupuestal_id" required>
-                        <option value="">Selecciona un año</option>
-                        <?php foreach ($aniosActivos as $anioOpcion): ?>
-                        <option value="<?= (int) $anioOpcion['id'] ?>"><?= htmlspecialchars((string) $anioOpcion['anio']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-solicitud-facultad_buscador">Facultad *</label>
-                    <?php
-                    $idPrefijoDependencia = '';
-                    $nombreCampoDependencia = 'facultad';
-                    $idBaseDependenciaOverride = 'editar-solicitud-facultad';
-                    $dependenciasOpciones = $dependenciasSugeridas;
-                    $dependenciaDataSelectRol = 'editar-solicitud-rol';
-                    require __DIR__ . '/../parciales/selector-dependencia.php';
-                    ?>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-solicitud-rol">Rol al que se enviará *</label>
-                    <select id="editar-solicitud-rol" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo campo-ancho">
-                    <label>Riesgos ARL *</label>
-                    <div class="tabla-scroll">
-                        <table class="tabla-usuarios tabla-solicitud-riesgos">
-                            <thead>
-                                <tr>
-                                    <th>Clase de riesgo</th>
-                                    <th>Número de estudiantes</th>
-                                    <th>Valor anual</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($numerosRomanos as $nivel => $numero): ?>
-                                <tr>
-                                    <td>Riesgo <?= $numero ?></td>
-                                    <td>
-                                        <label class="etiqueta-oculta" for="editar-solicitud-riesgo<?= $nivel ?>_estudiantes">Número de estudiantes Riesgo <?= $numero ?></label>
-                                        <input type="number" id="editar-solicitud-riesgo<?= $nivel ?>_estudiantes" name="riesgo<?= $nivel ?>_estudiantes" class="campo-solicitud-estudiantes" data-nivel="<?= $nivel ?>" min="0" step="1" value="0">
-                                    </td>
-                                    <td>
-                                        <label class="etiqueta-oculta" for="editar-solicitud-riesgo<?= $nivel ?>_valor">Valor anual Riesgo <?= $numero ?></label>
-                                        <input type="text" id="editar-solicitud-riesgo<?= $nivel ?>_valor" name="riesgo<?= $nivel ?>_valor" class="campo-solicitud-valor" value="0.00" readonly>
-                                    </td>
-                                </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <button type="submit" class="boton-enviar">Guardar cambios</button>
-            </form>
-        </div>
-    </div>
-
     <div id="modal-monitor" class="modal-fondo<?= !empty($error) && $tab === 'monitores' ? ' abierto' : '' ?>">
         <div class="modal-caja">
             <div class="modal-cabecera">
@@ -662,76 +611,6 @@ require __DIR__ . '/../parciales/encabezado.php';
                 </div>
 
                 <button type="submit" class="boton-enviar">Registrar solicitud</button>
-            </form>
-        </div>
-    </div>
-
-    <div id="modal-editar-monitor" class="modal-fondo">
-        <div class="modal-caja">
-            <div class="modal-cabecera">
-                <h2>Editar solicitud — Monitores</h2>
-                <button type="button" id="boton-cerrar-modal-editar-monitor" class="modal-cerrar" aria-label="Cerrar">&times;</button>
-            </div>
-
-            <form method="POST" action="index.php?ruta=solicitudes" class="form-necesidad">
-                <input type="hidden" name="accion" value="actualizar_monitor">
-                <input type="hidden" name="tab" value="monitores">
-                <input type="hidden" name="id" id="editar-monitor-id" value="">
-                <input type="hidden" name="volver" id="editar-monitor-volver" value="">
-
-                <div class="campo">
-                    <label for="editar-monitor-anio">Año presupuestal *</label>
-                    <select id="editar-monitor-anio" name="anio_presupuestal_id" required>
-                        <option value="">Selecciona un año</option>
-                        <?php foreach ($aniosActivos as $anioOpcion): ?>
-                        <option value="<?= (int) $anioOpcion['id'] ?>"><?= htmlspecialchars((string) $anioOpcion['anio']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-monitor-dependencia_buscador">Dependencia *</label>
-                    <?php
-                    $idPrefijoDependencia = '';
-                    $nombreCampoDependencia = 'dependencia';
-                    $idBaseDependenciaOverride = 'editar-monitor-dependencia';
-                    $dependenciasOpciones = $dependenciasSugeridas;
-                    $dependenciaDataSelectRol = 'editar-monitor-rol';
-                    require __DIR__ . '/../parciales/selector-dependencia.php';
-                    ?>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-monitor-rol">Rol al que se enviará *</label>
-                    <select id="editar-monitor-rol" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-monitor-tipo">Tipo *</label>
-                    <select id="editar-monitor-tipo" name="tipo" required>
-                        <option value="">Selecciona un tipo</option>
-                        <?php foreach ($tiposMonitor as $tipoClave => $tipoNombre): ?>
-                        <option value="<?= htmlspecialchars($tipoClave) ?>"><?= htmlspecialchars($tipoNombre) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-monitor-semestre1">Monitores semestre I</label>
-                    <input type="number" id="editar-monitor-semestre1" name="monitores_semestre1" min="0" step="1" value="0">
-                </div>
-
-                <div class="campo">
-                    <label for="editar-monitor-semestre2">Monitores semestre II</label>
-                    <input type="number" id="editar-monitor-semestre2" name="monitores_semestre2" min="0" step="1" value="0">
-                </div>
-
-                <button type="submit" class="boton-enviar">Guardar cambios</button>
             </form>
         </div>
     </div>
@@ -837,109 +716,6 @@ require __DIR__ . '/../parciales/encabezado.php';
         </div>
     </div>
 
-    <div id="modal-editar-ops" class="modal-fondo">
-        <div class="modal-caja">
-            <div class="modal-cabecera">
-                <h2>Editar solicitud — OPS prestación de servicios</h2>
-                <button type="button" id="boton-cerrar-modal-editar-ops" class="modal-cerrar" aria-label="Cerrar">&times;</button>
-            </div>
-
-            <form method="POST" action="index.php?ruta=solicitudes" class="form-necesidad">
-                <input type="hidden" name="accion" value="actualizar_ops">
-                <input type="hidden" name="tab" value="ops">
-                <input type="hidden" name="id" id="editar-ops-id" value="">
-                <input type="hidden" name="volver" id="editar-ops-volver" value="">
-
-                <div class="campo">
-                    <label for="editar-ops-anio">Año presupuestal *</label>
-                    <select id="editar-ops-anio" name="anio_presupuestal_id" required>
-                        <option value="">Selecciona un año</option>
-                        <?php foreach ($aniosActivos as $anioOpcion): ?>
-                        <option value="<?= (int) $anioOpcion['id'] ?>"><?= htmlspecialchars((string) $anioOpcion['anio']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-ops-sede">Sede *</label>
-                    <select id="editar-ops-sede" name="sede_id" required>
-                        <option value="">Selecciona una sede</option>
-                        <?php foreach ($sedes as $sede): ?>
-                        <option value="<?= (int) $sede['id'] ?>"><?= htmlspecialchars($sede['codigo'] . ' - ' . $sede['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <?php $idPrefijoProyecto = 'editar-ops-'; $proyectosPdi = $proyectos; require __DIR__ . '/../parciales/selector-proyecto-pdi.php'; ?>
-
-                <div class="campo">
-                    <label for="editar-ops-dependencia_buscador">Dependencia académico/administrativa *</label>
-                    <?php
-                    $idPrefijoDependencia = '';
-                    $nombreCampoDependencia = 'dependencia';
-                    $idBaseDependenciaOverride = 'editar-ops-dependencia';
-                    $dependenciasOpciones = $dependenciasSugeridas;
-                    $dependenciaDataSelectRol = 'editar-ops-rol';
-                    require __DIR__ . '/../parciales/selector-dependencia.php';
-                    ?>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-ops-rol">Rol al que se enviará *</label>
-                    <select id="editar-ops-rol" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo campo-ancho">
-                    <label for="editar-ops-rubro_buscador">Rubro *</label>
-                    <div class="selector-buscable" id="editar-ops-selector-rubro">
-                        <input type="text" id="editar-ops-rubro_buscador" class="selector-buscable-input" placeholder="Buscar rubro..." autocomplete="off">
-                        <input type="hidden" name="rubro_id" id="editar-ops-rubro_id">
-                        <div class="selector-buscable-lista" id="editar-ops-rubro_lista">
-                            <?php foreach ($rubros as $rubro): ?>
-                            <div class="selector-buscable-opcion" data-id="<?= (int) $rubro['id'] ?>" data-texto="<?= htmlspecialchars($rubro['codigo'] . ' - ' . $rubro['descripcion']) ?>">
-                                <?= htmlspecialchars($rubro['codigo'] . ' - ' . $rubro['descripcion']) ?>
-                            </div>
-                            <?php endforeach; ?>
-                            <div class="selector-buscable-vacio">Sin resultados.</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-ops-perfil">Perfil *</label>
-                    <select id="editar-ops-perfil" name="perfil" required>
-                        <option value="">Selecciona un perfil</option>
-                        <?php foreach ($perfilesOps as $perfilClave => $perfilNombre): ?>
-                        <option value="<?= htmlspecialchars($perfilClave) ?>"><?= htmlspecialchars($perfilNombre) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-ops-valor">Valor *</label>
-                    <input type="number" id="editar-ops-valor" name="valor" min="0" step="0.01" value="0" required>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-ops-cantidad">Cantidad *</label>
-                    <input type="number" id="editar-ops-cantidad" name="cantidad" min="1" step="1" value="1" required>
-                </div>
-
-                <div class="campo campo-ancho">
-                    <label for="editar-ops-observaciones">Observaciones</label>
-                    <input type="text" id="editar-ops-observaciones" name="observaciones" placeholder="Opcional">
-                </div>
-
-                <button type="submit" class="boton-enviar">Guardar cambios</button>
-            </form>
-        </div>
-    </div>
-
     <div id="modal-peticion" class="modal-fondo<?= !empty($error) && $tab === 'otros' ? ' abierto' : '' ?>">
         <div class="modal-caja">
             <div class="modal-cabecera">
@@ -1001,69 +777,6 @@ require __DIR__ . '/../parciales/encabezado.php';
         </div>
     </div>
 
-    <div id="modal-editar-peticion" class="modal-fondo">
-        <div class="modal-caja">
-            <div class="modal-cabecera">
-                <h2>Editar solicitud — Petición</h2>
-                <button type="button" id="boton-cerrar-modal-editar-peticion" class="modal-cerrar" aria-label="Cerrar">&times;</button>
-            </div>
-
-            <form method="POST" action="index.php?ruta=solicitudes" class="form-necesidad">
-                <input type="hidden" name="accion" value="actualizar_peticion">
-                <input type="hidden" name="tab" value="otros">
-                <input type="hidden" name="id" id="editar-peticion-id" value="">
-                <input type="hidden" name="volver" id="editar-peticion-volver" value="">
-
-                <div class="campo">
-                    <label for="editar-peticion-anio">Año presupuestal *</label>
-                    <select id="editar-peticion-anio" name="anio_presupuestal_id" required>
-                        <option value="">Selecciona un año</option>
-                        <?php foreach ($aniosActivos as $anioOpcion): ?>
-                        <option value="<?= (int) $anioOpcion['id'] ?>"><?= htmlspecialchars((string) $anioOpcion['anio']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo campo-ancho">
-                    <label for="editar-peticion-concepto">Concepto *</label>
-                    <input type="text" id="editar-peticion-concepto" name="concepto" placeholder="Diligenciar" required>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-peticion-rol">Rol al que se enviará *</label>
-                    <select id="editar-peticion-rol" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo">
-                    <label for="editar-peticion-semestre1">Semestre 1</label>
-                    <input type="number" id="editar-peticion-semestre1" name="semestre1" min="0" step="1" value="0">
-                </div>
-
-                <div class="campo">
-                    <label for="editar-peticion-valor-s1">Valor S1</label>
-                    <input type="number" id="editar-peticion-valor-s1" name="valor_s1" min="0" step="0.01" value="0">
-                </div>
-
-                <div class="campo">
-                    <label for="editar-peticion-semestre2">Semestre 2</label>
-                    <input type="number" id="editar-peticion-semestre2" name="semestre2" min="0" step="1" value="0">
-                </div>
-
-                <div class="campo">
-                    <label for="editar-peticion-valor-s2">Valor S2</label>
-                    <input type="number" id="editar-peticion-valor-s2" name="valor_s2" min="0" step="0.01" value="0">
-                </div>
-
-                <button type="submit" class="boton-enviar">Guardar cambios</button>
-            </form>
-        </div>
-    </div>
-
 
     <?php endif; ?>
 
@@ -1088,54 +801,21 @@ require __DIR__ . '/../parciales/encabezado.php';
     <script type="application/json" id="datos-roles-por-tipo"><?= json_encode($rolesPorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
     <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
 
-    <?php if ($solicitudArlParaEditarDesdePeticiones !== null): ?>
-    <button
-        type="button"
-        id="boton-editar-solicitud-desde-peticiones"
-        class="fila-menu-editar-solicitud boton-editar-fila-generico"
-        hidden
-        data-solicitud="<?= htmlspecialchars(json_encode($solicitudArlParaEditarDesdePeticiones + ['volver' => $volverAPeticiones], JSON_UNESCAPED_UNICODE)) ?>"
-    ></button>
-    <?php endif; ?>
-    <?php if ($solicitudMonitorParaEditarDesdePeticiones !== null): ?>
-    <button
-        type="button"
-        id="boton-editar-monitor-desde-peticiones"
-        class="fila-menu-editar-monitor boton-editar-fila-generico"
-        hidden
-        data-monitor="<?= htmlspecialchars(json_encode($solicitudMonitorParaEditarDesdePeticiones + ['volver' => $volverAPeticiones], JSON_UNESCAPED_UNICODE)) ?>"
-    ></button>
-    <?php endif; ?>
-    <?php if ($solicitudOpsParaEditarDesdePeticiones !== null): ?>
-    <button
-        type="button"
-        id="boton-editar-ops-desde-peticiones"
-        class="fila-menu-editar-ops boton-editar-fila-generico"
-        hidden
-        data-ops="<?= htmlspecialchars(json_encode($solicitudOpsParaEditarDesdePeticiones + ['volver' => $volverAPeticiones], JSON_UNESCAPED_UNICODE)) ?>"
-    ></button>
-    <?php endif; ?>
-    <?php if ($solicitudPeticionParaEditarDesdePeticiones !== null): ?>
-    <button
-        type="button"
-        id="boton-editar-peticion-desde-peticiones"
-        class="fila-menu-editar-peticion boton-editar-fila-generico"
-        hidden
-        data-peticion="<?= htmlspecialchars(json_encode($solicitudPeticionParaEditarDesdePeticiones + ['volver' => $volverAPeticiones], JSON_UNESCAPED_UNICODE)) ?>"
-    ></button>
-    <?php endif; ?>
-    <?php if ($solicitudArlParaEditarDesdePeticiones !== null || $solicitudMonitorParaEditarDesdePeticiones !== null || $solicitudOpsParaEditarDesdePeticiones !== null || $solicitudPeticionParaEditarDesdePeticiones !== null): ?>
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            var boton = document.getElementById('boton-editar-solicitud-desde-peticiones')
-                || document.getElementById('boton-editar-monitor-desde-peticiones')
-                || document.getElementById('boton-editar-ops-desde-peticiones')
-                || document.getElementById('boton-editar-peticion-desde-peticiones');
-            if (boton) {
-                boton.click();
-            }
-        });
-    </script>
+    <?php if ($modoEdicion): ?>
+    <div id="modal-confirmar-salir-edicion" class="modal-fondo">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Cambios sin guardar</h2>
+            </div>
+
+            <p class="texto-atenuado">Tienes cambios sin guardar en esta solicitud. Si sales ahora se perderán.</p>
+
+            <div class="acciones-fila">
+                <button type="button" id="boton-seguir-editando-edicion" class="boton-accion boton-accion-editar">Seguir editando</button>
+                <button type="button" id="boton-salir-sin-guardar-edicion" class="boton-accion boton-accion-eliminar">Salir sin guardar</button>
+            </div>
+        </div>
+    </div>
     <?php endif; ?>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>
