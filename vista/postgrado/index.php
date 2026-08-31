@@ -73,7 +73,6 @@ require __DIR__ . '/../parciales/encabezado.php';
         $barraTextoVolver = ($modoEdicion && $volverEdicion !== '') ? 'Volver a Peticiones' : 'Volver a Postgrado';
         require __DIR__ . '/../parciales/barra-modulo.php';
         ?>
-        </div>
 
         <div class="pestanas">
             <a href="index.php?ruta=postgrado&tab=ingresos" class="pestana<?= $tab === 'ingresos' ? ' activa' : '' ?>">Ingresos</a>

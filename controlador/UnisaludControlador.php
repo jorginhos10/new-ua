@@ -157,6 +157,10 @@ class UnisaludControlador
             }
         }
 
+        if ($dependenciaPorDefecto === null && in_array('UNIDAD DE SALUD', $dependenciasSugeridas, true)) {
+            $dependenciaPorDefecto = 'UNIDAD DE SALUD';
+        }
+
         $anioSeleccionadoId = 0;
 
         if (!empty($aniosActivos)) {
