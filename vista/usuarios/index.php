@@ -23,6 +23,7 @@
 
         <?php if ($tab === 'administradores'): ?>
             <section class="panel-pestana">
+                <div class="tabla-scroll">
                 <table class="tabla-usuarios">
                     <thead>
                         <tr>
@@ -32,6 +33,7 @@
                             <th>Dependencia</th>
                             <th>Estamento</th>
                             <th>Creado</th>
+                            <th>Último acceso</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -44,6 +46,7 @@
                             <td><?= (int) ($admin['es_super_admin'] ?? 0) === 1 ? 'Superadmin' : htmlspecialchars($admin['dependencia_nombre'] ?? '—') ?></td>
                             <td><?= htmlspecialchars($admin['estamento_nombre'] ?? '—') ?></td>
                             <td><?= htmlspecialchars($admin['creado_en']) ?></td>
+                            <td><?= $admin['ultimo_acceso'] !== null ? htmlspecialchars($admin['ultimo_acceso']) : '<span class="texto-atenuado">Nunca</span>' ?></td>
                             <td class="celda-acciones">
                                 <div class="acciones-fila">
                                     <button
@@ -76,15 +79,17 @@
                         <?php endforeach; ?>
                         <?php if (empty($administradores)): ?>
                         <tr>
-                            <td colspan="7">No hay administradores registrados.</td>
+                            <td colspan="8">No hay administradores registrados.</td>
                         </tr>
                         <?php endif; ?>
                     </tbody>
                 </table>
+                </div>
             </section>
         <?php else: ?>
             <section class="panel-pestana">
                 <h2>Invitados registrados</h2>
+                <div class="tabla-scroll">
                 <table class="tabla-usuarios">
                     <thead>
                         <tr>
@@ -108,6 +113,7 @@
                         <?php endif; ?>
                     </tbody>
                 </table>
+                </div>
             </section>
         <?php endif; ?>
     </div>

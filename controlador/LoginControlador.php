@@ -42,6 +42,8 @@ class LoginControlador
             return 'Correo o contraseña incorrectos.';
         }
 
+        $this->modeloUsuario->registrarAcceso((int) $datos['id']);
+
         session_regenerate_id(true);
         $_SESSION['usuario_id'] = $datos['id'];
         $_SESSION['usuario_nombre'] = $datos['nombre'];

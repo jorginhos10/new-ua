@@ -125,7 +125,7 @@ class Usuario
     public function obtenerPorRol(string $rol): array
     {
         $consulta = $this->db->prepare(
-            'SELECT u.id, u.nombre, u.correo, u.rol, u.rol_id, u.dependencia_id, u.estamento_id, u.menu_personalizado, u.es_super_admin, u.creado_en, r.nombre AS rol_catalogo, d.nombre AS dependencia_nombre, d.tipo AS dependencia_tipo, e.nombre AS estamento_nombre
+            'SELECT u.id, u.nombre, u.correo, u.rol, u.rol_id, u.dependencia_id, u.estamento_id, u.menu_personalizado, u.es_super_admin, u.creado_en, u.ultimo_acceso, r.nombre AS rol_catalogo, d.nombre AS dependencia_nombre, d.tipo AS dependencia_tipo, e.nombre AS estamento_nombre
              FROM usuarios u
              LEFT JOIN roles r ON r.id = u.rol_id
              LEFT JOIN dependencias d ON d.id = u.dependencia_id
@@ -149,6 +149,13 @@ class Usuario
         $consulta = $this->db->prepare('UPDATE usuarios SET password = :password WHERE id = :id');
 
         return $consulta->execute(['id' => $id, 'password' => password_hash($password, PASSWORD_DEFAULT)]);
+    }
+
+    public function registrarAcceso(int $id): bool
+    {
+        $consulta = $this->db->prepare('UPDATE usuarios SET ultimo_acceso = NOW() WHERE id = :id');
+
+        return $consulta->execute(['id' => $id]);
     }
 
     public function actualizarPermisos(int $id, ?int $rolId, ?int $dependenciaId): bool
