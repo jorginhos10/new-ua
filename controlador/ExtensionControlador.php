@@ -50,6 +50,24 @@ class ExtensionControlador
         'costo_unitario',
     ];
 
+    /**
+     * Nombre legible de cada campo requerido, usado para armar mensajes de error específicos
+     * en vez de un genérico "todos los campos son obligatorios" que no dice cuál falta.
+     */
+    private const ETIQUETAS_CAMPOS = [
+        'sede_id' => 'la sede',
+        'anio_presupuestal_id' => 'el año presupuestal',
+        'categoria' => 'la categoría',
+        'dependencia' => 'la dependencia',
+        'proyecto_id' => 'el proyecto PDI',
+        'actividad' => 'la actividad',
+        'rubro_id' => 'el rubro',
+        'autogestion_id' => 'el ítem de Autogestión (selector de arriba de la tabla)',
+        'insumo' => 'el insumo',
+        'cantidad' => 'la cantidad',
+        'costo_unitario' => 'el costo unitario',
+    ];
+
     private const CATEGORIAS_EGRESO = [
         'Gastos',
         'Inversiones',
@@ -452,7 +470,9 @@ class ExtensionControlador
 
         foreach (self::CAMPOS_REQUERIDOS_EGRESO as $campo) {
             if (($datos[$campo] ?? '') === '') {
-                return [[], 'Todos los campos son obligatorios.'];
+                $etiqueta = self::ETIQUETAS_CAMPOS[$campo] ?? $campo;
+
+                return [[], 'Falta ' . $etiqueta . '. Ese campo es obligatorio para registrar el egreso.'];
             }
         }
 
@@ -509,8 +529,16 @@ class ExtensionControlador
         $conceptoAdicional = trim($_POST['concepto_adicional'] ?? '');
         $valorAdicional = is_numeric($_POST['valor_adicional'] ?? '') ? (float) $_POST['valor_adicional'] : 0.0;
 
-        if ($anioPresupuestalId <= 0 || $autogestionId <= 0 || $dependencia === '') {
-            return [[], [], 'El año presupuestal, la autogestión y la dependencia son obligatorios.'];
+        if ($anioPresupuestalId <= 0) {
+            return [[], [], 'Falta el año presupuestal. Ese campo es obligatorio para registrar el ingreso.'];
+        }
+
+        if ($autogestionId <= 0) {
+            return [[], [], 'Falta el ítem de Autogestión (selector de arriba de la tabla). Ese campo es obligatorio para registrar el ingreso. Si el selector aparece vacío, pide a un administrador que active un ítem en Configuraciones > Autogestión.'];
+        }
+
+        if ($dependencia === '') {
+            return [[], [], 'Falta la dependencia. Ese campo es obligatorio para registrar el ingreso.'];
         }
 
         if ($valorAdicional < 0) {
