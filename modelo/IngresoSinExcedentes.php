@@ -188,9 +188,9 @@ class IngresoSinExcedentes
         try {
             $consulta = $this->db->prepare(
                 'INSERT INTO ingresos_sin_excedentes
-                    (anio_presupuestal_id, dependencia, concepto_adicional, valor_adicional, valor_total)
+                    (anio_presupuestal_id, dependencia, concepto_adicional, valor_adicional, valor_total, usuario_id)
                  VALUES
-                    (:anio_presupuestal_id, :dependencia, :concepto_adicional, :valor_adicional, :valor_total)'
+                    (:anio_presupuestal_id, :dependencia, :concepto_adicional, :valor_adicional, :valor_total, :usuario_id)'
             );
             $consulta->execute([
                 'anio_presupuestal_id' => $cabecera['anio_presupuestal_id'],
@@ -198,6 +198,7 @@ class IngresoSinExcedentes
                 'concepto_adicional' => $cabecera['concepto_adicional'],
                 'valor_adicional' => $cabecera['valor_adicional'],
                 'valor_total' => $cabecera['valor_total'],
+                'usuario_id' => $cabecera['usuario_id'] ?? null,
             ]);
 
             $ingresoId = (int) $this->db->lastInsertId();

@@ -72,8 +72,27 @@ require __DIR__ . '/../parciales/encabezado.php';
         require __DIR__ . '/../parciales/barra-modulo.php';
         ?>
 
+        <div class="acciones-importar-exportar">
+            <a href="index.php?ruta=gastos-exportar-plantilla" class="boton-secundario">Exportar plantilla (.xlsx)</a>
+            <form method="POST" action="index.php?ruta=gastos<?= $anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : '' ?>" enctype="multipart/form-data" class="form-importar">
+                <input type="hidden" name="accion" value="importar">
+                <input type="file" name="archivo" accept=".xlsx" required>
+                <button type="submit" class="boton-secundario">Importar</button>
+            </form>
+        </div>
+
         <?php if (!empty($error)): ?>
             <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
+        <?php endif; ?>
+
+        <?php if (!empty($erroresImportacion)): ?>
+            <div class="mensaje-error">
+                <ul class="lista-errores-importacion">
+                    <?php foreach ($erroresImportacion as $errorFila): ?>
+                    <li><?= htmlspecialchars($errorFila) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
         <?php endif; ?>
 
         <?php if (!empty($exito)): ?>

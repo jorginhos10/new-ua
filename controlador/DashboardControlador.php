@@ -11,6 +11,8 @@ require_once __DIR__ . '/../modelo/IngresoSinExcedentes.php';
 require_once __DIR__ . '/../modelo/IngresoPostgrado.php';
 require_once __DIR__ . '/../modelo/RelojArenaConfiguracion.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
+require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
+require_once __DIR__ . '/../modelo/MensajeGlobal.php';
 
 class DashboardControlador
 {
@@ -27,6 +29,7 @@ class DashboardControlador
         if ($rolUsuario === 'administrador') {
             $modeloUsuario = new Usuario();
             $usuarioActual = $modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+            $esSuperAdmin = $usuarioActual !== null && (int) ($usuarioActual['es_super_admin'] ?? 0) === 1;
             [$dependenciaIdsPermitidos, $dependenciaNombresPermitidos] = $this->obtenerAlcanceDependencia($usuarioActual);
 
             $usuariosAsociados = $modeloUsuario->obtenerRecientesPorDependencias($dependenciaIdsPermitidos, 5);
@@ -35,9 +38,19 @@ class DashboardControlador
                 (new VariableMacroeconomica())->obtenerTodas(),
                 static fn (array $variable): bool => $variable['estado'] === 'activo'
             ));
-            $resumenCostos = $this->obtenerResumenCostos();
-            $resumenAutogestion = $this->obtenerResumenIngresos([new IngresoExtension(), new IngresoSinExcedentes()]);
-            $resumenPostgrado = $this->obtenerResumenIngresos([new IngresoPostgrado()]);
+
+            if ($esSuperAdmin) {
+                $resumenCostos = $this->obtenerResumenCostos();
+                $resumenAutogestion = $this->obtenerResumenIngresos([new IngresoExtension(), new IngresoSinExcedentes()]);
+                $resumenPostgrado = $this->obtenerResumenIngresos([new IngresoPostgrado()]);
+                $mensajeGlobal = '';
+            } else {
+                $resumenCostos = [];
+                $resumenAutogestion = [];
+                $resumenPostgrado = [];
+                $mensajeGlobal = (new MensajeGlobal())->obtener()['contenido'] ?? '';
+            }
+
             $relojArena = $this->obtenerRelojArena();
 
             require __DIR__ . '/../vista/dashboard/administrador.php';
@@ -95,10 +108,56 @@ class DashboardControlador
                 'porcentaje' => $porcentaje,
                 'dependencias_con_dato' => $dependenciasConDato,
                 'dependencias_total' => $totalDependencias,
+                'detalle_dependencias' => $this->obtenerDetalleCostosPorDependencia($anioId, $modeloGasto),
             ];
         }
 
         return $resumen;
+    }
+
+    /**
+     * Gasto ejecutado de cada dependencia frente a su propio techo asignado para el año,
+     * de mayor a menor porcentaje ejecutado. Solo incluye dependencias con techo > 0.
+     */
+    private function obtenerDetalleCostosPorDependencia(int $anioId, Gasto $modeloGasto): array
+    {
+        $techos = (new PresupuestoDependencia())->obtenerPorAnio($anioId);
+
+        if (empty($techos)) {
+            return [];
+        }
+
+        $modeloDependencia = new Dependencia();
+        $ejecutados = $modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioId);
+
+        $detalle = [];
+
+        foreach ($techos as $dependenciaId => $info) {
+            $techo = (float) ($info['techo'] ?? 0);
+
+            if ($techo <= 0) {
+                continue;
+            }
+
+            $dependencia = $modeloDependencia->obtenerPorId($dependenciaId);
+
+            if ($dependencia === null) {
+                continue;
+            }
+
+            $gastado = $ejecutados[$dependencia['nombre']] ?? 0.0;
+
+            $detalle[] = [
+                'nombre' => $dependencia['nombre'],
+                'gastado' => $gastado,
+                'techo' => $techo,
+                'porcentaje' => min(100, ($gastado / $techo) * 100),
+            ];
+        }
+
+        usort($detalle, static fn (array $a, array $b): int => $b['porcentaje'] <=> $a['porcentaje']);
+
+        return $detalle;
     }
 
     private function obtenerResumenIngresos(array $modelosIngreso): array

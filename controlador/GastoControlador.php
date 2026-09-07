@@ -17,6 +17,8 @@ require_once __DIR__ . '/../modelo/Rol.php';
 require_once __DIR__ . '/../modelo/Mensaje.php';
 require_once __DIR__ . '/../modelo/TipoDependenciaRol.php';
 require_once __DIR__ . '/../modelo/PeticionArchivada.php';
+require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
+require_once __DIR__ . '/../modelo/LectorXlsx.php';
 
 class GastoControlador
 {
@@ -96,10 +98,14 @@ class GastoControlador
                 [$error, $exito] = $this->duplicarSeleccionados();
             } elseif ($accion === 'enviar_todo') {
                 [$error, $exito] = $this->enviarTodo();
+            } elseif ($accion === 'importar') {
+                [$error, $exito, $erroresImportacion] = $this->importar();
             } else {
                 [$error, $exito] = $this->guardar();
             }
         }
+
+        $erroresImportacion = $erroresImportacion ?? [];
 
         $lineas = $this->modeloLinea->obtenerTodas();
         $motores = $this->modeloMotor->obtenerTodos();
@@ -196,6 +202,328 @@ class GastoControlador
         $totalDiasAnio = date('L') ? 366 : 365;
 
         require __DIR__ . '/../vista/gastos/index.php';
+    }
+
+    public function exportarPlantilla(): void
+    {
+        if (empty($_SESSION['usuario_id']) || $_SESSION['usuario_rol'] !== 'administrador') {
+            header('Location: index.php?ruta=login');
+            exit;
+        }
+
+        $catalogos = $this->construirCatalogos();
+
+        $encabezados = [
+            'Año presupuestal *', 'Sede *', 'Dependencia *', 'Proyecto PDI *', 'Contratos comunes',
+            'Actividad *', 'Rubro *', 'Insumo *', 'Cantidad *', 'Costo unitario *', 'Meses de ejecución * (ej: 1,3,5)',
+        ];
+
+        $listas = [
+            'Años' => array_map(static fn (array $a): string => (string) $a['anio'], $catalogos['aniosActivos']),
+            'Sedes' => array_map(static fn (array $s): string => $s['codigo'] . ' - ' . $s['nombre'], $catalogos['sedes']),
+            'Dependencias' => $catalogos['dependenciasSugeridas'],
+            'Proyectos' => array_map(static fn (array $p): string => self::textoProyecto($p), $catalogos['proyectos']),
+            'Contratos' => array_map(static fn (array $c): string => $c['codigo'], $catalogos['contratosComunes']),
+            'Rubros' => array_map(static fn (array $r): string => $r['codigo'] . ' - ' . $r['descripcion'], $catalogos['rubros']),
+        ];
+
+        $columnasConLista = [
+            0 => 'Años',
+            1 => 'Sedes',
+            2 => 'Dependencias',
+            3 => 'Proyectos',
+            4 => 'Contratos',
+            6 => 'Rubros',
+        ];
+
+        $filaEjemplo = [
+            $listas['Años'][0] ?? '',
+            $listas['Sedes'][0] ?? '',
+            $listas['Dependencias'][0] ?? '',
+            $listas['Proyectos'][0] ?? '',
+            '',
+            'Ejemplo: compra de equipos de laboratorio',
+            $listas['Rubros'][0] ?? '',
+            'Ejemplo: computadores portátiles',
+            '1',
+            '1000000',
+            '1,2,3',
+        ];
+
+        $metadatos = [
+            'plantilla' => 'gastos',
+            'usuario_id' => (int) $_SESSION['usuario_id'],
+            'usuario_nombre' => $catalogos['usuarioActual']['nombre'] ?? '',
+        ];
+
+        GeneradorXlsx::descargar('plantilla_gastos.xlsx', $encabezados, $columnasConLista, $listas, $filaEjemplo, $metadatos);
+        exit;
+    }
+
+    private static function textoProyecto(array $proyecto): string
+    {
+        return $proyecto['linea_codigo'] . ' · ' . $proyecto['motor_codigo'] . ' · ' . $proyecto['codigo'] . ' - ' . $proyecto['nombre'];
+    }
+
+    /**
+     * Catálogos y alcance de dependencias del usuario actual, iguales a los que usa index()
+     * para el formulario manual. Reutilizados por exportarPlantilla() e importar().
+     */
+    private function construirCatalogos(): array
+    {
+        $proyectos = $this->modeloProyecto->obtenerTodos();
+        $rubros = $this->modeloRubro->obtenerActivosPorCategoria('egresos');
+        $contratosComunes = $this->modeloContratoComun->obtenerActivos();
+        $aniosActivos = $this->modeloAnio->obtenerActivos();
+        $sedes = $this->modeloSede->obtenerTodas();
+
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+        $dependenciasSugeridas = $this->obtenerDependenciasPermitidas();
+
+        return [
+            'proyectos' => $proyectos,
+            'rubros' => $rubros,
+            'contratosComunes' => $contratosComunes,
+            'aniosActivos' => $aniosActivos,
+            'sedes' => $sedes,
+            'usuarioActual' => $usuarioActual,
+            'dependenciasSugeridas' => $dependenciasSugeridas,
+        ];
+    }
+
+    /**
+     * Importa gastos en borrador desde un archivo .xlsx (plantilla generada por exportarPlantilla()).
+     * Todo o nada: si alguna fila falla cualquier validación (incluido el techo presupuestal,
+     * verificado de forma acumulada entre las filas del propio archivo), no se importa ninguna.
+     *
+     * @return array{0: string, 1: string, 2: string[]} [error general, éxito, lista de errores por fila]
+     */
+    private function importar(): array
+    {
+        if (empty($_FILES['archivo']['tmp_name']) || $_FILES['archivo']['error'] !== UPLOAD_ERR_OK) {
+            return ['Selecciona un archivo .xlsx válido para importar.', '', []];
+        }
+
+        try {
+            $metadatos = LectorXlsx::leerMetadatos($_FILES['archivo']['tmp_name']);
+        } catch (Throwable $excepcion) {
+            return ['No se pudo leer el archivo: ' . $excepcion->getMessage(), '', []];
+        }
+
+        if (($metadatos['SPPI_Origen'] ?? '') !== GeneradorXlsx::FIRMA_PLATAFORMA || ($metadatos['SPPI_Plantilla'] ?? '') !== 'gastos') {
+            return ['Este archivo no parece haber sido descargado desde la plataforma. Usa el botón "Exportar plantilla" para descargar una plantilla nueva y diligénciala sin quitarle sus metadatos.', '', []];
+        }
+
+        try {
+            $filas = LectorXlsx::leerPrimeraHoja($_FILES['archivo']['tmp_name']);
+        } catch (Throwable $excepcion) {
+            return ['No se pudo leer el archivo: ' . $excepcion->getMessage(), '', []];
+        }
+
+        array_shift($filas);
+        $filas = array_values(array_filter(
+            $filas,
+            static fn (array $fila): bool => trim(implode('', $fila)) !== ''
+        ));
+
+        if (empty($filas)) {
+            return ['El archivo no contiene filas para importar.', '', []];
+        }
+
+        $catalogos = $this->construirCatalogos();
+        $dependenciasPermitidas = $catalogos['dependenciasSugeridas'];
+
+        $mapaAnios = [];
+        foreach ($catalogos['aniosActivos'] as $anio) {
+            $mapaAnios[(string) $anio['anio']] = (int) $anio['id'];
+        }
+
+        $mapaSedes = [];
+        foreach ($catalogos['sedes'] as $sede) {
+            $mapaSedes[$sede['codigo'] . ' - ' . $sede['nombre']] = (int) $sede['id'];
+        }
+
+        $mapaProyectos = [];
+        foreach ($catalogos['proyectos'] as $proyecto) {
+            $mapaProyectos[self::textoProyecto($proyecto)] = $proyecto;
+        }
+
+        $mapaRubros = [];
+        foreach ($catalogos['rubros'] as $rubro) {
+            $mapaRubros[$rubro['codigo'] . ' - ' . $rubro['descripcion']] = (int) $rubro['id'];
+        }
+
+        $codigosContratos = array_column($catalogos['contratosComunes'], 'codigo');
+
+        $errores = [];
+        $filasValidas = [];
+        $totalesAcumulados = [];
+
+        foreach ($filas as $indice => $fila) {
+            $numeroFilaExcel = $indice + 3;
+
+            [$datos, $errorFila] = $this->validarFilaImportacion(
+                $fila,
+                $mapaAnios,
+                $mapaSedes,
+                $dependenciasPermitidas,
+                $mapaProyectos,
+                $codigosContratos,
+                $mapaRubros
+            );
+
+            if ($errorFila !== '') {
+                $errores[] = "Fila $numeroFilaExcel: $errorFila";
+                continue;
+            }
+
+            $dependenciaNombre = $datos['dependencia'];
+
+            if (!array_key_exists($dependenciaNombre, $totalesAcumulados)) {
+                $totalesAcumulados[$dependenciaNombre] = $this->modeloGasto->obtenerTotalEjecutadoPorAnioYDependencia(
+                    $datos['anio_presupuestal_id'],
+                    $dependenciaNombre
+                );
+            }
+
+            $dependenciaObjetivo = $this->modeloDependencia->obtenerPorNombre($dependenciaNombre);
+
+            if ($dependenciaObjetivo !== null && empty($dependenciaObjetivo['es_raiz_superadmin'])) {
+                $presupuestos = $this->modeloPresupuestoDependencia->obtenerPorAnio($datos['anio_presupuestal_id']);
+                $techoDependencia = (float) ($presupuestos[(int) $dependenciaObjetivo['id']]['techo'] ?? 0);
+                $nuevoValor = $datos['cantidad'] * $datos['costo_unitario'];
+
+                if ($totalesAcumulados[$dependenciaNombre] + $nuevoValor > $techoDependencia) {
+                    $disponible = max(0, $techoDependencia - $totalesAcumulados[$dependenciaNombre]);
+                    $errores[] = "Fila $numeroFilaExcel: supera el techo presupuestal de \"$dependenciaNombre\". Disponible: " . number_format($disponible, 2) . '.';
+                    continue;
+                }
+
+                $totalesAcumulados[$dependenciaNombre] += $nuevoValor;
+            }
+
+            $filasValidas[] = $datos;
+        }
+
+        if (!empty($errores)) {
+            return ['No se importó ningún registro porque se encontraron errores:', '', $errores];
+        }
+
+        if (empty($filasValidas)) {
+            return ['No hay filas válidas para importar.', '', []];
+        }
+
+        $db = Conexion::obtener();
+        $db->beginTransaction();
+
+        try {
+            foreach ($filasValidas as $datos) {
+                $this->modeloGasto->crear($datos);
+            }
+            $db->commit();
+        } catch (PDOException $excepcion) {
+            $db->rollBack();
+            return ['No se pudo importar el archivo. Verifica los datos e inténtalo de nuevo.', '', []];
+        }
+
+        return ['', count($filasValidas) . ' gasto(s) importado(s) correctamente como borrador.', []];
+    }
+
+    /**
+     * @return array{0: array|null, 1: string} [datos listos para Gasto::crear(), mensaje de error]
+     */
+    private function validarFilaImportacion(
+        array $fila,
+        array $mapaAnios,
+        array $mapaSedes,
+        array $dependenciasPermitidas,
+        array $mapaProyectos,
+        array $codigosContratos,
+        array $mapaRubros
+    ): array {
+        $anioTexto = trim($fila[0] ?? '');
+        $sedeTexto = trim($fila[1] ?? '');
+        $dependenciaTexto = trim($fila[2] ?? '');
+        $proyectoTexto = trim($fila[3] ?? '');
+        $contratoTexto = trim($fila[4] ?? '');
+        $actividad = trim($fila[5] ?? '');
+        $rubroTexto = trim($fila[6] ?? '');
+        $insumo = trim($fila[7] ?? '');
+        $cantidadTexto = trim($fila[8] ?? '');
+        $costoTexto = trim($fila[9] ?? '');
+        $mesesTexto = trim($fila[10] ?? '');
+
+        if ($anioTexto === '' || $sedeTexto === '' || $dependenciaTexto === '' || $proyectoTexto === ''
+            || $actividad === '' || $rubroTexto === '' || $insumo === '' || $cantidadTexto === ''
+            || $costoTexto === '' || $mesesTexto === ''
+        ) {
+            return [null, 'todos los campos obligatorios (*) deben estar diligenciados.'];
+        }
+
+        if (!isset($mapaAnios[$anioTexto])) {
+            return [null, "el año \"$anioTexto\" no es válido. Usa el desplegable de la columna."];
+        }
+
+        if (!isset($mapaSedes[$sedeTexto])) {
+            return [null, "la sede \"$sedeTexto\" no es válida. Usa el desplegable de la columna."];
+        }
+
+        if (!in_array($dependenciaTexto, $dependenciasPermitidas, true)) {
+            return [null, "la dependencia \"$dependenciaTexto\" no está disponible para tu usuario."];
+        }
+
+        if (!isset($mapaProyectos[$proyectoTexto])) {
+            return [null, "el proyecto PDI \"$proyectoTexto\" no es válido. Usa el desplegable de la columna."];
+        }
+
+        if ($contratoTexto !== '' && !in_array($contratoTexto, $codigosContratos, true)) {
+            return [null, "el contrato común \"$contratoTexto\" no es válido. Usa el desplegable de la columna."];
+        }
+
+        if (!isset($mapaRubros[$rubroTexto])) {
+            return [null, "el rubro \"$rubroTexto\" no es válido. Usa el desplegable de la columna."];
+        }
+
+        if (!is_numeric($cantidadTexto) || (int) $cantidadTexto <= 0) {
+            return [null, 'la cantidad debe ser un número entero mayor a 0.'];
+        }
+
+        if (!is_numeric($costoTexto) || (float) $costoTexto < 0) {
+            return [null, 'el costo unitario debe ser un número válido.'];
+        }
+
+        $meses = array_filter(
+            array_map('intval', array_map('trim', explode(',', $mesesTexto))),
+            static fn (int $mes): bool => $mes >= 1 && $mes <= 12
+        );
+
+        if (empty($meses)) {
+            return [null, 'los meses de ejecución deben ser números entre 1 y 12 separados por coma (ej: 1,2,3).'];
+        }
+
+        $meses = array_unique($meses);
+        sort($meses);
+
+        $proyecto = $mapaProyectos[$proyectoTexto];
+
+        $datos = [
+            'anio_presupuestal_id' => $mapaAnios[$anioTexto],
+            'sede_id' => $mapaSedes[$sedeTexto],
+            'dependencia' => $dependenciaTexto,
+            'proyecto_id' => (int) $proyecto['id'],
+            'motor_id' => (int) $proyecto['motor_id'],
+            'linea_id' => (int) $proyecto['linea_id'],
+            'objeto_proyecto_paa' => $contratoTexto,
+            'actividad' => $actividad,
+            'rubro_id' => $mapaRubros[$rubroTexto],
+            'insumo' => $insumo,
+            'cantidad' => (int) $cantidadTexto,
+            'costo_unitario' => (float) $costoTexto,
+            'meses' => implode(',', $meses),
+            'usuario_id' => (int) ($_SESSION['usuario_id'] ?? 0),
+        ];
+
+        return [$datos, ''];
     }
 
     private function guardar(): array

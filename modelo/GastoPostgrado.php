@@ -120,9 +120,9 @@ class GastoPostgrado
     {
         $consulta = $this->db->prepare(
             'INSERT INTO gastos_postgrado
-                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, insumo, cantidad, costo_unitario, valor_total, meses)
+                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, insumo, cantidad, costo_unitario, valor_total, meses, usuario_id)
              VALUES
-                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses)'
+                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses, :usuario_id)'
         );
 
         return $consulta->execute([
@@ -141,6 +141,7 @@ class GastoPostgrado
             'costo_unitario' => $datos['costo_unitario'],
             'valor_total' => $datos['cantidad'] * $datos['costo_unitario'],
             'meses' => $datos['meses'],
+            'usuario_id' => $datos['usuario_id'] ?? null,
         ]);
     }
 

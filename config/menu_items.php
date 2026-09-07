@@ -15,6 +15,7 @@ return [
         'gastos' => 'Gastos',
         'solicitudes' => 'Solicitudes',
         'techos' => 'Techos',
+        'actas' => 'Actas',
     ],
     'Proyectos' => [
         'perfil-proyectos' => 'Perfil de proyectos',

@@ -3,10 +3,12 @@ $rolActual = $_SESSION['usuario_rol'] ?? '';
 $rutaActual = $_GET['ruta'] ?? 'dashboard';
 
 $menuPermitido = null; // null = sin restricción configurada (se muestra todo)
+$puedeVerActas = false;
 
 if (!empty($_SESSION['usuario_id']) && $rolActual === 'administrador') {
     require_once __DIR__ . '/../../modelo/Usuario.php';
     require_once __DIR__ . '/../../modelo/MenuPermiso.php';
+    require_once __DIR__ . '/../../modelo/Dependencia.php';
 
     $modeloUsuarioSidebar = new Usuario();
     $usuarioActualSidebar = $modeloUsuarioSidebar->obtenerPorId((int) $_SESSION['usuario_id']);
@@ -14,10 +16,17 @@ if (!empty($_SESSION['usuario_id']) && $rolActual === 'administrador') {
     if ($usuarioActualSidebar !== null) {
         $permitidoSidebar = (new MenuPermiso())->calcularPermitidoParaUsuario($usuarioActualSidebar);
         $menuPermitido = $permitidoSidebar === null ? null : array_flip($permitidoSidebar);
+
+        if (!empty($usuarioActualSidebar['dependencia_id'])) {
+            $dependenciaActualSidebar = (new Dependencia())->obtenerPorId((int) $usuarioActualSidebar['dependencia_id']);
+            $puedeVerActas = $dependenciaActualSidebar !== null
+                && in_array($dependenciaActualSidebar['tipo'] ?? '', ['Facultad', 'Vicerrectoria'], true);
+        }
     }
 }
 
 $puedeVerMenu = static fn (string $clave): bool => $menuPermitido === null || isset($menuPermitido[$clave]);
+$puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
 ?>
 <aside class="barra-lateral">
     <a href="index.php?ruta=dashboard" class="marca">S P P I</a>
@@ -49,7 +58,7 @@ $puedeVerMenu = static fn (string $clave): bool => $menuPermitido === null || is
             <?php endif; ?>
             <?php endif; ?>
 
-            <?php if ($puedeVerMenu('gastos') || $puedeVerMenu('solicitudes') || $puedeVerMenu('techos')): ?>
+            <?php if ($puedeVerMenu('gastos') || $puedeVerMenu('solicitudes') || $puedeVerMenu('techos') || $puedeVerActas): ?>
             <p class="grupo-menu">Egresos</p>
             <?php if ($puedeVerMenu('gastos')): ?>
             <a href="index.php?ruta=gastos" class="<?= $rutaActual === 'gastos' ? 'activo' : '' ?>">Gastos</a>
@@ -59,6 +68,9 @@ $puedeVerMenu = static fn (string $clave): bool => $menuPermitido === null || is
             <?php endif; ?>
             <?php if ($puedeVerMenu('techos')): ?>
             <a href="index.php?ruta=techos" class="<?= in_array($rutaActual, ['techos', 'control-versiones'], true) ? 'activo' : '' ?>">Techos</a>
+            <?php endif; ?>
+            <?php if ($puedeVerActas): ?>
+            <a href="index.php?ruta=actas" class="<?= $rutaActual === 'actas' ? 'activo' : '' ?>">Actas</a>
             <?php endif; ?>
             <?php endif; ?>
 

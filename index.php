@@ -25,6 +25,7 @@ require_once __DIR__ . '/controlador/SedeControlador.php';
 require_once __DIR__ . '/controlador/DependenciaControlador.php';
 require_once __DIR__ . '/controlador/FacultadControlador.php';
 require_once __DIR__ . '/controlador/RelojArenaControlador.php';
+require_once __DIR__ . '/controlador/MensajeGlobalControlador.php';
 require_once __DIR__ . '/controlador/AutogestionControlador.php';
 require_once __DIR__ . '/controlador/ExtensionControlador.php';
 require_once __DIR__ . '/controlador/PostgradoControlador.php';
@@ -41,6 +42,7 @@ require_once __DIR__ . '/controlador/MensajeControlador.php';
 require_once __DIR__ . '/controlador/PerfilControlador.php';
 require_once __DIR__ . '/controlador/TechosControlador.php';
 require_once __DIR__ . '/controlador/HistorialControlador.php';
+require_once __DIR__ . '/controlador/ActaControlador.php';
 
 $ruta = $_GET['ruta'] ?? 'login';
 
@@ -54,11 +56,13 @@ $rutaAMenuKey = [
     'unisalud' => 'unisalud',
     'sin-excedentes' => 'sin-excedentes',
     'gastos' => 'gastos',
+    'gastos-exportar-plantilla' => 'gastos',
     'solicitudes' => 'solicitudes',
     'perfil-proyectos' => 'perfil-proyectos',
     'techos' => 'techos',
     'resumen-techos' => 'techos',
     'control-versiones' => 'techos',
+    'actas' => 'actas',
     'configurar-presupuestos' => 'configuraciones',
     'configuraciones' => 'configuraciones',
     'usuarios' => 'configuraciones',
@@ -79,6 +83,7 @@ $rutaAMenuKey = [
     'jerarquias' => 'configuraciones',
     'variables-macroeconomicas' => 'configuraciones',
     'reloj-arena' => 'configuraciones',
+    'mensaje-global' => 'configuraciones',
 ];
 
 if (
@@ -128,6 +133,10 @@ switch ($ruta) {
 
     case 'reloj-arena':
         (new RelojArenaControlador())->index();
+        break;
+
+    case 'mensaje-global':
+        (new MensajeGlobalControlador())->index();
         break;
 
     case 'autogestion':
@@ -184,6 +193,10 @@ switch ($ruta) {
 
     case 'gastos':
         (new GastoControlador())->index();
+        break;
+
+    case 'gastos-exportar-plantilla':
+        (new GastoControlador())->exportarPlantilla();
         break;
 
     case 'extension':
@@ -264,6 +277,14 @@ switch ($ruta) {
 
     case 'techos':
         (new TechosControlador())->index();
+        break;
+
+    case 'actas':
+        (new ActaControlador())->index();
+        break;
+
+    case 'actas-descargar':
+        (new ActaControlador())->descargar();
         break;
 
     case 'resumen-techos':

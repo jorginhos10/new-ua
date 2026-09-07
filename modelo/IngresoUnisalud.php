@@ -177,9 +177,9 @@ class IngresoUnisalud
         try {
             $consulta = $this->db->prepare(
                 'INSERT INTO ingresos_unisalud
-                    (anio_presupuestal_id, dependencia, concepto_adicional, valor_adicional, valor_total)
+                    (anio_presupuestal_id, dependencia, concepto_adicional, valor_adicional, valor_total, usuario_id)
                  VALUES
-                    (:anio_presupuestal_id, :dependencia, :concepto_adicional, :valor_adicional, :valor_total)'
+                    (:anio_presupuestal_id, :dependencia, :concepto_adicional, :valor_adicional, :valor_total, :usuario_id)'
             );
             $consulta->execute([
                 'anio_presupuestal_id' => $cabecera['anio_presupuestal_id'],
@@ -187,6 +187,7 @@ class IngresoUnisalud
                 'concepto_adicional' => $cabecera['concepto_adicional'],
                 'valor_adicional' => $cabecera['valor_adicional'],
                 'valor_total' => $cabecera['valor_total'],
+                'usuario_id' => $cabecera['usuario_id'] ?? null,
             ]);
 
             $ingresoId = (int) $this->db->lastInsertId();

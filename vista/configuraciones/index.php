@@ -153,6 +153,15 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </div>
                     <p class="texto-atenuado">Define las fechas de inicio y cierre del reloj de arena del dashboard.</p>
                 </a>
+                <?php if ($esSuperAdmin): ?>
+                <a href="index.php?ruta=mensaje-global" class="tarjeta-modulo">
+                    <div class="tarjeta-modulo-cabecera">
+                        <h2>Mensaje global</h2>
+                        <?= $flechaModulo ?>
+                    </div>
+                    <p class="texto-atenuado">Edita el mensaje que ven en el Dashboard los administradores que no son superadmin.</p>
+                </a>
+                <?php endif; ?>
                 <a href="index.php?ruta=jerarquias" class="tarjeta-modulo">
                     <div class="tarjeta-modulo-cabecera">
                         <h2>Jerarquías</h2>

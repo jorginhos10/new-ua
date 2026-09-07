@@ -3911,6 +3911,92 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
+    var modalActa = document.getElementById('modal-acta');
+
+    if (!modalActa) {
+        return;
+    }
+
+    var botonAbrirActa = document.getElementById('boton-abrir-modal-acta');
+    var botonCerrarActa = document.getElementById('boton-cerrar-modal-acta');
+
+    function cerrarActa() {
+        modalActa.classList.remove('abierto');
+    }
+
+    if (botonAbrirActa) {
+        botonAbrirActa.addEventListener('click', function () {
+            modalActa.classList.add('abierto');
+        });
+    }
+
+    if (botonCerrarActa) {
+        botonCerrarActa.addEventListener('click', cerrarActa);
+    }
+
+    modalActa.addEventListener('click', function (evento) {
+        if (evento.target === modalActa) {
+            cerrarActa();
+        }
+    });
+
+    document.addEventListener('keydown', function (evento) {
+        if (evento.key === 'Escape') {
+            cerrarActa();
+        }
+    });
+
+    // ---- Validación de tamaño + vista previa del PDF antes de enviar ----
+    var TAMANO_MAXIMO_BYTES = 3 * 1024 * 1024;
+    var campoArchivo = document.getElementById('archivo_acta');
+    var campoArchivoError = document.getElementById('archivo_acta_error');
+    var envoltorioVistaPrevia = document.getElementById('vista_previa_acta_envoltorio');
+    var iframeVistaPrevia = document.getElementById('vista_previa_acta');
+    var botonEnviarActa = document.getElementById('boton-enviar-acta');
+    var urlVistaPreviaActual = null;
+
+    if (campoArchivo) {
+        campoArchivo.addEventListener('change', function () {
+            if (urlVistaPreviaActual) {
+                URL.revokeObjectURL(urlVistaPreviaActual);
+                urlVistaPreviaActual = null;
+            }
+
+            campoArchivoError.style.display = 'none';
+            campoArchivoError.textContent = '';
+            envoltorioVistaPrevia.style.display = 'none';
+            iframeVistaPrevia.src = '';
+            botonEnviarActa.disabled = true;
+
+            var archivo = campoArchivo.files && campoArchivo.files[0] ? campoArchivo.files[0] : null;
+
+            if (!archivo) {
+                return;
+            }
+
+            if (archivo.type !== 'application/pdf' && !/\.pdf$/i.test(archivo.name)) {
+                campoArchivoError.textContent = 'Solo se permiten archivos en formato PDF.';
+                campoArchivoError.style.display = '';
+                campoArchivo.value = '';
+                return;
+            }
+
+            if (archivo.size > TAMANO_MAXIMO_BYTES) {
+                campoArchivoError.textContent = 'El archivo pesa ' + (archivo.size / (1024 * 1024)).toFixed(2) + ' MB. El máximo permitido es 3 MB.';
+                campoArchivoError.style.display = '';
+                campoArchivo.value = '';
+                return;
+            }
+
+            urlVistaPreviaActual = URL.createObjectURL(archivo);
+            iframeVistaPrevia.src = urlVistaPreviaActual;
+            envoltorioVistaPrevia.style.display = '';
+            botonEnviarActa.disabled = false;
+        });
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.boton-expandir-arbol').forEach(function (boton) {
         boton.addEventListener('click', function () {
             var nodo = boton.closest('.nodo-arbol-presupuesto');

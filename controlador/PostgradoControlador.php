@@ -170,15 +170,14 @@ class PostgradoControlador
             }
         }
 
+        $gastosEgresos = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : [];
+
         if ($tab === 'ingresos') {
             $gastos = $anioSeleccionadoId > 0 ? $this->modeloIngreso->obtenerPorAnio($anioSeleccionadoId) : [];
+            $gastos = $this->filtrarPorPropietarioODestinatario($gastos, $usuarioActual, $dependenciasSugeridas);
         } else {
-            $gastos = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : [];
+            $gastos = $this->filtrarEgresosVisibles($gastosEgresos, $usuarioActual, $dependenciasSugeridas);
         }
-
-        $gastosEgresos = $tab === 'egresos'
-            ? $gastos
-            : ($anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : []);
 
         $dependenciasTodas = $this->modeloDependencia->obtenerActivasParaEnvio();
 
@@ -535,6 +534,7 @@ class PostgradoControlador
         $datos['rubro_id'] = (int) $datos['rubro_id'];
         $datos['cantidad'] = (int) $datos['cantidad'];
         $datos['costo_unitario'] = (float) $datos['costo_unitario'];
+        $datos['usuario_id'] = (int) ($_SESSION['usuario_id'] ?? 0);
 
         return [$datos, ''];
     }
@@ -597,6 +597,7 @@ class PostgradoControlador
             'concepto_adicional' => $conceptoAdicional,
             'valor_adicional' => $valorAdicional,
             'valor_total' => $valorTotal,
+            'usuario_id' => (int) ($_SESSION['usuario_id'] ?? 0),
         ];
 
         return [$cabecera, $conceptos, ''];
@@ -805,5 +806,53 @@ class PostgradoControlador
                 $this->modeloGasto->crearAutomatico($datos);
             }
         }
+    }
+
+    /**
+     * Un ingreso o egreso solo debe ser visible, en su propio listado, para quien lo creó o para
+     * quien coincide exactamente con la dependencia y el rol al que fue enviado — nadie más lo ve,
+     * ni siquiera un nivel superior de la jerarquía, hasta que se le envía explícitamente.
+     * Los registros anteriores a este control (sin usuario_id registrado) se mantienen visibles
+     * por dependencia, para no ocultar información ya existente.
+     */
+    private function filtrarPorPropietarioODestinatario(array $items, ?array $usuarioActual, array $dependenciasPermitidas): array
+    {
+        $usuarioActualId = (int) ($usuarioActual['id'] ?? 0);
+        $dependenciaUsuarioNombre = null;
+
+        if (!empty($usuarioActual['dependencia_id'])) {
+            $dependenciaFila = $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id']);
+            $dependenciaUsuarioNombre = $dependenciaFila['nombre'] ?? null;
+        }
+
+        $rolUsuarioId = !empty($usuarioActual['rol_id']) ? (int) $usuarioActual['rol_id'] : null;
+
+        return array_values(array_filter($items, static function (array $item) use ($usuarioActualId, $dependenciaUsuarioNombre, $rolUsuarioId, $dependenciasPermitidas): bool {
+            if ($item['usuario_id'] === null) {
+                return in_array($item['dependencia'], $dependenciasPermitidas, true);
+            }
+
+            if ($usuarioActualId > 0 && (int) $item['usuario_id'] === $usuarioActualId) {
+                return true;
+            }
+
+            return $item['estado'] === 'enviado'
+                && $rolUsuarioId !== null
+                && (int) ($item['rol_destinatario_id'] ?? 0) === $rolUsuarioId
+                && $item['dependencia_destino'] === $dependenciaUsuarioNombre;
+        }));
+    }
+
+    /**
+     * Igual que filtrarPorPropietarioODestinatario, pero preserva siempre las líneas automáticas
+     * (excedentes / contribución a posgrado), que son cifras agregadas administradas de forma
+     * centralizada y no pertenecen a la dependencia que originó el ingreso que las generó.
+     */
+    private function filtrarEgresosVisibles(array $items, ?array $usuarioActual, array $dependenciasPermitidas): array
+    {
+        $automaticos = array_values(array_filter($items, static fn (array $item): bool => $item['tipo_automatico'] !== null));
+        $manuales = array_values(array_filter($items, static fn (array $item): bool => $item['tipo_automatico'] === null));
+
+        return array_merge($automaticos, $this->filtrarPorPropietarioODestinatario($manuales, $usuarioActual, $dependenciasPermitidas));
     }
 }
