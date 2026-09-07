@@ -204,7 +204,9 @@ class UnisaludControlador
 
         $totalGastado = array_sum(array_map(static fn (array $g): float => (float) $g['valor_total'], $gastos));
         $totalEjecutado = array_sum(array_map(static fn (array $g): float => (float) $g['valor_total'], $gastosEgresos));
-        $presupuestoAnio = $anioSeleccionadoId > 0 ? $this->modeloIngreso->obtenerTotalPorAnio($anioSeleccionadoId) : 0.0;
+        $presupuestoAnio = $anioSeleccionadoId > 0
+            ? $this->modeloIngreso->obtenerTotalPorAnioYDependencias($anioSeleccionadoId, $dependenciasSugeridas)
+            : 0.0;
         $porcentajeGastado = $presupuestoAnio > 0 ? min(100, ($totalEjecutado / $presupuestoAnio) * 100) : 0.0;
         $puedeEnviarTodo = $presupuestoAnio > 0 && abs($presupuestoAnio - $totalEjecutado) < 0.01;
 
@@ -243,8 +245,9 @@ class UnisaludControlador
             return [$error, ''];
         }
 
-        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnio($datos['anio_presupuestal_id']);
-        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnio($datos['anio_presupuestal_id']);
+        [, $dependenciasPermitidas] = $this->obtenerDependenciasVisiblesUsuarioActual();
+        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($datos['anio_presupuestal_id'], $dependenciasPermitidas);
+        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnioYDependencias($datos['anio_presupuestal_id'], $dependenciasPermitidas);
         $nuevoValor = $datos['cantidad'] * $datos['costo_unitario'];
 
         if ($egresosActuales + $nuevoValor > $ingresosDisponibles) {
@@ -253,7 +256,7 @@ class UnisaludControlador
             return ['Este egreso supera los ingresos disponibles de este año. Disponible: ' . number_format($disponible, 2) . '.', ''];
         }
 
-        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles);
+        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, 0.0, $dependenciasPermitidas);
 
         if ($errorCategoria !== '') {
             return [$errorCategoria, ''];
@@ -283,8 +286,9 @@ class UnisaludControlador
             return [$error, ''];
         }
 
-        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnio($datos['anio_presupuestal_id']);
-        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnio($datos['anio_presupuestal_id']) - (float) $existente['valor_total'];
+        [, $dependenciasPermitidas] = $this->obtenerDependenciasVisiblesUsuarioActual();
+        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($datos['anio_presupuestal_id'], $dependenciasPermitidas);
+        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnioYDependencias($datos['anio_presupuestal_id'], $dependenciasPermitidas) - (float) $existente['valor_total'];
         $nuevoValor = $datos['cantidad'] * $datos['costo_unitario'];
 
         if ($egresosActuales + $nuevoValor > $ingresosDisponibles) {
@@ -294,7 +298,7 @@ class UnisaludControlador
         }
 
         $valorExcluidoCategoria = $existente['categoria'] === $datos['categoria'] ? (float) $existente['valor_total'] : 0.0;
-        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, $valorExcluidoCategoria);
+        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, $valorExcluidoCategoria, $dependenciasPermitidas);
 
         if ($errorCategoria !== '') {
             return [$errorCategoria, ''];
@@ -315,7 +319,7 @@ class UnisaludControlador
         exit;
     }
 
-    private function validarLimiteCategoria(int $anioPresupuestalId, string $categoria, float $nuevoValor, float $totalIngresos, float $valorExcluido = 0.0): string
+    private function validarLimiteCategoria(int $anioPresupuestalId, string $categoria, float $nuevoValor, float $totalIngresos, float $valorExcluido = 0.0, array $dependenciasPermitidas = []): string
     {
         $mapaCategoriaPorcentaje = ['Gastos' => 'costos', 'Inversiones' => 'inversiones'];
         $clavePorcentaje = $mapaCategoriaPorcentaje[$categoria] ?? null;
@@ -331,7 +335,7 @@ class UnisaludControlador
         }
 
         $limiteCategoria = round($totalIngresos * (float) $porcentajes[$clavePorcentaje] / 100, 2);
-        $totalCategoriaActual = $this->modeloGasto->obtenerTotalPorAnioYCategoria($anioPresupuestalId, $categoria) - $valorExcluido;
+        $totalCategoriaActual = $this->modeloGasto->obtenerTotalPorAnioYCategoriaYDependencias($anioPresupuestalId, $categoria, $dependenciasPermitidas) - $valorExcluido;
 
         if ($totalCategoriaActual + $nuevoValor > $limiteCategoria) {
             $disponibleCategoria = max(0, $limiteCategoria - $totalCategoriaActual);
@@ -375,15 +379,16 @@ class UnisaludControlador
             }
         }
 
-        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnio($anioId);
-        $totalEgresos = $this->modeloGasto->obtenerTotalPorAnio($anioId);
+        [, $dependenciasPermitidasEnvio] = $this->obtenerDependenciasVisiblesUsuarioActual();
+        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($anioId, $dependenciasPermitidasEnvio);
+        $totalEgresos = $this->modeloGasto->obtenerTotalPorAnioYDependencias($anioId, $dependenciasPermitidasEnvio);
 
         if ($totalIngresos <= 0 || abs($totalIngresos - $totalEgresos) >= 0.01) {
             return ['Solo puedes enviar cuando el total de egresos sea igual al total de ingresos de este año.', ''];
         }
 
-        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId);
-        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId);
+        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio);
+        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio);
 
         if ($enviadosIngresos === 0 && $enviadosEgresos === 0) {
             return ['No hay ingresos ni egresos en borrador para enviar.', ''];
@@ -698,7 +703,11 @@ class UnisaludControlador
     private function generarEgresosAutomaticos(?int $ingresoId, int $anioPresupuestalId, string $dependencia): void
     {
         $porcentajes = $this->modeloPorcentaje->obtenerPorModulo('unisalud');
-        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnio($anioPresupuestalId);
+        // Acotado a la propia dependencia del ingreso: antes usaba obtenerTotalPorAnio() (todo el
+        // año, todas las dependencias), así que el egreso automático de cada dependencia se
+        // calculaba sobre el total de TODA la universidad, no sobre lo que esa dependencia
+        // realmente ingresó.
+        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($anioPresupuestalId, [$dependencia]);
 
         $lineas = [];
 
@@ -790,5 +799,38 @@ class UnisaludControlador
         $manuales = array_values(array_filter($items, static fn (array $item): bool => $item['tipo_automatico'] === null));
 
         return array_merge($automaticos, $this->filtrarPorPropietarioODestinatario($manuales, $usuarioActual, $dependenciasPermitidas));
+    }
+
+    /**
+     * Dependencias que el usuario de la sesión actual puede ver (la suya propia + sus
+     * descendientes), igual que las que ya calcula index() para filtrar la tabla — pero
+     * reutilizable desde los métodos privados de guardado/validación, que no reciben ese
+     * contexto. Usarla para acotar cualquier total de presupuesto (ingresos/egresos disponibles),
+     * en vez de sumar sin filtro por dependencia.
+     */
+    private function obtenerDependenciasVisiblesUsuarioActual(): array
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+        $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
+        $dependenciaUsuario = $dependenciaUsuarioId !== null ? $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId) : null;
+        $dependenciaUsuarioEsRaiz = $dependenciaUsuario !== null && !empty($dependenciaUsuario['es_raiz_superadmin']);
+
+        $dependenciasSugeridas = [];
+
+        if ($dependenciaUsuario !== null) {
+            if (!$dependenciaUsuarioEsRaiz) {
+                $dependenciasSugeridas[] = $dependenciaUsuario['nombre'];
+            }
+
+            foreach ($this->modeloDependencia->obtenerDescendientesPlano($dependenciaUsuarioId) as $descendiente) {
+                if (!empty($descendiente['es_raiz_superadmin'])) {
+                    continue;
+                }
+
+                $dependenciasSugeridas[] = $descendiente['nombre'];
+            }
+        }
+
+        return [$usuarioActual, $dependenciasSugeridas];
     }
 }

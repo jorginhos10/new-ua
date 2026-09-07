@@ -203,15 +203,25 @@ class ExtensionControlador
         }
 
         if ($anioSeleccionadoId > 0 && $autogestionSeleccionadoId > 0) {
-            $gastosEgresos = $this->modeloGasto->obtenerPorAnioYAutogestion($anioSeleccionadoId, $autogestionSeleccionadoId);
+            // Filtrados por dependencia/propietario de una vez aquí: $gastosEgresos e $ingresosTotal
+            // alimentan tanto la tabla como la barra de resumen (total ingresos, % asignado,
+            // desglose Costos/Inversión/Excedentes) — si no se filtran aquí, la barra de resumen
+            // termina sumando ingresos/egresos de OTRAS dependencias que comparten el mismo ítem
+            // de Autogestión, y una dependencia ve los totales de otra.
+            $gastosEgresos = $this->filtrarEgresosVisibles(
+                $this->modeloGasto->obtenerPorAnioYAutogestion($anioSeleccionadoId, $autogestionSeleccionadoId),
+                $usuarioActual,
+                $dependenciasSugeridas
+            );
+            $ingresosTotal = $this->filtrarPorPropietarioODestinatario(
+                $this->modeloIngreso->obtenerPorAnioYAutogestion($anioSeleccionadoId, $autogestionSeleccionadoId),
+                $usuarioActual,
+                $dependenciasSugeridas
+            );
 
-            if ($tab === 'ingresos') {
-                $gastos = $this->modeloIngreso->obtenerPorAnioYAutogestion($anioSeleccionadoId, $autogestionSeleccionadoId);
-                $gastos = $this->filtrarPorPropietarioODestinatario($gastos, $usuarioActual, $dependenciasSugeridas);
-            } else {
-                $gastos = $this->filtrarEgresosVisibles($gastosEgresos, $usuarioActual, $dependenciasSugeridas);
-            }
+            $gastos = $tab === 'ingresos' ? $ingresosTotal : $gastosEgresos;
         } else {
+            $ingresosTotal = [];
             $gastos = [];
             $gastosEgresos = [];
         }
@@ -239,9 +249,7 @@ class ExtensionControlador
 
         $totalGastado = array_sum(array_map(static fn (array $g): float => (float) $g['valor_total'], $gastos));
         $totalEjecutado = array_sum(array_map(static fn (array $g): float => (float) $g['valor_total'], $gastosEgresos));
-        $presupuestoAnio = ($anioSeleccionadoId > 0 && $autogestionSeleccionadoId > 0)
-            ? $this->modeloIngreso->obtenerTotalPorAnioYAutogestion($anioSeleccionadoId, $autogestionSeleccionadoId)
-            : 0.0;
+        $presupuestoAnio = array_sum(array_map(static fn (array $i): float => (float) $i['valor_total'], $ingresosTotal));
         $porcentajeGastado = $presupuestoAnio > 0 ? min(100, ($totalEjecutado / $presupuestoAnio) * 100) : 0.0;
         $puedeEnviarTodo = $presupuestoAnio > 0 && abs($presupuestoAnio - $totalEjecutado) < 0.01;
 
@@ -280,8 +288,9 @@ class ExtensionControlador
             return [$error, ''];
         }
 
-        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYAutogestion($datos['anio_presupuestal_id'], $datos['autogestion_id']);
-        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnioYAutogestion($datos['anio_presupuestal_id'], $datos['autogestion_id']);
+        [, $dependenciasPermitidas] = $this->obtenerDependenciasVisiblesUsuarioActual();
+        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($datos['anio_presupuestal_id'], $datos['autogestion_id'], $dependenciasPermitidas);
+        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnioYAutogestionYDependencias($datos['anio_presupuestal_id'], $datos['autogestion_id'], $dependenciasPermitidas);
         $nuevoValor = $datos['cantidad'] * $datos['costo_unitario'];
 
         if ($egresosActuales + $nuevoValor > $ingresosDisponibles) {
@@ -290,7 +299,7 @@ class ExtensionControlador
             return ["Este egreso supera los ingresos disponibles de este ítem de autogestión. Disponible: " . number_format($disponible, 2) . '.', ''];
         }
 
-        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], (int) $datos['autogestion_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles);
+        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], (int) $datos['autogestion_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, 0.0, $dependenciasPermitidas);
 
         if ($errorCategoria !== '') {
             return [$errorCategoria, ''];
@@ -320,8 +329,9 @@ class ExtensionControlador
             return [$error, ''];
         }
 
-        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYAutogestion($datos['anio_presupuestal_id'], $datos['autogestion_id']);
-        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnioYAutogestion($datos['anio_presupuestal_id'], $datos['autogestion_id']);
+        [, $dependenciasPermitidas] = $this->obtenerDependenciasVisiblesUsuarioActual();
+        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($datos['anio_presupuestal_id'], $datos['autogestion_id'], $dependenciasPermitidas);
+        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnioYAutogestionYDependencias($datos['anio_presupuestal_id'], $datos['autogestion_id'], $dependenciasPermitidas);
         $egresosActuales -= (float) $existente['valor_total'];
         $nuevoValor = $datos['cantidad'] * $datos['costo_unitario'];
 
@@ -332,7 +342,7 @@ class ExtensionControlador
         }
 
         $valorExcluidoCategoria = $existente['categoria'] === $datos['categoria'] ? (float) $existente['valor_total'] : 0.0;
-        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], (int) $datos['autogestion_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, $valorExcluidoCategoria);
+        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], (int) $datos['autogestion_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, $valorExcluidoCategoria, $dependenciasPermitidas);
 
         if ($errorCategoria !== '') {
             return [$errorCategoria, ''];
@@ -353,7 +363,7 @@ class ExtensionControlador
         exit;
     }
 
-    private function validarLimiteCategoria(int $anioPresupuestalId, int $autogestionId, string $categoria, float $nuevoValor, float $totalIngresos, float $valorExcluido = 0.0): string
+    private function validarLimiteCategoria(int $anioPresupuestalId, int $autogestionId, string $categoria, float $nuevoValor, float $totalIngresos, float $valorExcluido = 0.0, array $dependenciasPermitidas = []): string
     {
         $mapaCategoriaPorcentaje = ['Gastos' => 'costos', 'Inversiones' => 'inversiones'];
         $clavePorcentaje = $mapaCategoriaPorcentaje[$categoria] ?? null;
@@ -369,7 +379,7 @@ class ExtensionControlador
         }
 
         $limiteCategoria = round($totalIngresos * (float) $porcentajes[$clavePorcentaje] / 100, 2);
-        $totalCategoriaActual = $this->modeloGasto->obtenerTotalPorAnioAutogestionYCategoria($anioPresupuestalId, $autogestionId, $categoria) - $valorExcluido;
+        $totalCategoriaActual = $this->modeloGasto->obtenerTotalPorAnioAutogestionYCategoriaYDependencias($anioPresupuestalId, $autogestionId, $categoria, $dependenciasPermitidas) - $valorExcluido;
 
         if ($totalCategoriaActual + $nuevoValor > $limiteCategoria) {
             $disponibleCategoria = max(0, $limiteCategoria - $totalCategoriaActual);
@@ -414,15 +424,16 @@ class ExtensionControlador
             }
         }
 
-        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnioYAutogestion($anioId, $autogestionId);
-        $totalEgresos = $this->modeloGasto->obtenerTotalPorAnioYAutogestion($anioId, $autogestionId);
+        [, $dependenciasPermitidasEnvio] = $this->obtenerDependenciasVisiblesUsuarioActual();
+        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $autogestionId, $dependenciasPermitidasEnvio);
+        $totalEgresos = $this->modeloGasto->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $autogestionId, $dependenciasPermitidasEnvio);
 
         if ($totalIngresos <= 0 || abs($totalIngresos - $totalEgresos) >= 0.01) {
             return ['Solo puedes enviar cuando el total de egresos sea igual al total de ingresos de este ítem de autogestión.', ''];
         }
 
-        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $autogestionId, $dependenciaDestinoNombre, $rolDestinatarioId);
-        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $autogestionId, $dependenciaDestinoNombre, $rolDestinatarioId);
+        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $autogestionId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio);
+        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $autogestionId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio);
 
         if ($enviadosIngresos === 0 && $enviadosEgresos === 0) {
             return ['No hay ingresos ni egresos en borrador para enviar.', ''];
@@ -753,7 +764,11 @@ class ExtensionControlador
     private function generarEgresosAutomaticos(?int $ingresoId, int $anioPresupuestalId, int $autogestionId, string $dependencia): void
     {
         $porcentajes = $this->modeloPorcentaje->obtenerPorModulo('extension');
-        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnioYAutogestion($anioPresupuestalId, $autogestionId);
+        // Acotado a la propia dependencia del ingreso: antes usaba obtenerTotalPorAnioYAutogestion()
+        // (todas las dependencias que comparten ese ítem de Autogestión), así que el egreso
+        // automático de cada dependencia se calculaba sobre el total combinado de todas ellas, no
+        // sobre lo que esa dependencia realmente ingresó.
+        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($anioPresupuestalId, $autogestionId, [$dependencia]);
 
         $lineas = [];
 
@@ -846,5 +861,38 @@ class ExtensionControlador
         $manuales = array_values(array_filter($items, static fn (array $item): bool => $item['tipo_automatico'] === null));
 
         return array_merge($automaticos, $this->filtrarPorPropietarioODestinatario($manuales, $usuarioActual, $dependenciasPermitidas));
+    }
+
+    /**
+     * Dependencias que el usuario de la sesión actual puede ver (la suya propia + sus
+     * descendientes), igual que las que ya calcula index() para filtrar la tabla — pero
+     * reutilizable desde los métodos privados de guardado/validación, que no reciben ese
+     * contexto. Usarla para acotar cualquier total de presupuesto (ingresos/egresos disponibles),
+     * en vez de sumar sin filtro por dependencia.
+     */
+    private function obtenerDependenciasVisiblesUsuarioActual(): array
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+        $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
+        $dependenciaUsuario = $dependenciaUsuarioId !== null ? $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId) : null;
+        $dependenciaUsuarioEsRaiz = $dependenciaUsuario !== null && !empty($dependenciaUsuario['es_raiz_superadmin']);
+
+        $dependenciasSugeridas = [];
+
+        if ($dependenciaUsuario !== null) {
+            if (!$dependenciaUsuarioEsRaiz) {
+                $dependenciasSugeridas[] = $dependenciaUsuario['nombre'];
+            }
+
+            foreach ($this->modeloDependencia->obtenerDescendientesPlano($dependenciaUsuarioId) as $descendiente) {
+                if (!empty($descendiente['es_raiz_superadmin'])) {
+                    continue;
+                }
+
+                $dependenciasSugeridas[] = $descendiente['nombre'];
+            }
+        }
+
+        return [$usuarioActual, $dependenciasSugeridas];
     }
 }

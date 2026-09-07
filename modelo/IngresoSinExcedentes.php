@@ -56,6 +56,34 @@ class IngresoSinExcedentes
         return (float) $consulta->fetchColumn();
     }
 
+    /**
+     * Igual que obtenerTotalPorAnio(), pero acotado a un conjunto de dependencias — evita sumar
+     * ingresos de dependencias que la persona que consulta no debería ver (usarlo siempre que el
+     * total se vaya a mostrar o a validar contra un techo, en vez de obtenerTotalPorAnio()).
+     */
+    public function obtenerTotalPorAnioYDependencias(int $anioPresupuestalId, array $dependencias): float
+    {
+        if (empty($dependencias)) {
+            return 0.0;
+        }
+
+        $parametros = ['anio_presupuestal_id' => $anioPresupuestalId];
+        $marcadores = [];
+        foreach (array_values($dependencias) as $indice => $dependencia) {
+            $clave = 'dep' . $indice;
+            $marcadores[] = ':' . $clave;
+            $parametros[$clave] = $dependencia;
+        }
+
+        $consulta = $this->db->prepare(
+            'SELECT COALESCE(SUM(valor_total), 0) FROM ingresos_sin_excedentes
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND dependencia IN (' . implode(', ', $marcadores) . ')'
+        );
+        $consulta->execute($parametros);
+
+        return (float) $consulta->fetchColumn();
+    }
+
     public function obtenerDependenciasBorrador(int $anioPresupuestalId): array
     {
         $consulta = $this->db->prepare(
@@ -67,20 +95,36 @@ class IngresoSinExcedentes
         return array_column($consulta->fetchAll(), 'dependencia');
     }
 
-    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaDestinoNombre, int $rolDestinatarioId, string $categoriaPeticion): int
+    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaDestinoNombre, int $rolDestinatarioId, string $categoriaPeticion, array $dependenciasOrigen): int
     {
-        $consulta = $this->db->prepare(
-            "UPDATE ingresos_sin_excedentes
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia_destino = :dependencia, categoria_peticion = :categoria_peticion
-             WHERE anio_presupuestal_id = :anio_presupuestal_id
-                AND estado = 'borrador'"
-        );
-        $consulta->execute([
+        if (empty($dependenciasOrigen)) {
+            return 0;
+        }
+
+        $parametros = [
             'anio_presupuestal_id' => $anioPresupuestalId,
             'dependencia' => $dependenciaDestinoNombre,
             'rol_destinatario_id' => $rolDestinatarioId,
             'categoria_peticion' => $categoriaPeticion,
-        ]);
+        ];
+        $marcadores = [];
+        foreach (array_values($dependenciasOrigen) as $indice => $dependenciaOrigen) {
+            $clave = 'depOrigen' . $indice;
+            $marcadores[] = ':' . $clave;
+            $parametros[$clave] = $dependenciaOrigen;
+        }
+
+        // El IN de dependencia acota a solo las dependencias que el remitente puede ver — sin
+        // esto, "Enviar todo" marcaba como enviados los borradores de CUALQUIER dependencia del
+        // año, no solo los del usuario que envía.
+        $consulta = $this->db->prepare(
+            "UPDATE ingresos_sin_excedentes
+             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia_destino = :dependencia, categoria_peticion = :categoria_peticion
+             WHERE anio_presupuestal_id = :anio_presupuestal_id
+                AND estado = 'borrador'
+                AND dependencia IN (" . implode(', ', $marcadores) . ')'
+        );
+        $consulta->execute($parametros);
 
         return $consulta->rowCount();
     }

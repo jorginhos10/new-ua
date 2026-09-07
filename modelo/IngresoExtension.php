@@ -76,6 +76,36 @@ class IngresoExtension
         return (float) $consulta->fetchColumn();
     }
 
+    /**
+     * Igual que obtenerTotalPorAnioYAutogestion(), pero acotado a un conjunto de dependencias —
+     * evita sumar ingresos de dependencias que la persona que consulta no debería ver (las
+     * dependencias que comparten el mismo ítem de Autogestión no son necesariamente las mismas
+     * que puede ver el usuario actual).
+     */
+    public function obtenerTotalPorAnioYAutogestionYDependencias(int $anioPresupuestalId, int $autogestionId, array $dependencias): float
+    {
+        if (empty($dependencias)) {
+            return 0.0;
+        }
+
+        $parametros = ['anio_presupuestal_id' => $anioPresupuestalId, 'autogestion_id' => $autogestionId];
+        $marcadores = [];
+        foreach (array_values($dependencias) as $indice => $dependencia) {
+            $clave = 'dep' . $indice;
+            $marcadores[] = ':' . $clave;
+            $parametros[$clave] = $dependencia;
+        }
+
+        $consulta = $this->db->prepare(
+            'SELECT COALESCE(SUM(valor_total), 0) FROM ingresos_extension
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id
+                AND dependencia IN (' . implode(', ', $marcadores) . ')'
+        );
+        $consulta->execute($parametros);
+
+        return (float) $consulta->fetchColumn();
+    }
+
     public function obtenerTotalPorAnio(int $anioPresupuestalId): float
     {
         $consulta = $this->db->prepare(
@@ -100,21 +130,37 @@ class IngresoExtension
         return array_column($consulta->fetchAll(), 'dependencia');
     }
 
-    public function enviarTodosBorrador(int $anioPresupuestalId, int $autogestionId, string $dependenciaDestinoNombre, int $rolDestinatarioId): int
+    public function enviarTodosBorrador(int $anioPresupuestalId, int $autogestionId, string $dependenciaDestinoNombre, int $rolDestinatarioId, array $dependenciasOrigen): int
     {
+        if (empty($dependenciasOrigen)) {
+            return 0;
+        }
+
+        $parametros = [
+            'anio_presupuestal_id' => $anioPresupuestalId,
+            'autogestion_id' => $autogestionId,
+            'dependencia' => $dependenciaDestinoNombre,
+            'rol_destinatario_id' => $rolDestinatarioId,
+        ];
+        $marcadores = [];
+        foreach (array_values($dependenciasOrigen) as $indice => $dependenciaOrigen) {
+            $clave = 'depOrigen' . $indice;
+            $marcadores[] = ':' . $clave;
+            $parametros[$clave] = $dependenciaOrigen;
+        }
+
+        // El IN de dependencia acota a solo las dependencias que el remitente puede ver — sin
+        // esto, "Enviar todo" marcaba como enviados los borradores de CUALQUIER dependencia que
+        // compartiera año + ítem de Autogestión, no solo los del usuario que envía.
         $consulta = $this->db->prepare(
             "UPDATE ingresos_extension
              SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia_destino = :dependencia
              WHERE anio_presupuestal_id = :anio_presupuestal_id
                 AND autogestion_id = :autogestion_id
-                AND estado = 'borrador'"
+                AND estado = 'borrador'
+                AND dependencia IN (" . implode(', ', $marcadores) . ')'
         );
-        $consulta->execute([
-            'anio_presupuestal_id' => $anioPresupuestalId,
-            'autogestion_id' => $autogestionId,
-            'dependencia' => $dependenciaDestinoNombre,
-            'rol_destinatario_id' => $rolDestinatarioId,
-        ]);
+        $consulta->execute($parametros);
 
         return $consulta->rowCount();
     }
