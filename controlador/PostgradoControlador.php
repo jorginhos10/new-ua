@@ -263,7 +263,7 @@ class PostgradoControlador
         try {
             $this->modeloGasto->crear($datos);
         } catch (PDOException $excepcion) {
-            return ['No se pudo registrar el egreso. Verifica el año, la sede, la línea, el motor, el proyecto y el rubro seleccionados.', ''];
+            return ['No se pudo registrar el egreso: ' . $excepcion->getMessage(), ''];
         }
 
         return ['', 'Egreso registrado correctamente.'];
@@ -367,7 +367,7 @@ class PostgradoControlador
                 $this->modeloGasto->actualizar($id, $datos);
             }
         } catch (PDOException $excepcion) {
-            return ['No se pudo actualizar el egreso. Verifica el año, la sede, la línea, el motor, el proyecto y el rubro seleccionados.', ''];
+            return ['No se pudo actualizar el egreso: ' . $excepcion->getMessage(), ''];
         }
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('gasto_postgrado', $id, $nuevoValor, $datos['dependencia']);
@@ -619,7 +619,7 @@ class PostgradoControlador
         try {
             $ingresoId = $this->modeloIngreso->crear($cabecera, $conceptos);
         } catch (PDOException $excepcion) {
-            return ['No se pudo registrar el ingreso. Verifica el año presupuestal seleccionado.', ''];
+            return ['No se pudo registrar el ingreso: ' . $excepcion->getMessage(), ''];
         }
 
         $this->generarEgresosAutomaticos($ingresoId, $cabecera['anio_presupuestal_id'], $cabecera['dependencia']);
@@ -645,7 +645,7 @@ class PostgradoControlador
         try {
             $this->modeloIngreso->actualizar($id, $cabecera, $conceptos);
         } catch (PDOException $excepcion) {
-            return ['No se pudo actualizar el ingreso. Verifica el año presupuestal seleccionado.', ''];
+            return ['No se pudo actualizar el ingreso: ' . $excepcion->getMessage(), ''];
         }
 
         $this->generarEgresosAutomaticos($id, $cabecera['anio_presupuestal_id'], $cabecera['dependencia']);
