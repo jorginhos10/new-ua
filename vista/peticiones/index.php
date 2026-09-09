@@ -17,15 +17,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             //     'href' => 'index.php?ruta=consolidado-autogestion',
             // ],
         ];
-        if ($bandeja !== null) {
-            $barraBotonesSecundarios[] = [
-                'id' => null,
-                'icono' => 'historial',
-                'etiqueta' => 'Historial',
-                'tipo' => 'a',
-                'href' => 'index.php?ruta=peticiones-historial&bandeja=' . urlencode($bandeja),
-            ];
-        }
         $barraBotonPrincipal = null;
         $barraEstado = $bandeja !== null ? 'consulta' : 'creacion';
         $barraRutaVolver = $bandeja !== null ? 'index.php?ruta=peticiones' : null;
@@ -454,7 +445,10 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                         <td><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
                         <td><?= $item['valor'] !== null ? '$ ' . number_format((float) $item['valor'], 2) : '—' ?></td>
                         <td class="celda-acciones">
-                            <a href="<?= htmlspecialchars($item['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>
+                            <div class="acciones-fila">
+                                <a href="<?= htmlspecialchars($item['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>
+                                <a href="index.php?ruta=peticiones-historial-item&origen=<?= urlencode($item['origen']) ?>&origen_id=<?= (int) $item['origen_id'] ?>&volver=<?= urlencode('index.php?ruta=peticiones&bandeja=' . $bandeja . '&vista=enviadas&anio_id=' . $anioSeleccionadoId) ?>" class="boton-accion boton-accion-editar">Historial</a>
+                            </div>
                         </td>
                     </tr>
                     <?php endforeach; ?>

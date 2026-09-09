@@ -2743,6 +2743,16 @@ document.addEventListener('DOMContentLoaded', function () {
                 enlace.className = 'boton-accion boton-accion-ver';
                 enlace.textContent = 'Ver';
                 celdaAccion.appendChild(enlace);
+
+                var enlaceHistorial = document.createElement('a');
+                enlaceHistorial.href = 'index.php?ruta=peticiones-historial-item&origen=' + encodeURIComponent(item.origen || '')
+                    + '&origen_id=' + encodeURIComponent(item.origen_id || '')
+                    + '&volver=' + encodeURIComponent(window.location.href);
+                enlaceHistorial.className = 'boton-accion boton-accion-editar';
+                enlaceHistorial.textContent = 'Historial';
+                celdaAccion.appendChild(document.createTextNode(' '));
+                celdaAccion.appendChild(enlaceHistorial);
+
                 fila.appendChild(celdaAccion);
 
                 cuerpoVerConsolidado.appendChild(fila);

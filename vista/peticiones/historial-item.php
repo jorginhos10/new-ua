@@ -1,5 +1,5 @@
 <?php
-$tituloPagina = 'Historial';
+$tituloPagina = 'Historial del ítem';
 require __DIR__ . '/../parciales/encabezado.php';
 
 $etiquetasAccion = [
@@ -16,15 +16,15 @@ $etiquetasAccion = [
 
     <div class="tarjeta">
         <?php
-        $barraTitulo = 'Historial — ' . $bandejas[$bandeja]['etiqueta'];
+        $barraTitulo = 'Historial — ' . $origen . ' #' . $origenId;
         $barraBotonesSecundarios = [];
         $barraBotonPrincipal = null;
         $barraEstado = 'consulta';
-        $barraRutaVolver = 'index.php?ruta=peticiones&bandeja=' . urlencode($bandeja);
+        $barraRutaVolver = $volver;
         require __DIR__ . '/../parciales/barra-modulo.php';
         ?>
 
-        <p class="texto-atenuado">Registro de auditoría de solo lectura: qué le pasó a cada ítem desde que llegó a Peticiones (no incluye el momento en que se envió desde su módulo de origen).</p>
+        <p class="texto-atenuado">Registro de auditoría de solo lectura de este ítem: qué le pasó desde que llegó a Peticiones (no incluye el momento en que se envió desde su módulo de origen).</p>
 
         <div class="tabla-scroll">
             <table class="tabla-usuarios">
@@ -34,7 +34,6 @@ $etiquetasAccion = [
                         <th>Actor</th>
                         <th>Acción</th>
                         <th>Detalle</th>
-                        <th>Origen</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -44,12 +43,11 @@ $etiquetasAccion = [
                         <td><?= htmlspecialchars($evento['usuario_nombre'] ?? 'Usuario eliminado') ?></td>
                         <td><?= htmlspecialchars($etiquetasAccion[$evento['accion']] ?? $evento['accion']) ?></td>
                         <td><?= htmlspecialchars($evento['detalle']) ?></td>
-                        <td><?= htmlspecialchars($evento['origen']) ?> #<?= (int) $evento['origen_id'] ?></td>
                     </tr>
                     <?php endforeach; ?>
                     <?php if (empty($eventos)): ?>
                     <tr>
-                        <td colspan="5">Todavía no hay eventos registrados en esta bandeja.</td>
+                        <td colspan="4">Todavía no hay eventos registrados para este ítem.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>

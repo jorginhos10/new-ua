@@ -31,30 +31,16 @@ class PeticionHistorial
         ]);
     }
 
-    public function obtenerPorOrigenes(array $origenes, int $limite = 200): array
+    public function obtenerPorOrigenYId(string $origen, int $origenId): array
     {
-        if (empty($origenes)) {
-            return [];
-        }
-
-        $marcadores = [];
-        $parametros = [];
-
-        foreach ($origenes as $indice => $origen) {
-            $marcador = 'o' . $indice;
-            $marcadores[] = ':' . $marcador;
-            $parametros[$marcador] = $origen;
-        }
-
         $consulta = $this->db->prepare(
             'SELECT h.*, u.nombre AS usuario_nombre
              FROM peticiones_historial h
              LEFT JOIN usuarios u ON u.id = h.usuario_id
-             WHERE h.origen IN (' . implode(', ', $marcadores) . ')
-             ORDER BY h.creado_en DESC, h.id DESC
-             LIMIT ' . (int) $limite
+             WHERE h.origen = :origen AND h.origen_id = :origen_id
+             ORDER BY h.creado_en ASC, h.id ASC'
         );
-        $consulta->execute($parametros);
+        $consulta->execute(['origen' => $origen, 'origen_id' => $origenId]);
 
         return $consulta->fetchAll();
     }

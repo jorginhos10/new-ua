@@ -565,7 +565,12 @@ class PeticionesControlador
      * llegaron a Peticiones (aprobar/archivar/editar/redireccionar/rechazar/duplicar/eliminar). No
      * incluye el momento "Enviado" (eso ocurre en el módulo de origen, fuera de este controlador).
      */
-    public function historial(): void
+    /**
+     * Historial de auditoría de un solo ítem (no de toda una bandeja): quién hizo qué y cuándo
+     * desde que llegó a Peticiones. Se accede desde un botón por ítem en Consolidado/Enviadas,
+     * no desde un botón global por pestaña.
+     */
+    public function historialItem(): void
     {
         if (empty($_SESSION['usuario_id'])) {
             header('Location: index.php?ruta=login');
@@ -577,69 +582,36 @@ class PeticionesControlador
             exit;
         }
 
-        $bandejaSolicitada = $_GET['bandeja'] ?? '';
+        $origen = trim($_GET['origen'] ?? '');
+        $origenId = (int) ($_GET['origen_id'] ?? 0);
+        $volver = trim($_GET['volver'] ?? '') !== '' ? $_GET['volver'] : 'index.php?ruta=peticiones';
 
-        if (!isset(self::BANDEJAS[$bandejaSolicitada])) {
+        if ($origen === '' || $origenId <= 0 || !$this->puedeVerHistorialItem($origen, $origenId)) {
             header('Location: index.php?ruta=peticiones');
             exit;
         }
 
-        $bandeja = $bandejaSolicitada;
-        $bandejas = self::BANDEJAS;
+        $eventos = $this->modeloHistorial->obtenerPorOrigenYId($origen, $origenId);
 
-        $origenesConsulta = array_unique(array_merge(
-            self::BANDEJAS[$bandeja]['origenes'],
-            ['gasto_sin_excedentes', 'ingreso_sin_excedentes']
-        ));
-
-        $dependenciasPermitidas = $this->obtenerDependenciasPermitidas();
-
-        $eventos = $this->modeloHistorial->obtenerPorOrigenes($origenesConsulta);
-        $eventos = $this->filtrarPorOrigenes($eventos, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
-        $eventos = $this->filtrarEventosPorDependencia($eventos, $dependenciasPermitidas);
-
-        require __DIR__ . '/../vista/peticiones/historial.php';
+        require __DIR__ . '/../vista/peticiones/historial-item.php';
     }
 
     /**
-     * A diferencia de peticiones_archivadas (que ya trae la dependencia del ítem cacheada en
-     * 'detalle'), peticiones_historial solo guarda origen/origen_id — hay que resolver la
-     * dependencia consultando en vivo el registro real. Sin este filtro, "Historial" mostraba el
-     * historial de TODAS las dependencias del sistema a cualquier administrador, sin importar la
-     * suya (a diferencia de Pendientes/Consolidado/Archivo/Enviadas, que sí llaman a
-     * filtrarPorDependencia()).
+     * Mismo criterio de visibilidad que filtrarPorDependencia(), pero para un ítem puntual: por
+     * dependencia (resuelta en vivo, ya que peticiones_historial solo guarda origen/origen_id) o,
+     * para 'otros' (sin dependencia propia), por rol destinatario.
      */
-    private function filtrarEventosPorDependencia(array $eventos, array $dependenciasPermitidas): array
+    private function puedeVerHistorialItem(string $origen, int $origenId): bool
     {
-        $cache = [];
-        $rolUsuarioActual = $this->obtenerRolUsuarioActual();
+        if ($origen === 'otros') {
+            $rolDestinatario = $this->obtenerRolDestinatarioOtros($origenId);
 
-        return array_values(array_filter($eventos, function (array $evento) use ($dependenciasPermitidas, $rolUsuarioActual, &$cache): bool {
-            $origen = $evento['origen'];
-            $origenId = (int) $evento['origen_id'];
+            return $rolDestinatario !== null && $rolDestinatario === $this->obtenerRolUsuarioActual();
+        }
 
-            // 'otros' no tiene dependencia propia — se filtra por rol destinatario, igual que
-            // filtrarPorDependencia(). Sin esto, el historial de una Petición (Otra) quedaba
-            // visible para todas las dependencias, no solo las que comparten el rol destinatario.
-            if ($origen === 'otros') {
-                $rolDestinatario = $this->obtenerRolDestinatarioOtros($origenId);
+        $dependenciaOrigen = $this->obtenerDependenciaOrigen($origen, $origenId);
 
-                return $rolDestinatario !== null && $rolDestinatario === $rolUsuarioActual;
-            }
-
-            $clave = $origen . ':' . $origenId;
-
-            if (!array_key_exists($clave, $cache)) {
-                $cache[$clave] = $this->obtenerDependenciaOrigen($origen, $origenId);
-            }
-
-            $dependenciaOrigen = $cache[$clave];
-
-            // null = no se pudo resolver (registro ya eliminado) o el tipo no tiene dependencia
-            // propia (ej. 'necesidad_grupo') — se deja visible, igual que ya hace
-            // filtrarPorDependencia() para esos mismos casos.
-            return $dependenciaOrigen === null || in_array($dependenciaOrigen, $dependenciasPermitidas, true);
-        }));
+        return $dependenciaOrigen === null || in_array($dependenciaOrigen, $this->obtenerDependenciasPermitidas(), true);
     }
 
     /**
