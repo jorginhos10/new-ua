@@ -592,10 +592,86 @@ class PeticionesControlador
             ['gasto_sin_excedentes', 'ingreso_sin_excedentes']
         ));
 
+        $dependenciasPermitidas = $this->obtenerDependenciasPermitidas();
+
         $eventos = $this->modeloHistorial->obtenerPorOrigenes($origenesConsulta);
         $eventos = $this->filtrarPorOrigenes($eventos, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
+        $eventos = $this->filtrarEventosPorDependencia($eventos, $dependenciasPermitidas);
 
         require __DIR__ . '/../vista/peticiones/historial.php';
+    }
+
+    /**
+     * A diferencia de peticiones_archivadas (que ya trae la dependencia del ítem cacheada en
+     * 'detalle'), peticiones_historial solo guarda origen/origen_id — hay que resolver la
+     * dependencia consultando en vivo el registro real. Sin este filtro, "Historial" mostraba el
+     * historial de TODAS las dependencias del sistema a cualquier administrador, sin importar la
+     * suya (a diferencia de Pendientes/Consolidado/Archivo/Enviadas, que sí llaman a
+     * filtrarPorDependencia()).
+     */
+    private function filtrarEventosPorDependencia(array $eventos, array $dependenciasPermitidas): array
+    {
+        $cache = [];
+        $rolUsuarioActual = $this->obtenerRolUsuarioActual();
+
+        return array_values(array_filter($eventos, function (array $evento) use ($dependenciasPermitidas, $rolUsuarioActual, &$cache): bool {
+            $origen = $evento['origen'];
+            $origenId = (int) $evento['origen_id'];
+
+            // 'otros' no tiene dependencia propia — se filtra por rol destinatario, igual que
+            // filtrarPorDependencia(). Sin esto, el historial de una Petición (Otra) quedaba
+            // visible para todas las dependencias, no solo las que comparten el rol destinatario.
+            if ($origen === 'otros') {
+                $rolDestinatario = $this->obtenerRolDestinatarioOtros($origenId);
+
+                return $rolDestinatario !== null && $rolDestinatario === $rolUsuarioActual;
+            }
+
+            $clave = $origen . ':' . $origenId;
+
+            if (!array_key_exists($clave, $cache)) {
+                $cache[$clave] = $this->obtenerDependenciaOrigen($origen, $origenId);
+            }
+
+            $dependenciaOrigen = $cache[$clave];
+
+            // null = no se pudo resolver (registro ya eliminado) o el tipo no tiene dependencia
+            // propia (ej. 'necesidad_grupo') — se deja visible, igual que ya hace
+            // filtrarPorDependencia() para esos mismos casos.
+            return $dependenciaOrigen === null || in_array($dependenciaOrigen, $dependenciasPermitidas, true);
+        }));
+    }
+
+    /**
+     * Dependencia real (en vivo) de un ítem, según su tabla de origen. Devuelve null si el
+     * registro ya no existe, o si ese tipo de origen no tiene un campo de dependencia propio.
+     */
+    private function obtenerDependenciaOrigen(string $origen, int $origenId): ?string
+    {
+        $mapaCampo = [
+            'gasto_principal' => [$this->modeloGasto, 'dependencia'],
+            'gasto_extension' => [$this->modeloGastoExtension, 'dependencia'],
+            'gasto_postgrado' => [$this->modeloGastoPostgrado, 'dependencia'],
+            'gasto_unisalud' => [$this->modeloGastoUnisalud, 'dependencia'],
+            'gasto_sin_excedentes' => [$this->modeloGastoSinExcedentes, 'dependencia'],
+            'ingreso_extension' => [$this->modeloIngresoExtension, 'dependencia'],
+            'ingreso_postgrado' => [$this->modeloIngresoPostgrado, 'dependencia'],
+            'ingreso_unisalud' => [$this->modeloIngresoUnisalud, 'dependencia'],
+            'ingreso_sin_excedentes' => [$this->modeloIngresoSinExcedentes, 'dependencia'],
+            'necesidad' => [$this->modeloNecesidad, 'dependencia'],
+            'arl' => [$this->modeloSolicitud, 'facultad'],
+            'monitores' => [$this->modeloMonitor, 'dependencia'],
+            'ops' => [$this->modeloOps, 'dependencia'],
+        ];
+
+        if (!isset($mapaCampo[$origen])) {
+            return null;
+        }
+
+        [$modelo, $campo] = $mapaCampo[$origen];
+        $fila = $modelo->obtenerPorId($origenId);
+
+        return $fila[$campo] ?? null;
     }
 
     private function construirFilasDetalleCompleto(array $aprobados, int $anioPresupuestalId): array
@@ -1703,9 +1779,41 @@ class PeticionesControlador
 
     private function filtrarPorDependencia(array $items, array $dependenciasPermitidas): array
     {
-        return array_values(array_filter($items, static function (array $item) use ($dependenciasPermitidas): bool {
-            return $item['origen'] === 'otros' || $item['origen'] === 'necesidad_grupo' || in_array($item['detalle'], $dependenciasPermitidas, true);
+        $rolUsuarioActual = $this->obtenerRolUsuarioActual();
+
+        return array_values(array_filter($items, function (array $item) use ($dependenciasPermitidas, $rolUsuarioActual): bool {
+            if ($item['origen'] === 'necesidad_grupo') {
+                return true;
+            }
+
+            // 'otros' (Petición sin dependencia) no tiene campo de dependencia — se dirige a
+            // todos los que tengan el rol destinatario, sin importar la dependencia (ver
+            // SolicitudControlador::notificarYMarcarEnviada). Antes esta rama dejaba pasar
+            // CUALQUIER Petición (Otra) a TODOS los usuarios sin comprobar siquiera el rol, lo
+            // que hacía que, una vez consolidada/archivada, una facultad viera las peticiones de
+            // otra. Se reemplaza por el mismo chequeo de rol que ya se usa al construir Pendientes.
+            if ($item['origen'] === 'otros') {
+                $rolDestinatario = $this->obtenerRolDestinatarioOtros((int) $item['origen_id']);
+
+                return $rolDestinatario !== null && $rolDestinatario === $rolUsuarioActual;
+            }
+
+            return in_array($item['detalle'], $dependenciasPermitidas, true);
         }));
+    }
+
+    private function obtenerRolUsuarioActual(): ?int
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+
+        return !empty($usuarioActual['rol_id']) ? (int) $usuarioActual['rol_id'] : null;
+    }
+
+    private function obtenerRolDestinatarioOtros(int $origenId): ?int
+    {
+        $fila = $this->modeloPeticion->obtenerPorId($origenId);
+
+        return !empty($fila['rol_destinatario_id']) ? (int) $fila['rol_destinatario_id'] : null;
     }
 
     /**
