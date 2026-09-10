@@ -350,4 +350,11 @@ class GastoSinExcedentes
             'valor_total' => $datos['valor_total'],
         ]);
     }
+
+    public function eliminarAutomaticoPorId(int $id): bool
+    {
+        $consulta = $this->db->prepare('DELETE FROM gastos_sin_excedentes WHERE id = :id AND tipo_automatico IS NOT NULL');
+
+        return $consulta->execute(['id' => $id]);
+    }
 }

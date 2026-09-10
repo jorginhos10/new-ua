@@ -719,6 +719,17 @@ class UnisaludControlador
 
         foreach ($lineas as $tipo => $info) {
             $valor = round($totalIngresos * $info['porcentaje'] / 100, 2);
+            $existente = $this->modeloGasto->obtenerAutomaticoPorTipo($anioPresupuestalId, $tipo);
+
+            // Si ya no hay ingresos que la sustenten (p. ej. tras eliminar el último), la fila
+            // automática desaparece en vez de quedar visible en $0.00.
+            if ($valor <= 0) {
+                if ($existente !== null) {
+                    $this->modeloGasto->eliminarAutomaticoPorId((int) $existente['id']);
+                }
+                continue;
+            }
+
             $porcentajeTexto = rtrim(rtrim(number_format($info['porcentaje'], 2), '0'), '.');
 
             $categoria = $info['etiqueta'] . ' (' . $porcentajeTexto . '%)';
@@ -742,8 +753,6 @@ class UnisaludControlador
                 'valor_total' => $valor,
                 'meses' => (string) self::AUTOMATICO_MES,
             ];
-
-            $existente = $this->modeloGasto->obtenerAutomaticoPorTipo($anioPresupuestalId, $tipo);
 
             if ($existente !== null) {
                 $this->modeloGasto->actualizarAutomatico((int) $existente['id'], $datos);
