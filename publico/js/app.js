@@ -2579,6 +2579,129 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
+    var checkboxesPendientes = document.querySelectorAll('.checkbox-pendiente');
+    var checkboxPendientesTodos = document.getElementById('checkbox-pendientes-todos');
+
+    if (checkboxesPendientes.length === 0 && !checkboxPendientesTodos) {
+        return;
+    }
+
+    var barraAccionesPendientes = document.getElementById('barra-acciones-pendientes');
+    var anioIdPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.anioId : '';
+    var bandejaPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.bandeja : '';
+    var modoPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.modo : '';
+
+    var botonPendientesAprobar = document.getElementById('boton-pendientes-aprobar');
+    var botonPendientesArchivar = document.getElementById('boton-pendientes-archivar');
+
+    function obtenerSeleccionadosPendientes() {
+        return Array.prototype.filter.call(checkboxesPendientes, function (casilla) {
+            return casilla.checked;
+        });
+    }
+
+    function actualizarBotonesPendientes() {
+        var seleccionados = obtenerSeleccionadosPendientes();
+        var hay = seleccionados.length > 0;
+
+        if (botonPendientesAprobar) {
+            botonPendientesAprobar.disabled = !hay;
+        }
+        if (botonPendientesArchivar) {
+            botonPendientesArchivar.disabled = !hay;
+        }
+
+        if (checkboxPendientesTodos) {
+            checkboxPendientesTodos.checked = checkboxesPendientes.length > 0 && seleccionados.length === checkboxesPendientes.length;
+        }
+    }
+
+    checkboxesPendientes.forEach(function (casilla) {
+        casilla.addEventListener('change', actualizarBotonesPendientes);
+    });
+
+    if (checkboxPendientesTodos) {
+        checkboxPendientesTodos.addEventListener('change', function () {
+            checkboxesPendientes.forEach(function (casilla) {
+                casilla.checked = checkboxPendientesTodos.checked;
+            });
+            actualizarBotonesPendientes();
+        });
+    }
+
+    actualizarBotonesPendientes();
+
+    function enviarFormularioPendientes(accion, seleccionados) {
+        var formulario = document.createElement('form');
+        formulario.method = 'POST';
+        formulario.action = 'index.php?ruta=peticiones';
+        formulario.style.display = 'none';
+
+        function agregarCampo(nombre, valor) {
+            var campo = document.createElement('input');
+            campo.type = 'hidden';
+            campo.name = nombre;
+            campo.value = valor;
+            formulario.appendChild(campo);
+        }
+
+        agregarCampo('accion', accion);
+        agregarCampo('vista', 'pendientes');
+        agregarCampo('anio_id', anioIdPendientes || '');
+        agregarCampo('bandeja', bandejaPendientes || '');
+        if (modoPendientes === 'jerarquia') {
+            agregarCampo('modo', 'jerarquia');
+        }
+
+        seleccionados.forEach(function (casilla) {
+            agregarCampo('item_origen[]', casilla.dataset.origen || '');
+            agregarCampo('item_origen_id[]', casilla.dataset.origenId || '');
+            agregarCampo('item_tipo[]', casilla.dataset.tipo || '');
+            agregarCampo('item_detalle[]', casilla.dataset.detalle || '');
+            agregarCampo('item_cantidad[]', casilla.dataset.cantidad || '');
+            agregarCampo('item_valor[]', casilla.dataset.valor || '');
+            agregarCampo('item_ruta_ver[]', casilla.dataset.rutaVer || '');
+            agregarCampo('item_ruta_origen[]', casilla.dataset.rutaOrigen || '');
+        });
+
+        document.body.appendChild(formulario);
+        formulario.submit();
+    }
+
+    if (botonPendientesAprobar) {
+        botonPendientesAprobar.addEventListener('click', function () {
+            if (botonPendientesAprobar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosPendientes();
+
+            if (!window.confirm('¿Aceptar ' + seleccionados.length + ' ítem(s) seleccionado(s)? Pasarán a "Consolidado por tipo".')) {
+                return;
+            }
+
+            enviarFormularioPendientes('aprobar_pendientes_grupo', seleccionados);
+        });
+    }
+
+    if (botonPendientesArchivar) {
+        botonPendientesArchivar.addEventListener('click', function () {
+            if (botonPendientesArchivar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosPendientes();
+
+            if (!window.confirm('¿Archivar ' + seleccionados.length + ' ítem(s) seleccionado(s)? Pasarán a "Archivados".')) {
+                return;
+            }
+
+            enviarFormularioPendientes('archivar_pendientes_grupo', seleccionados);
+        });
+    }
+});
+
+document.addEventListener('DOMContentLoaded', function () {
     var checkboxes = document.querySelectorAll('.checkbox-consolidado');
     var checkboxTodos = document.getElementById('checkbox-consolidado-todos');
 

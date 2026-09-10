@@ -200,6 +200,12 @@ class PeticionesControlador
                 [$errorEliminar, $exitoEliminar] = $this->eliminarPendiente();
                 $_SESSION['peticiones_flash_error'] = $errorEliminar;
                 $_SESSION['peticiones_flash_exito'] = $exitoEliminar;
+            } elseif ($accion === 'aprobar_pendientes_grupo' || $accion === 'archivar_pendientes_grupo') {
+                [$errorPendGrupo, $exitoPendGrupo] = $this->procesarPendientesGrupo(
+                    $accion === 'aprobar_pendientes_grupo' ? 'aprobada' : 'archivada'
+                );
+                $_SESSION['peticiones_flash_error'] = $errorPendGrupo;
+                $_SESSION['peticiones_flash_exito'] = $exitoPendGrupo;
             } elseif ($accion === 'archivar_consolidado') {
                 [$errorArchivarCons, $exitoArchivarCons] = $this->archivarConsolidadoGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorArchivarCons;
@@ -1880,6 +1886,81 @@ class PeticionesControlador
         $verbo = $accionArchivada === 'aprobada' ? 'aceptaron' : 'archivaron';
 
         return ['', 'Se ' . $verbo . ' ' . count($visibles) . ' proyecto(s) de Perfil de proyectos.'];
+    }
+
+    /**
+     * Aprueba o archiva una selección arbitraria de ítems de "Pendientes" (seleccionar todo /
+     * aceptar seleccionados / archivar seleccionados). A diferencia de `archivarConsolidadoGrupo()`,
+     * los ítems pendientes no necesitan resolverse contra la BD: sus datos ya viajan completos desde
+     * la vista (igual que la acción individual "aprobar"/"archivar" de una sola fila).
+     * Si la fila resumen "Perfil de proyectos" (origen='necesidad_grupo') va en la selección, se
+     * delega en `procesarGrupoNecesidades()`, igual que hace la acción individual.
+     */
+    private function procesarPendientesGrupo(string $accionArchivada): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+        $tipos = $_POST['item_tipo'] ?? [];
+        $detalles = $_POST['item_detalle'] ?? [];
+        $cantidades = $_POST['item_cantidad'] ?? [];
+        $valores = $_POST['item_valor'] ?? [];
+        $rutasVer = $_POST['item_ruta_ver'] ?? [];
+        $rutasOrigen = $_POST['item_ruta_origen'] ?? [];
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem pendiente.', ''];
+        }
+
+        $procesados = 0;
+        $mensajesExtra = [];
+
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+
+            if ($origen === 'necesidad_grupo') {
+                [, $exitoGrupoNecesidades] = $this->procesarGrupoNecesidades($accionArchivada);
+                if ($exitoGrupoNecesidades !== '') {
+                    $mensajesExtra[] = $exitoGrupoNecesidades;
+                }
+                continue;
+            }
+
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+
+            $this->modeloArchivada->archivar([
+                'origen' => $origen,
+                'origen_id' => $origenId,
+                'accion' => $accionArchivada,
+                'tipo' => $tipos[$indice] ?? '',
+                'detalle' => $detalles[$indice] ?? '',
+                'cantidad' => ($cantidades[$indice] ?? '') !== '' ? $cantidades[$indice] : null,
+                'valor' => ($valores[$indice] ?? '') !== '' ? (float) $valores[$indice] : null,
+                'ruta_ver' => $rutasVer[$indice] ?? 'index.php?ruta=peticiones',
+                'ruta_origen' => $rutasOrigen[$indice] ?? null,
+            ]);
+
+            $this->modeloHistorial->registrar(
+                $origen,
+                $origenId,
+                $accionArchivada,
+                $accionArchivada === 'aprobada' ? 'Consolidado (aceptar seleccionados)' : 'Archivado (archivar seleccionados)'
+            );
+
+            $procesados++;
+        }
+
+        if ($procesados === 0 && empty($mensajesExtra)) {
+            return ['No se pudo procesar ningún ítem.', ''];
+        }
+
+        $verbo = $accionArchivada === 'aprobada' ? 'aceptaron' : 'archivaron';
+        $mensaje = $procesados > 0 ? 'Se ' . $verbo . ' ' . $procesados . ' ítem(s) pendiente(s).' : '';
+
+        if (!empty($mensajesExtra)) {
+            $mensaje = trim($mensaje . ' ' . implode(' ', $mensajesExtra));
+        }
+
+        return ['', $mensaje];
     }
 
     private function construirPendientes(int $anioPresupuestalId, array $dependenciasPermitidas): array

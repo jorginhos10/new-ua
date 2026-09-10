@@ -53,6 +53,12 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=archivar" class="pestana<?= $vista === 'archivar' ? ' activa' : '' ?>">Archivados</a>
                 <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=enviadas" class="pestana<?= $vista === 'enviadas' ? ' activa' : '' ?>">Enviadas</a>
             </div>
+            <?php if ($vista === 'pendientes'): ?>
+            <div class="grupo-acciones-encabezado" id="barra-acciones-pendientes" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>" data-modo="<?= $modoJerarquia ? 'jerarquia' : '' ?>">
+                <button type="button" id="boton-pendientes-aprobar" class="boton-accion boton-accion-enviar" disabled>Aceptar seleccionados</button>
+                <button type="button" id="boton-pendientes-archivar" class="boton-accion boton-accion-editar" disabled>Archivar seleccionados</button>
+            </div>
+            <?php endif; ?>
             <?php if ($vista === 'consolidado'): ?>
             <div class="grupo-acciones-encabezado" id="barra-acciones-consolidado" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>">
                 <button type="button" id="boton-consolidado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
@@ -114,6 +120,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th><input type="checkbox" id="checkbox-pendientes-todos" <?= empty(array_filter($pendientes, static fn (array $i): bool => $i['estado_item'] === 'pendiente')) ? 'disabled' : '' ?>></th>
                         <th>Tipo</th>
                         <th>Origen</th>
                         <th>Cantidad</th>
@@ -125,6 +132,22 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <tbody>
                     <?php foreach ($pendientes as $item): ?>
                     <tr>
+                        <td>
+                            <?php if ($item['estado_item'] === 'pendiente'): ?>
+                            <input
+                                type="checkbox"
+                                class="checkbox-pendiente"
+                                data-origen="<?= htmlspecialchars($item['origen']) ?>"
+                                data-origen-id="<?= (int) $item['origen_id'] ?>"
+                                data-tipo="<?= htmlspecialchars($item['tipo']) ?>"
+                                data-detalle="<?= htmlspecialchars($item['detalle']) ?>"
+                                data-cantidad="<?= $item['cantidad'] !== null ? htmlspecialchars((string) $item['cantidad']) : '' ?>"
+                                data-valor="<?= $item['valor'] !== null ? htmlspecialchars((string) $item['valor']) : '' ?>"
+                                data-ruta-ver="<?= htmlspecialchars($item['ruta_ver']) ?>"
+                                data-ruta-origen="<?= htmlspecialchars($item['ruta_origen']) ?>"
+                            >
+                            <?php endif; ?>
+                        </td>
                         <td><?= htmlspecialchars($item['tipo']) ?></td>
                         <td><?= htmlspecialchars($item['detalle']) ?></td>
                         <td><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
@@ -182,7 +205,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     <?php endforeach; ?>
                     <?php if (empty($pendientes)): ?>
                     <tr>
-                        <td colspan="6">No hay elementos por debajo de tu dependencia para este año.</td>
+                        <td colspan="7">No hay elementos por debajo de tu dependencia para este año.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
@@ -193,6 +216,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
+                        <th><input type="checkbox" id="checkbox-pendientes-todos" <?= empty($pendientes) ? 'disabled' : '' ?>></th>
                         <th>Tipo</th>
                         <th>Origen</th>
                         <th>Cantidad</th>
@@ -203,6 +227,20 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <tbody>
                     <?php foreach ($pendientes as $item): ?>
                     <tr>
+                        <td>
+                            <input
+                                type="checkbox"
+                                class="checkbox-pendiente"
+                                data-origen="<?= htmlspecialchars($item['origen']) ?>"
+                                data-origen-id="<?= (int) $item['origen_id'] ?>"
+                                data-tipo="<?= htmlspecialchars($item['tipo']) ?>"
+                                data-detalle="<?= htmlspecialchars($item['detalle']) ?>"
+                                data-cantidad="<?= $item['cantidad'] !== null ? htmlspecialchars((string) $item['cantidad']) : '' ?>"
+                                data-valor="<?= $item['valor'] !== null ? htmlspecialchars((string) $item['valor']) : '' ?>"
+                                data-ruta-ver="<?= htmlspecialchars($item['ruta_ver']) ?>"
+                                data-ruta-origen="<?= htmlspecialchars($item['ruta_origen']) ?>"
+                            >
+                        </td>
                         <td>
                             <?= htmlspecialchars($item['tipo']) ?>
                             <?php if (!empty($item['redireccionado'])): ?>
@@ -272,7 +310,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     <?php endforeach; ?>
                     <?php if (empty($pendientes)): ?>
                     <tr>
-                        <td colspan="5">No hay peticiones pendientes para este año.</td>
+                        <td colspan="6">No hay peticiones pendientes para este año.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
