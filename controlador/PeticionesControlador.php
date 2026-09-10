@@ -314,15 +314,19 @@ class PeticionesControlador
         $consolidado = [];
         foreach ($aprobados as $indice => $item) {
             $tipo = $item['tipo'];
-            if (!isset($consolidado[$tipo])) {
-                $consolidado[$tipo] = ['tipo' => $tipo, 'cantidad' => 0, 'ruta' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones', 'items' => [], 'puede_editar' => true];
+            // Las peticiones "Otros" (solicitudes_peticiones) son variantes entre sí — cada una
+            // tiene su propio concepto y valor — así que no se fusionan en una sola fila sumada
+            // como el resto de tipos; cada una queda como su propia fila en Consolidado.
+            $claveGrupo = $item['origen'] === 'otros' ? $tipo . '#' . $item['origen_id'] : $tipo;
+            if (!isset($consolidado[$claveGrupo])) {
+                $consolidado[$claveGrupo] = ['tipo' => $tipo, 'cantidad' => 0, 'ruta' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones', 'items' => [], 'puede_editar' => true];
             }
-            $consolidado[$tipo]['cantidad']++;
+            $consolidado[$claveGrupo]['cantidad']++;
             $filaDetalle = $filasDetalladasConsolidado[$indice] ?? [];
             if (empty($filaDetalle['puede_editar'])) {
-                $consolidado[$tipo]['puede_editar'] = false;
+                $consolidado[$claveGrupo]['puede_editar'] = false;
             }
-            $consolidado[$tipo]['items'][] = [
+            $consolidado[$claveGrupo]['items'][] = [
                 'origen' => $item['origen'],
                 'origen_id' => (int) $item['origen_id'],
                 'tipo' => $tipo,
