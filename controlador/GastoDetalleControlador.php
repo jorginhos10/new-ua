@@ -1,5 +1,6 @@
 <?php
 
+require_once __DIR__ . '/../modelo/Gasto.php';
 require_once __DIR__ . '/../modelo/GastoExtension.php';
 require_once __DIR__ . '/../modelo/GastoPostgrado.php';
 require_once __DIR__ . '/../modelo/GastoUnisalud.php';
@@ -20,6 +21,7 @@ require_once __DIR__ . '/../modelo/Dependencia.php';
 class GastoDetalleControlador
 {
     private const ORIGENES = [
+        'gasto_principal' => ['modelo' => 'Gasto', 'titulo' => 'Egreso — Gasto', 'esGasto' => true],
         'gasto_extension' => ['modelo' => 'GastoExtension', 'titulo' => 'Egreso — Extensión', 'esGasto' => true],
         'gasto_postgrado' => ['modelo' => 'GastoPostgrado', 'titulo' => 'Egreso — Postgrado', 'esGasto' => true],
         'gasto_unisalud' => ['modelo' => 'GastoUnisalud', 'titulo' => 'Egreso — Unidad de Salud', 'esGasto' => true],

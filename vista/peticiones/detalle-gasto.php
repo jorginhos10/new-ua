@@ -25,8 +25,10 @@ $nombresMeses = [
                 <dt>Dependencia</dt>
                 <dd><?= htmlspecialchars($registro['dependencia']) ?></dd>
 
+                <?php if (isset($registro['categoria'])): ?>
                 <dt>Categoría</dt>
                 <dd><?= htmlspecialchars($registro['categoria']) ?></dd>
+                <?php endif; ?>
 
                 <dt>Sede</dt>
                 <dd><?= htmlspecialchars($registro['sede_codigo'] . ' - ' . $registro['sede_nombre']) ?></dd>

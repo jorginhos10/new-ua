@@ -312,6 +312,34 @@ class Gasto
         return $fila !== false ? $fila : null;
     }
 
+    /**
+     * Igual que obtenerPorId(), pero con los códigos/nombres de sede, línea, motor, proyecto y
+     * rubro ya resueltos — la forma que necesita la vista de detalle de solo lectura en Peticiones
+     * (GastoDetalleControlador), igual que GastoExtension::obtenerDetallePorId() y homólogos.
+     */
+    public function obtenerDetallePorId(int $id): ?array
+    {
+        $consulta = $this->db->prepare(
+            'SELECT g.*,
+                    s.codigo AS sede_codigo, s.nombre AS sede_nombre,
+                    l.codigo AS linea_codigo, l.nombre AS linea_nombre,
+                    m.codigo AS motor_codigo, m.nombre AS motor_nombre,
+                    p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
+                    r.codigo AS rubro_codigo, r.descripcion AS rubro_descripcion
+             FROM gastos g
+             JOIN sedes s ON s.id = g.sede_id
+             JOIN lineas l ON l.id = g.linea_id
+             JOIN motores m ON m.id = g.motor_id
+             JOIN proyectos p ON p.id = g.proyecto_id
+             LEFT JOIN rubros r ON r.id = g.rubro_id
+             WHERE g.id = :id'
+        );
+        $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
     public function actualizar(int $id, array $datos): bool
     {
         $consulta = $this->db->prepare(

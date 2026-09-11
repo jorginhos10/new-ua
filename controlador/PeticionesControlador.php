@@ -853,9 +853,7 @@ class PeticionesControlador
                 }
 
                 $tipo = ($fuente['origen'] === 'gasto_extension' && !empty($fila['autogestion_nombre'])) ? ucfirst($fila['autogestion_nombre']) : $fuente['tipo'];
-                $rutaVerItem = $fuente['origen'] === 'gasto_principal'
-                    ? $fuente['ruta']
-                    : 'index.php?ruta=gasto-detalle&origen=' . $fuente['origen'] . '&id=' . (int) $fila['id'];
+                $rutaVerItem = 'index.php?ruta=gasto-detalle&origen=' . $fuente['origen'] . '&id=' . (int) $fila['id'];
                 $items[] = ['origen' => $fuente['origen'], 'facultad' => $fila['dependencia']] + $filaJerarquia($fuente['origen'], (int) $fila['id'], $tipo, $fila['dependencia'], $fila['cantidad'] . ' und.', (float) $fila['valor_total'], $rutaVerItem, $fuente['ruta']);
             }
         }
@@ -1651,10 +1649,6 @@ class PeticionesControlador
             return 'index.php?ruta=perfil-proyectos';
         }
 
-        if ($origen === 'gasto_principal') {
-            return 'index.php?ruta=gastos';
-        }
-
         return 'index.php?ruta=gasto-detalle&origen=' . $origen . '&id=' . $origenId;
     }
 
@@ -2048,7 +2042,7 @@ class PeticionesControlador
         $pendientesGasto = [];
 
         foreach ($this->modeloGasto->obtenerEnviadosPorAnio($anioPresupuestalId) as $fila) {
-            $filaGasto = $this->filaGasto('gasto_principal', $fila, 'Gasto', 'index.php?ruta=gastos', 'index.php?ruta=gastos');
+            $filaGasto = $this->filaGasto('gasto_principal', $fila, 'Gasto', 'index.php?ruta=gastos', 'index.php?ruta=gasto-detalle&origen=gasto_principal&id=' . (int) $fila['id'] . $volver);
             if ($filaGasto !== null) {
                 $pendientesGasto[] = $filaGasto;
             }
@@ -2216,9 +2210,7 @@ class PeticionesControlador
                     continue;
                 }
 
-                $rutaVer = $fuente['origen'] === 'gasto_principal'
-                    ? 'index.php?ruta=gastos'
-                    : 'index.php?ruta=gasto-detalle&origen=' . $fuente['origen'] . '&id=' . (int) $fila['id'];
+                $rutaVer = 'index.php?ruta=gasto-detalle&origen=' . $fuente['origen'] . '&id=' . (int) $fila['id'];
                 $cantidad = isset($fila['cantidad']) ? $fila['cantidad'] . ' und.' : null;
                 $agregar($fuente['origen'], (int) $fila['id'], $fuente['tipo'], $fila['dependencia_destino'] ?? $fila['dependencia'], $cantidad, (float) $fila['valor_total'], $rutaVer);
             }
