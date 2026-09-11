@@ -9,9 +9,15 @@ $nombresMeses = [
 ?>
 
     <div class="tarjeta">
-        <div class="cabecera-modulo">
-            <h1><?= htmlspecialchars($tituloPagina) ?></h1>
-            <a href="<?= htmlspecialchars($rutaVolver) ?>" class="boton-agregar">&larr; <?= htmlspecialchars($etiquetaVolver) ?></a>
+        <div class="cabecera-modulo barra-modulo">
+            <div class="barra-modulo-zona1-y-2">
+                <a href="#" onclick="history.back(); return false;" class="boton-icono-accion barra-modulo-volver" data-tooltip="Volver" title="Volver">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                </a>
+                <div class="cabecera-modulo-titulo">
+                    <h1><?= htmlspecialchars($tituloPagina) ?></h1>
+                </div>
+            </div>
         </div>
 
         <span class="badge-rol badge-<?= htmlspecialchars($registro['estado']) ?>">
