@@ -2632,6 +2632,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var botonPendientesVer = document.getElementById('boton-pendientes-ver');
     var botonPendientesAprobar = document.getElementById('boton-pendientes-aprobar');
     var botonPendientesArchivar = document.getElementById('boton-pendientes-archivar');
+    var botonPendientesEnviar = document.getElementById('boton-pendientes-enviar');
     var botonPendientesEliminar = document.getElementById('boton-pendientes-eliminar');
 
     function obtenerSeleccionadosPendientes() {
@@ -2652,6 +2653,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (botonPendientesArchivar) {
             botonPendientesArchivar.disabled = !hay;
+        }
+        if (botonPendientesEnviar) {
+            botonPendientesEnviar.disabled = !hay;
         }
         if (botonPendientesEliminar) {
             botonPendientesEliminar.disabled = !hay;
@@ -2677,6 +2681,36 @@ document.addEventListener('DOMContentLoaded', function () {
 
     actualizarBotonesPendientes();
 
+    function obtenerItemsPlanosPendientes(seleccionados) {
+        var items = [];
+
+        seleccionados.forEach(function (casilla) {
+            if (casilla.dataset.items) {
+                var propios = [];
+                try {
+                    propios = JSON.parse(casilla.dataset.items);
+                } catch (error) {
+                    propios = [];
+                }
+                items = items.concat(propios);
+                return;
+            }
+
+            items.push({
+                origen: casilla.dataset.origen || '',
+                origen_id: casilla.dataset.origenId || '',
+                tipo: casilla.dataset.tipo || '',
+                detalle: casilla.dataset.detalle || '',
+                cantidad: casilla.dataset.cantidad || '',
+                valor: casilla.dataset.valor || '',
+                ruta_ver: casilla.dataset.rutaVer || '',
+                ruta_origen: casilla.dataset.rutaOrigen || ''
+            });
+        });
+
+        return items;
+    }
+
     function enviarFormularioPendientes(accion, seleccionados) {
         var formulario = document.createElement('form');
         formulario.method = 'POST';
@@ -2699,35 +2733,15 @@ document.addEventListener('DOMContentLoaded', function () {
             agregarCampo('modo', 'jerarquia');
         }
 
-        seleccionados.forEach(function (casilla) {
-            if (casilla.dataset.items) {
-                var items = [];
-                try {
-                    items = JSON.parse(casilla.dataset.items);
-                } catch (error) {
-                    items = [];
-                }
-                items.forEach(function (item) {
-                    agregarCampo('item_origen[]', item.origen || '');
-                    agregarCampo('item_origen_id[]', item.origen_id || '');
-                    agregarCampo('item_tipo[]', item.tipo || '');
-                    agregarCampo('item_detalle[]', item.detalle || '');
-                    agregarCampo('item_cantidad[]', item.cantidad || '');
-                    agregarCampo('item_valor[]', item.valor || '');
-                    agregarCampo('item_ruta_ver[]', item.ruta_ver || '');
-                    agregarCampo('item_ruta_origen[]', item.ruta_origen || '');
-                });
-                return;
-            }
-
-            agregarCampo('item_origen[]', casilla.dataset.origen || '');
-            agregarCampo('item_origen_id[]', casilla.dataset.origenId || '');
-            agregarCampo('item_tipo[]', casilla.dataset.tipo || '');
-            agregarCampo('item_detalle[]', casilla.dataset.detalle || '');
-            agregarCampo('item_cantidad[]', casilla.dataset.cantidad || '');
-            agregarCampo('item_valor[]', casilla.dataset.valor || '');
-            agregarCampo('item_ruta_ver[]', casilla.dataset.rutaVer || '');
-            agregarCampo('item_ruta_origen[]', casilla.dataset.rutaOrigen || '');
+        obtenerItemsPlanosPendientes(seleccionados).forEach(function (item) {
+            agregarCampo('item_origen[]', item.origen || '');
+            agregarCampo('item_origen_id[]', item.origen_id || '');
+            agregarCampo('item_tipo[]', item.tipo || '');
+            agregarCampo('item_detalle[]', item.detalle || '');
+            agregarCampo('item_cantidad[]', item.cantidad || '');
+            agregarCampo('item_valor[]', item.valor || '');
+            agregarCampo('item_ruta_ver[]', item.ruta_ver || '');
+            agregarCampo('item_ruta_origen[]', item.ruta_origen || '');
         });
 
         document.body.appendChild(formulario);
@@ -2797,6 +2811,68 @@ document.addEventListener('DOMContentLoaded', function () {
             enviarFormularioPendientes('eliminar_pendientes_grupo', seleccionados);
         });
     }
+
+    var modalEnviarPendientes = document.getElementById('modal-enviar-pendientes');
+
+    if (botonPendientesEnviar && modalEnviarPendientes) {
+        var botonCerrarEnviarPendientes = document.getElementById('boton-cerrar-modal-enviar-pendientes');
+        var contenedorCamposItemsEnviarPendientes = document.getElementById('enviar-pendientes-campos-items');
+        var campoDependenciaEnviarPendientes = document.getElementById('enviar-pendientes-dependencia');
+        var campoRolEnviarPendientes = document.getElementById('enviar-pendientes-rol');
+        var campoUsuarioEnviarPendientes = document.getElementById('enviar-pendientes-usuario');
+        var campoDestinatarioComboEnviarPendientes = document.getElementById('enviar-pendientes-destinatario');
+
+        var cerrarEnviarPendientes = function () {
+            modalEnviarPendientes.classList.remove('abierto');
+        };
+
+        botonPendientesEnviar.addEventListener('click', function () {
+            if (botonPendientesEnviar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosPendientes();
+            var items = obtenerItemsPlanosPendientes(seleccionados);
+
+            contenedorCamposItemsEnviarPendientes.innerHTML = '';
+            items.forEach(function (item) {
+                ['origen', 'origen_id', 'tipo', 'detalle', 'cantidad', 'valor', 'ruta_ver', 'ruta_origen'].forEach(function (clave) {
+                    var campo = document.createElement('input');
+                    campo.type = 'hidden';
+                    campo.name = 'item_' + clave + '[]';
+                    campo.value = item[clave] || '';
+                    contenedorCamposItemsEnviarPendientes.appendChild(campo);
+                });
+            });
+
+            campoDependenciaEnviarPendientes.value = '';
+            if (campoDestinatarioComboEnviarPendientes) {
+                campoDestinatarioComboEnviarPendientes.value = '';
+            }
+            campoRolEnviarPendientes.value = '';
+            campoUsuarioEnviarPendientes.value = '';
+            campoDependenciaEnviarPendientes.dispatchEvent(new Event('change'));
+
+            modalEnviarPendientes.classList.add('abierto');
+            campoDependenciaEnviarPendientes.focus();
+        });
+
+        if (botonCerrarEnviarPendientes) {
+            botonCerrarEnviarPendientes.addEventListener('click', cerrarEnviarPendientes);
+        }
+
+        modalEnviarPendientes.addEventListener('click', function (evento) {
+            if (evento.target === modalEnviarPendientes) {
+                cerrarEnviarPendientes();
+            }
+        });
+
+        document.addEventListener('keydown', function (evento) {
+            if (evento.key === 'Escape') {
+                cerrarEnviarPendientes();
+            }
+        });
+    }
 });
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -2811,6 +2887,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var botonEditar = document.getElementById('boton-consolidado-editar');
     var botonRedireccionar = document.getElementById('boton-consolidado-redireccionar');
     var botonArchivar = document.getElementById('boton-consolidado-archivar');
+    var botonDesconsolidar = document.getElementById('boton-consolidado-desconsolidar');
 
     var barraAccionesConsolidado = document.getElementById('barra-acciones-consolidado');
     var anioIdConsolidado = barraAccionesConsolidado ? barraAccionesConsolidado.dataset.anioId : '';
@@ -2875,6 +2952,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (botonArchivar) {
             botonArchivar.disabled = !ningunoRedireccionado;
+        }
+        if (botonDesconsolidar) {
+            botonDesconsolidar.disabled = !ningunoRedireccionado;
         }
 
         if (checkboxTodos) {
@@ -3208,6 +3288,49 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             agregarCampo('accion', 'archivar_consolidado');
+            agregarCampo('vista', 'consolidado');
+            agregarCampo('anio_id', anioIdConsolidado || '');
+            agregarCampo('bandeja', bandejaConsolidado || '');
+
+            items.forEach(function (item) {
+                agregarCampo('item_origen[]', item.origen || '');
+                agregarCampo('item_origen_id[]', item.origen_id || '');
+            });
+
+            document.body.appendChild(formulario);
+            formulario.submit();
+        });
+    }
+
+    // ---- Desconsolidar (uno o varios grupos a la vez): deshace la aprobación — el ítem deja de
+    // estar en "aprobada" y vuelve a Pendientes, donde queda agrupado por dependencia de origen. ----
+    if (botonDesconsolidar) {
+        botonDesconsolidar.addEventListener('click', function () {
+            if (botonDesconsolidar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionados();
+            var items = itemsDeSeleccion(seleccionados);
+
+            if (!window.confirm('¿Desconsolidar ' + items.length + ' ítem(s) seleccionado(s)? Volverán a "Pendientes", separados por dependencia de origen.')) {
+                return;
+            }
+
+            var formulario = document.createElement('form');
+            formulario.method = 'POST';
+            formulario.action = 'index.php?ruta=peticiones';
+            formulario.style.display = 'none';
+
+            function agregarCampo(nombre, valor) {
+                var campo = document.createElement('input');
+                campo.type = 'hidden';
+                campo.name = nombre;
+                campo.value = valor;
+                formulario.appendChild(campo);
+            }
+
+            agregarCampo('accion', 'desconsolidar_grupo');
             agregarCampo('vista', 'consolidado');
             agregarCampo('anio_id', anioIdConsolidado || '');
             agregarCampo('bandeja', bandejaConsolidado || '');

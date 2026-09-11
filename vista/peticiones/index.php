@@ -58,6 +58,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <button type="button" id="boton-pendientes-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
                 <button type="button" id="boton-pendientes-aprobar" class="boton-accion boton-accion-enviar" disabled>Aceptar seleccionados</button>
                 <button type="button" id="boton-pendientes-archivar" class="boton-accion boton-accion-editar" disabled>Archivar seleccionados</button>
+                <button type="button" id="boton-pendientes-enviar" class="boton-agregar" disabled>Enviar</button>
                 <button type="button" id="boton-pendientes-eliminar" class="boton-accion boton-accion-eliminar" disabled>Eliminar seleccionados</button>
             </div>
             <?php endif; ?>
@@ -65,6 +66,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             <div class="grupo-acciones-encabezado" id="barra-acciones-consolidado" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>">
                 <button type="button" id="boton-consolidado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
                 <button type="button" id="boton-consolidado-editar" class="boton-accion boton-accion-editar" disabled>Editar</button>
+                <button type="button" id="boton-consolidado-desconsolidar" class="boton-accion boton-accion-eliminar" disabled>Desconsolidar</button>
                 <button type="button" id="boton-consolidado-archivar" class="boton-accion boton-accion-editar" disabled>Archivar</button>
                 <button type="button" id="boton-consolidado-redireccionar" class="boton-agregar" disabled>Enviar</button>
             </div>
@@ -590,6 +592,52 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     </select>
                     <input type="hidden" id="enviar-archivado-rol" name="rol_destinatario_id">
                     <input type="hidden" id="enviar-archivado-usuario" name="usuario_destinatario_id">
+                </div>
+
+                <button type="submit" class="boton-enviar">Enviar</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-enviar-pendientes" class="modal-fondo">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Enviar seleccionados</h2>
+                <button type="button" id="boton-cerrar-modal-enviar-pendientes" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <form method="POST" action="index.php?ruta=peticiones" class="form-necesidad form-confirmar-envio" data-campo-dependencia="enviar-pendientes-dependencia" data-campo-rol="enviar-pendientes-rol">
+                <input type="hidden" name="accion" value="enviar_pendientes_grupo">
+                <input type="hidden" name="vista" value="pendientes">
+                <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
+                <div id="enviar-pendientes-campos-items"></div>
+
+                <div class="campo">
+                    <label for="enviar-pendientes-dependencia_buscador">Dependencia *</label>
+                    <?php
+                    $idPrefijoDependencia = '';
+                    $nombreCampoDependencia = 'dependencia_destino';
+                    $idBaseDependenciaOverride = 'enviar-pendientes-dependencia';
+                    $dependenciasOpciones = $dependenciasSugeridas;
+                    require __DIR__ . '/../parciales/selector-dependencia.php';
+                    ?>
+                </div>
+
+                <div class="campo">
+                    <label for="enviar-pendientes-destinatario">¿A quién se enviará? *</label>
+                    <select
+                        id="enviar-pendientes-destinatario"
+                        class="selector-rol-destinatario"
+                        data-campo-dependencia="enviar-pendientes-dependencia"
+                        data-campo-rol-oculto="enviar-pendientes-rol"
+                        data-campo-usuario-oculto="enviar-pendientes-usuario"
+                        required
+                    >
+                        <option value="">Selecciona a quién enviarlo</option>
+                    </select>
+                    <input type="hidden" id="enviar-pendientes-rol" name="rol_destinatario_id">
+                    <input type="hidden" id="enviar-pendientes-usuario" name="usuario_destinatario_id">
                 </div>
 
                 <button type="submit" class="boton-enviar">Enviar</button>

@@ -210,10 +210,18 @@ class PeticionesControlador
                 [$errorEliminarGrupo, $exitoEliminarGrupo] = $this->eliminarPendientesGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorEliminarGrupo;
                 $_SESSION['peticiones_flash_exito'] = $exitoEliminarGrupo;
+            } elseif ($accion === 'enviar_pendientes_grupo') {
+                [$errorEnviarPend, $exitoEnviarPend] = $this->enviarPendientesGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorEnviarPend;
+                $_SESSION['peticiones_flash_exito'] = $exitoEnviarPend;
             } elseif ($accion === 'archivar_consolidado') {
                 [$errorArchivarCons, $exitoArchivarCons] = $this->archivarConsolidadoGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorArchivarCons;
                 $_SESSION['peticiones_flash_exito'] = $exitoArchivarCons;
+            } elseif ($accion === 'desconsolidar_grupo') {
+                [$errorDesconsolidar, $exitoDesconsolidar] = $this->desconsolidarGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorDesconsolidar;
+                $_SESSION['peticiones_flash_exito'] = $exitoDesconsolidar;
             } elseif ($accion === 'consolidar_archivado') {
                 [$errorConsolidarArch, $exitoConsolidarArch] = $this->consolidarArchivadoGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorConsolidarArch;
@@ -1197,6 +1205,46 @@ class PeticionesControlador
     }
 
     /**
+     * Desconsolida una selección arbitraria de ítems ya aprobados (Consolidado por tipo): elimina
+     * su fila de peticiones_archivadas, lo que los devuelve a "no procesado" — vuelven a aparecer
+     * en Pendientes, ahí agrupados por dependencia de origen (agruparPendientesPorDependencia())
+     * en vez de fusionados por tipo.
+     */
+    private function desconsolidarGrupo(): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem para desconsolidar.', ''];
+        }
+
+        $aprobadosPorClave = $this->obtenerPorAccionYClave('aprobada');
+        $desconsolidados = 0;
+
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+            $clave = $origen . ':' . $origenId;
+
+            if (!isset($aprobadosPorClave[$clave])) {
+                continue;
+            }
+
+            $this->modeloArchivada->eliminarPorOrigen($origen, $origenId);
+            $this->modeloHistorial->registrar($origen, $origenId, 'desconsolidada', 'Desconsolidado desde Consolidado, vuelve a Pendientes');
+
+            $desconsolidados++;
+        }
+
+        if ($desconsolidados === 0) {
+            return ['No se pudo desconsolidar ningún ítem.', ''];
+        }
+
+        return ['', 'Se desconsolidaron ' . $desconsolidados . ' ítem(s). Vuelven a aparecer en Pendientes.'];
+    }
+
+    /**
      * Consolida una selección arbitraria de ítems archivados: no hace falta reenviar tipo/detalle/
      * cantidad/valor porque ya están guardados en la fila archivada — solo se re-archiva la misma
      * fila cambiando accion a 'aprobada' (mismo upsert por origen+origen_id que ya usa `archivar()`).
@@ -1573,6 +1621,101 @@ class PeticionesControlador
         }
 
         return ['', 'Se enviaron ' . count($items) . ' ítem(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaNombre . '").'];
+    }
+
+    /**
+     * Envía (redirecciona) una selección arbitraria de ítems de "Pendientes" a otra
+     * dependencia/rol, en vez de dejarlos para su destinatario original — igual patrón que
+     * enviarArchivadoGrupo()/enviarEnviadoGrupo(), pero operando directamente sobre pendientes
+     * (que pueden no tener todavía ninguna fila en peticiones_archivadas, por eso
+     * redireccionarDirecto() y no redireccionarItems()).
+     */
+    private function enviarPendientesGrupo(): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+        $tipos = $_POST['item_tipo'] ?? [];
+        $detalles = $_POST['item_detalle'] ?? [];
+        $cantidades = $_POST['item_cantidad'] ?? [];
+        $valores = $_POST['item_valor'] ?? [];
+        $rutasVer = $_POST['item_ruta_ver'] ?? [];
+        $rutasOrigen = $_POST['item_ruta_origen'] ?? [];
+        $dependenciaNombre = trim($_POST['dependencia_destino'] ?? '');
+        $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem para enviar.', ''];
+        }
+
+        if ($dependenciaNombre === '') {
+            return ['Selecciona la dependencia a la que se enviará.', ''];
+        }
+
+        $rol = $rolDestinatarioId > 0 ? $this->modeloRol->obtenerPorId($rolDestinatarioId) : null;
+
+        if ($rol === null) {
+            return ['Selecciona el rol al que se enviará.', ''];
+        }
+
+        $dependencia = $this->modeloDependencia->obtenerPorNombre($dependenciaNombre);
+        $destinatarios = $dependencia !== null
+            ? $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependencia['id'], $rolDestinatarioId)
+            : [];
+
+        if (empty($destinatarios)) {
+            return ['No se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '" para notificar.', ''];
+        }
+
+        if (count($destinatarios) > 1) {
+            $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
+            $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
+
+            if (empty($destinatarios)) {
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '". Selecciona a quién remitir la petición.', ''];
+            }
+        }
+
+        $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
+        $enviados = 0;
+
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+
+            if ($origen === '' || $origen === 'necesidad_grupo') {
+                continue;
+            }
+
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+
+            $this->modeloArchivada->redireccionarDirecto([
+                'origen' => $origen,
+                'origen_id' => $origenId,
+                'tipo' => $tipos[$indice] ?? '',
+                'detalle' => $detalles[$indice] ?? '',
+                'cantidad' => ($cantidades[$indice] ?? '') !== '' ? $cantidades[$indice] : null,
+                'valor' => ($valores[$indice] ?? '') !== '' ? (float) $valores[$indice] : null,
+                'ruta_ver' => $rutasVer[$indice] ?? 'index.php?ruta=peticiones',
+                'ruta_origen' => $rutasOrigen[$indice] ?? null,
+            ], $dependenciaNombre, $rolDestinatarioId, $usuarioDestinatarioResuelto);
+
+            $this->modeloHistorial->registrar($origen, $origenId, 'redireccionada', 'Enviado desde Pendientes a ' . $dependenciaNombre);
+
+            $enviados++;
+        }
+
+        if ($enviados === 0) {
+            return ['No se pudo enviar ningún ítem.', ''];
+        }
+
+        $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
+        $asunto = 'Petición enviada';
+        $cuerpo = 'Se te enviaron ' . $enviados . ' ítem(s) para tu gestión en "' . $dependenciaNombre . '".';
+
+        foreach ($destinatarios as $destinatario) {
+            $this->modeloMensaje->crear($remitenteId, (int) $destinatario['id'], $asunto, $cuerpo);
+        }
+
+        return ['', 'Se enviaron ' . $enviados . ' ítem(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaNombre . '").'];
     }
 
     private function obtenerPorAccionYClave(string $accion): array
