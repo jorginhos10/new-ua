@@ -26,7 +26,7 @@
 
             <div class="campo">
                 <label>Rol</label>
-                <input type="text" value="<?= htmlspecialchars(ucfirst((string) $usuario['rol'])) ?>" disabled>
+                <input type="text" value="<?= htmlspecialchars(ucfirst((string) $usuario['rol_id'])) ?>" disabled>
             </div>
 
             <div class="campo">
