@@ -378,28 +378,30 @@ class GastoControlador
             }
 
             $dependenciaNombre = $datos['dependencia'];
-
-            if (!array_key_exists($dependenciaNombre, $totalesAcumulados)) {
-                $totalesAcumulados[$dependenciaNombre] = $this->modeloGasto->obtenerTotalEjecutadoPorAnioYDependencia(
-                    $datos['anio_presupuestal_id'],
-                    $dependenciaNombre
-                );
-            }
-
             $dependenciaObjetivo = $this->modeloDependencia->obtenerPorNombre($dependenciaNombre);
 
             if ($dependenciaObjetivo !== null && empty($dependenciaObjetivo['es_raiz_superadmin'])) {
                 $presupuestos = $this->modeloPresupuestoDependencia->obtenerPorAnio($datos['anio_presupuestal_id']);
-                $techoDependencia = (float) ($presupuestos[(int) $dependenciaObjetivo['id']]['techo'] ?? 0);
-                $nuevoValor = $datos['cantidad'] * $datos['costo_unitario'];
+                $resuelto = $this->resolverDependenciaConTecho($dependenciaObjetivo, $presupuestos);
 
-                if ($totalesAcumulados[$dependenciaNombre] + $nuevoValor > $techoDependencia) {
-                    $disponible = max(0, $techoDependencia - $totalesAcumulados[$dependenciaNombre]);
-                    $errores[] = "Fila $numeroFilaExcel: supera el techo presupuestal de \"$dependenciaNombre\". Disponible: " . number_format($disponible, 2) . '.';
-                    continue;
+                if ($resuelto !== null) {
+                    $claveAcumulado = $resuelto['dependencia']['id'] . ':' . $datos['anio_presupuestal_id'];
+
+                    if (!array_key_exists($claveAcumulado, $totalesAcumulados)) {
+                        $gastadoPorDependencia = $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($datos['anio_presupuestal_id']);
+                        $totalesAcumulados[$claveAcumulado] = $this->calcularGastadoConHerencia($resuelto['dependencia'], $presupuestos, $gastadoPorDependencia);
+                    }
+
+                    $nuevoValor = $datos['cantidad'] * $datos['costo_unitario'];
+
+                    if ($totalesAcumulados[$claveAcumulado] + $nuevoValor > $resuelto['techo']) {
+                        $disponible = max(0, $resuelto['techo'] - $totalesAcumulados[$claveAcumulado]);
+                        $errores[] = "Fila $numeroFilaExcel: supera el techo presupuestal de \"" . $resuelto['dependencia']['nombre'] . "\". Disponible: " . number_format($disponible, 2) . '.';
+                        continue;
+                    }
+
+                    $totalesAcumulados[$claveAcumulado] += $nuevoValor;
                 }
-
-                $totalesAcumulados[$dependenciaNombre] += $nuevoValor;
             }
 
             $filasValidas[] = $datos;
@@ -704,19 +706,21 @@ class GastoControlador
 
     private function validarLimiteTecho(array $datos, int $idExcluir = 0): string
     {
-        $dependenciaObjetivo = $this->modeloDependencia->obtenerPorNombre($datos['dependencia']);
+        $dependenciaFila = $this->modeloDependencia->obtenerPorNombre($datos['dependencia']);
 
-        if ($dependenciaObjetivo === null || !empty($dependenciaObjetivo['es_raiz_superadmin'])) {
+        if ($dependenciaFila === null) {
             return '';
         }
 
-        $dependenciaObjetivoId = (int) $dependenciaObjetivo['id'];
-
         $presupuestosDependencia = $this->modeloPresupuestoDependencia->obtenerPorAnio($datos['anio_presupuestal_id']);
-        $techoDependencia = $presupuestosDependencia[$dependenciaObjetivoId]['techo'] ?? null;
-        $techoDependencia = $techoDependencia !== null ? (float) $techoDependencia : 0.0;
+        $resuelto = $this->resolverDependenciaConTecho($dependenciaFila, $presupuestosDependencia);
 
-        $totalActual = $this->modeloGasto->obtenerTotalEjecutadoPorAnioYDependencia($datos['anio_presupuestal_id'], $dependenciaObjetivo['nombre']);
+        if ($resuelto === null) {
+            return '';
+        }
+
+        $gastadoPorDependencia = $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($datos['anio_presupuestal_id']);
+        $totalActual = $this->calcularGastadoConHerencia($resuelto['dependencia'], $presupuestosDependencia, $gastadoPorDependencia);
 
         if ($idExcluir > 0) {
             $existente = $this->modeloGasto->obtenerPorId($idExcluir);
@@ -728,13 +732,94 @@ class GastoControlador
 
         $nuevoValor = $datos['cantidad'] * $datos['costo_unitario'];
 
-        if ($totalActual + $nuevoValor > $techoDependencia) {
-            $disponible = max(0, $techoDependencia - $totalActual);
+        if ($totalActual + $nuevoValor > $resuelto['techo']) {
+            $disponible = max(0, $resuelto['techo'] - $totalActual);
 
-            return 'Este gasto supera el techo presupuestal de "' . $dependenciaObjetivo['nombre'] . '". Disponible: ' . number_format($disponible, 2) . '.';
+            return 'Este gasto supera el techo presupuestal de "' . $resuelto['dependencia']['nombre'] . '". Disponible: ' . number_format($disponible, 2) . '.';
         }
 
         return '';
+    }
+
+    /**
+     * Encuentra la dependencia contra la que debe validarse el techo para una fila de gasto: la
+     * propia dependencia de la fila si tiene techo propio (> 0) — un presupuesto delegado de
+     * forma independiente —, o si no, la dependencia del USUARIO que está enviando el gasto (no
+     * un ancestro cualquiera de la jerarquía). Así, un Gestor puede, dentro de su propia tabla de
+     * gastos, atribuir una fila a una dependencia hija suya sin techo propio (se cuenta contra su
+     * propio techo); pero si quien envía no tiene techo propio asignado, no puede registrar
+     * gastos en absoluto, sin importar si algún ancestro más arriba en la jerarquía sí lo tiene —
+     * el techo de un ancestro lejano no es del usuario que envía. validarDependenciaPermitida()
+     * ya garantiza, antes de llegar aquí, que la dependencia de la fila es la propia del usuario
+     * o una descendiente suya.
+     */
+    private function resolverDependenciaConTecho(array $dependenciaFila, array $presupuestosDependencia): ?array
+    {
+        if (!empty($dependenciaFila['es_raiz_superadmin'])) {
+            return null;
+        }
+
+        $techoPropio = $presupuestosDependencia[(int) $dependenciaFila['id']]['techo'] ?? null;
+
+        if ($techoPropio !== null && (float) $techoPropio > 0) {
+            return ['dependencia' => $dependenciaFila, 'techo' => (float) $techoPropio];
+        }
+
+        $dependenciaUsuario = $this->obtenerDependenciaUsuarioActual();
+
+        if ($dependenciaUsuario === null || !empty($dependenciaUsuario['es_raiz_superadmin'])) {
+            return null;
+        }
+
+        $techoUsuario = $presupuestosDependencia[(int) $dependenciaUsuario['id']]['techo'] ?? null;
+
+        if ($techoUsuario !== null && (float) $techoUsuario > 0) {
+            return ['dependencia' => $dependenciaUsuario, 'techo' => (float) $techoUsuario];
+        }
+
+        return null;
+    }
+
+    private function obtenerDependenciaUsuarioActual(): ?array
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+        $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
+
+        return $dependenciaUsuarioId !== null ? $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId) : null;
+    }
+
+    /**
+     * Total ya ejecutado contra el techo de $dependencia: lo gastado directamente en ella más lo
+     * gastado en cualquier descendiente que no tenga techo propio (esos descendientes "heredan"
+     * el techo del padre, así que su gasto cuenta contra el mismo límite) — mismo criterio que
+     * TechosControlador::calcularAsignadoArbol(), aplicado solo a la rama de $dependencia.
+     */
+    private function calcularGastadoConHerencia(array $dependencia, array $presupuestosDependencia, array $gastadoPorDependencia): float
+    {
+        $total = $gastadoPorDependencia[$dependencia['nombre']] ?? 0.0;
+
+        return $total + $this->sumarGastadoDescendientesSinTecho(
+            $this->modeloDependencia->construirArbolDescendientes((int) $dependencia['id']),
+            $presupuestosDependencia,
+            $gastadoPorDependencia
+        );
+    }
+
+    private function sumarGastadoDescendientesSinTecho(array $nodos, array $presupuestosDependencia, array $gastadoPorDependencia): float
+    {
+        $total = 0.0;
+
+        foreach ($nodos as $nodo) {
+            $techoNodo = $presupuestosDependencia[(int) $nodo['dependencia']['id']]['techo'] ?? null;
+            $gastadoRama = ($gastadoPorDependencia[$nodo['dependencia']['nombre']] ?? 0.0)
+                + $this->sumarGastadoDescendientesSinTecho($nodo['hijos'], $presupuestosDependencia, $gastadoPorDependencia);
+
+            if ($techoNodo === null || (float) $techoNodo <= 0) {
+                $total += $gastadoRama;
+            }
+        }
+
+        return $total;
     }
 
     private function eliminar(): array
