@@ -323,6 +323,14 @@ switch ($ruta) {
         require __DIR__ . '/vista/login/logout.php';
         break;
 
+    case 'recuperar-password-solicitar':
+        (new LoginControlador())->recuperarSolicitar();
+        break;
+
+    case 'recuperar-password-confirmar':
+        (new LoginControlador())->recuperarConfirmar();
+        break;
+
     case 'login':
     default:
         (new LoginControlador())->index();
