@@ -152,7 +152,7 @@ class GastoUnisalud
         return array_column($consulta->fetchAll(), 'dependencia');
     }
 
-    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaDestinoNombre, int $rolDestinatarioId, array $dependenciasOrigen): int
+    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaDestinoNombre, int $rolDestinatarioId, array $dependenciasOrigen, ?int $usuarioDestinatarioId = null): int
     {
         if (empty($dependenciasOrigen)) {
             return 0;
@@ -162,6 +162,7 @@ class GastoUnisalud
             'anio_presupuestal_id' => $anioPresupuestalId,
             'dependencia' => $dependenciaDestinoNombre,
             'rol_destinatario_id' => $rolDestinatarioId,
+            'usuario_destinatario_id' => $usuarioDestinatarioId,
         ];
         $marcadores = [];
         foreach (array_values($dependenciasOrigen) as $indice => $dependenciaOrigen) {
@@ -175,7 +176,7 @@ class GastoUnisalud
         // año, no solo los del usuario que envía.
         $consulta = $this->db->prepare(
             "UPDATE gastos_unisalud
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia_destino = :dependencia
+             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, usuario_destinatario_id = :usuario_destinatario_id, dependencia_destino = :dependencia
              WHERE anio_presupuestal_id = :anio_presupuestal_id
                 AND estado = 'borrador'
                 AND dependencia IN (" . implode(', ', $marcadores) . ')'

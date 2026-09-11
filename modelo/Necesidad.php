@@ -204,16 +204,17 @@ class Necesidad
         return $this->adjuntarBeneficiarios($consulta->fetchAll());
     }
 
-    public function enviarTodosBorrador(string $dependenciaDestinoNombre, int $rolDestinatarioId): int
+    public function enviarTodosBorrador(string $dependenciaDestinoNombre, int $rolDestinatarioId, ?int $usuarioDestinatarioId = null): int
     {
         $consulta = $this->db->prepare(
             "UPDATE necesidades_academicas
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia_destino = :dependencia
+             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, usuario_destinatario_id = :usuario_destinatario_id, dependencia_destino = :dependencia
              WHERE estado = 'borrador'"
         );
         $consulta->execute([
             'dependencia' => $dependenciaDestinoNombre,
             'rol_destinatario_id' => $rolDestinatarioId,
+            'usuario_destinatario_id' => $usuarioDestinatarioId,
         ]);
 
         return $consulta->rowCount();

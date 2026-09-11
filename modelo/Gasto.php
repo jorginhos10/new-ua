@@ -123,13 +123,14 @@ class Gasto
      * dependencia se sustituye por la de quien realmente remite ($dependenciaNombre), porque una
      * dependencia Dumi no tiene a quién notificarle ni cómo hacerle seguimiento en Peticiones.
      */
-    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaNombre, int $rolDestinatarioId, array $dependenciasDumi = []): int
+    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaNombre, int $rolDestinatarioId, array $dependenciasDumi = [], ?int $usuarioDestinatarioId = null): int
     {
         $nombres = array_values(array_unique(array_merge([$dependenciaNombre], $dependenciasDumi)));
         $marcadores = [];
         $parametros = [
             'anio_presupuestal_id' => $anioPresupuestalId,
             'rol_destinatario_id' => $rolDestinatarioId,
+            'usuario_destinatario_id' => $usuarioDestinatarioId,
             'dependencia_final' => $dependenciaNombre,
         ];
 
@@ -141,7 +142,7 @@ class Gasto
 
         $consulta = $this->db->prepare(
             "UPDATE gastos
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia_destino = :dependencia_final
+             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, usuario_destinatario_id = :usuario_destinatario_id, dependencia_destino = :dependencia_final
              WHERE anio_presupuestal_id = :anio_presupuestal_id
                 AND dependencia IN (" . implode(', ', $marcadores) . ")
                 AND estado = 'borrador'

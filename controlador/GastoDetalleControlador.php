@@ -82,7 +82,19 @@ class GastoDetalleControlador
             return false;
         }
 
-        $usuarioActual = (new Usuario())->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+        $usuarioActualId = (int) ($_SESSION['usuario_id'] ?? 0);
+
+        // Si se guardó un destinatario específico (porque había más de uno con ese rol en la
+        // dependencia), solo esa persona puede abrir este detalle directamente por URL — si no
+        // (envíos antiguos, o cuando había un único destinatario), se mantiene el chequeo de
+        // siempre por rol+dependencia.
+        $usuarioDestinatarioId = !empty($registro['usuario_destinatario_id']) ? (int) $registro['usuario_destinatario_id'] : null;
+
+        if ($usuarioDestinatarioId !== null && $usuarioDestinatarioId !== $usuarioActualId) {
+            return false;
+        }
+
+        $usuarioActual = (new Usuario())->obtenerPorId($usuarioActualId);
         $rolUsuarioId = !empty($usuarioActual['rol_id']) ? (int) $usuarioActual['rol_id'] : null;
 
         if ($rolUsuarioId !== $rolDestinatarioId) {

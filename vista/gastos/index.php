@@ -448,19 +448,24 @@ require __DIR__ . '/../parciales/encabezado.php';
                     $idPrefijoDependencia = 'enviar-todo-gasto-';
                     $nombreCampoDependencia = 'dependencia';
                     $dependenciasOpciones = $dependenciasConTipo;
-                    $dependenciaDataSelectRol = 'enviar-todo-gasto-rol';
                     require __DIR__ . '/../parciales/selector-dependencia.php';
                     ?>
                 </div>
 
                 <div class="campo">
-                    <label for="enviar-todo-gasto-rol">Rol al que se enviará *</label>
-                    <select id="enviar-todo-gasto-rol" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
+                    <label for="enviar-todo-gasto-destinatario">¿A quién se enviará? *</label>
+                    <select
+                        id="enviar-todo-gasto-destinatario"
+                        class="selector-rol-destinatario"
+                        data-campo-dependencia="enviar-todo-gasto-dependencia"
+                        data-campo-rol-oculto="enviar-todo-gasto-rol"
+                        data-campo-usuario-oculto="enviar-todo-gasto-usuario"
+                        required
+                    >
+                        <option value="">Selecciona a quién enviarlo</option>
                     </select>
+                    <input type="hidden" id="enviar-todo-gasto-rol" name="rol_destinatario_id">
+                    <input type="hidden" id="enviar-todo-gasto-usuario" name="usuario_destinatario_id">
                 </div>
 
                 <button type="submit" class="boton-enviar">Enviar todo</button>

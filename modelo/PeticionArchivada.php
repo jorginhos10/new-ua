@@ -127,7 +127,7 @@ class PeticionArchivada
      * Redirecciona ítems puntuales (por origen+origen_id), en vez de un tipo completo — permite
      * redireccionar una selección arbitraria de ítems consolidados, de uno o varios tipos a la vez.
      */
-    public function redireccionarItems(array $pares, string $dependenciaDestino, string $accionOrigen = 'aprobada'): int
+    public function redireccionarItems(array $pares, string $dependenciaDestino, string $accionOrigen = 'aprobada', ?int $rolDestinatarioId = null, ?int $usuarioDestinatarioId = null): int
     {
         if (empty($pares)) {
             return 0;
@@ -135,7 +135,8 @@ class PeticionArchivada
 
         $consulta = $this->db->prepare(
             "UPDATE peticiones_archivadas
-             SET accion = 'redireccionada', redireccionado_a_dependencia = :destino
+             SET accion = 'redireccionada', redireccionado_a_dependencia = :destino,
+                 rol_destinatario_id = :rol_destinatario_id, usuario_destinatario_id = :usuario_destinatario_id
              WHERE origen = :origen AND origen_id = :origen_id AND accion = :accion_origen"
         );
 
@@ -143,6 +144,8 @@ class PeticionArchivada
         foreach ($pares as $par) {
             $consulta->execute([
                 'destino' => $dependenciaDestino,
+                'rol_destinatario_id' => $rolDestinatarioId,
+                'usuario_destinatario_id' => $usuarioDestinatarioId,
                 'origen' => $par['origen'],
                 'origen_id' => $par['origen_id'],
                 'accion_origen' => $accionOrigen,
@@ -159,13 +162,13 @@ class PeticionArchivada
      * no tener todavía ninguna fila (a diferencia de `redireccionarItems()`, que exige
      * una fila previa con un accion concreto).
      */
-    public function redireccionarDirecto(array $datos, string $dependenciaDestino): bool
+    public function redireccionarDirecto(array $datos, string $dependenciaDestino, ?int $rolDestinatarioId = null, ?int $usuarioDestinatarioId = null): bool
     {
         $consulta = $this->db->prepare(
             'INSERT INTO peticiones_archivadas
-                (origen, origen_id, accion, tipo, detalle, cantidad, valor, ruta_ver, ruta_origen, redireccionado_a_dependencia)
+                (origen, origen_id, accion, tipo, detalle, cantidad, valor, ruta_ver, ruta_origen, redireccionado_a_dependencia, rol_destinatario_id, usuario_destinatario_id)
              VALUES
-                (:origen, :origen_id, \'redireccionada\', :tipo, :detalle, :cantidad, :valor, :ruta_ver, :ruta_origen, :destino)
+                (:origen, :origen_id, \'redireccionada\', :tipo, :detalle, :cantidad, :valor, :ruta_ver, :ruta_origen, :destino, :rol_destinatario_id, :usuario_destinatario_id)
              ON DUPLICATE KEY UPDATE
                 accion = \'redireccionada\',
                 tipo = VALUES(tipo),
@@ -174,7 +177,9 @@ class PeticionArchivada
                 valor = VALUES(valor),
                 ruta_ver = VALUES(ruta_ver),
                 ruta_origen = VALUES(ruta_origen),
-                redireccionado_a_dependencia = VALUES(redireccionado_a_dependencia)'
+                redireccionado_a_dependencia = VALUES(redireccionado_a_dependencia),
+                rol_destinatario_id = VALUES(rol_destinatario_id),
+                usuario_destinatario_id = VALUES(usuario_destinatario_id)'
         );
 
         return $consulta->execute([
@@ -187,6 +192,8 @@ class PeticionArchivada
             'ruta_ver' => $datos['ruta_ver'],
             'ruta_origen' => $datos['ruta_origen'] ?? null,
             'destino' => $dependenciaDestino,
+            'rol_destinatario_id' => $rolDestinatarioId,
+            'usuario_destinatario_id' => $usuarioDestinatarioId,
         ]);
     }
 

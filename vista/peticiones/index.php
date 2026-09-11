@@ -55,8 +55,10 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             </div>
             <?php if ($vista === 'pendientes'): ?>
             <div class="grupo-acciones-encabezado" id="barra-acciones-pendientes" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>" data-modo="<?= $modoJerarquia ? 'jerarquia' : '' ?>">
+                <button type="button" id="boton-pendientes-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
                 <button type="button" id="boton-pendientes-aprobar" class="boton-accion boton-accion-enviar" disabled>Aceptar seleccionados</button>
                 <button type="button" id="boton-pendientes-archivar" class="boton-accion boton-accion-editar" disabled>Archivar seleccionados</button>
+                <button type="button" id="boton-pendientes-eliminar" class="boton-accion boton-accion-eliminar" disabled>Eliminar seleccionados</button>
             </div>
             <?php endif; ?>
             <?php if ($vista === 'consolidado'): ?>
@@ -221,7 +223,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                         <th class="th-ordenable">Origen</th>
                         <th class="th-ordenable columna-derecha">Cantidad</th>
                         <th class="th-ordenable columna-derecha">Valor</th>
-                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -230,7 +231,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     <tr>
                         <td>
                             <?php if ($esGrupo): ?>
-                            <input type="checkbox" class="checkbox-pendiente" data-items="<?= htmlspecialchars(json_encode($item['items'])) ?>">
+                            <input type="checkbox" class="checkbox-pendiente" data-items="<?= htmlspecialchars(json_encode($item['items'])) ?>" data-ruta-ver="<?= htmlspecialchars($item['ruta_ver']) ?>">
                             <?php else: ?>
                             <input
                                 type="checkbox"
@@ -255,112 +256,11 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                         <td><?= htmlspecialchars($item['detalle']) ?></td>
                         <td class="columna-derecha" data-orden="<?= $item['cantidad'] !== null ? (float) $item['cantidad'] : 0 ?>"><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
                         <td class="columna-derecha" data-orden="<?= $item['valor'] ?? 0 ?>"><?= $item['valor'] !== null ? '$ ' . number_format($item['valor'], 2) : '—' ?></td>
-                        <td class="celda-acciones">
-                            <div class="acciones-fila">
-                                <a href="<?= htmlspecialchars($item['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>
-                                <form method="POST" action="index.php?ruta=peticiones">
-                                    <?php if ($esGrupo): ?>
-                                    <input type="hidden" name="accion" value="aprobar_pendientes_grupo">
-                                    <?php else: ?>
-                                    <input type="hidden" name="accion" value="aprobar">
-                                    <?php endif; ?>
-                                    <input type="hidden" name="vista" value="pendientes">
-                                    <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
-                                    <?php if ($esGrupo): ?>
-                                    <?php foreach ($item['items'] as $sub): ?>
-                                    <input type="hidden" name="item_origen[]" value="<?= htmlspecialchars($sub['origen']) ?>">
-                                    <input type="hidden" name="item_origen_id[]" value="<?= (int) $sub['origen_id'] ?>">
-                                    <input type="hidden" name="item_tipo[]" value="<?= htmlspecialchars($sub['tipo']) ?>">
-                                    <input type="hidden" name="item_detalle[]" value="<?= htmlspecialchars($sub['detalle']) ?>">
-                                    <input type="hidden" name="item_cantidad[]" value="<?= htmlspecialchars((string) $sub['cantidad']) ?>">
-                                    <input type="hidden" name="item_valor[]" value="<?= $sub['valor'] !== null ? htmlspecialchars((string) $sub['valor']) : '' ?>">
-                                    <input type="hidden" name="item_ruta_ver[]" value="<?= htmlspecialchars($sub['ruta_ver']) ?>">
-                                    <input type="hidden" name="item_ruta_origen[]" value="<?= htmlspecialchars($sub['ruta_origen']) ?>">
-                                    <?php endforeach; ?>
-                                    <?php else: ?>
-                                    <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
-                                    <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
-                                    <input type="hidden" name="tipo" value="<?= htmlspecialchars($item['tipo']) ?>">
-                                    <input type="hidden" name="detalle" value="<?= htmlspecialchars($item['detalle']) ?>">
-                                    <input type="hidden" name="cantidad" value="<?= htmlspecialchars((string) $item['cantidad']) ?>">
-                                    <input type="hidden" name="valor" value="<?= $item['valor'] !== null ? htmlspecialchars((string) $item['valor']) : '' ?>">
-                                    <input type="hidden" name="ruta_ver" value="<?= htmlspecialchars($item['ruta_ver']) ?>">
-                                    <input type="hidden" name="ruta_origen" value="<?= htmlspecialchars($item['ruta_origen']) ?>">
-                                    <?php endif; ?>
-                                    <button type="submit" class="boton-accion boton-accion-enviar"><?= htmlspecialchars($item['accion_aprobar']) ?></button>
-                                </form>
-                                <?php if (!empty($item['redireccionado'])): ?>
-                                <form method="POST" action="index.php?ruta=peticiones" onsubmit="return confirm('¿Rechazar este ítem redireccionado y devolverlo a la dependencia de origen?');">
-                                    <input type="hidden" name="accion" value="rechazar_redireccion">
-                                    <input type="hidden" name="vista" value="pendientes">
-                                    <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
-                                    <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
-                                    <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
-                                    <button type="submit" class="boton-accion boton-accion-eliminar"><?= htmlspecialchars($item['accion_rechazar']) ?></button>
-                                </form>
-                                <?php else: ?>
-                                <button type="button" class="boton-accion boton-accion-eliminar"><?= htmlspecialchars($item['accion_rechazar']) ?></button>
-                                <?php endif; ?>
-                                <form method="POST" action="index.php?ruta=peticiones">
-                                    <?php if ($esGrupo): ?>
-                                    <input type="hidden" name="accion" value="archivar_pendientes_grupo">
-                                    <?php else: ?>
-                                    <input type="hidden" name="accion" value="archivar">
-                                    <?php endif; ?>
-                                    <input type="hidden" name="vista" value="pendientes">
-                                    <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
-                                    <?php if ($esGrupo): ?>
-                                    <?php foreach ($item['items'] as $sub): ?>
-                                    <input type="hidden" name="item_origen[]" value="<?= htmlspecialchars($sub['origen']) ?>">
-                                    <input type="hidden" name="item_origen_id[]" value="<?= (int) $sub['origen_id'] ?>">
-                                    <input type="hidden" name="item_tipo[]" value="<?= htmlspecialchars($sub['tipo']) ?>">
-                                    <input type="hidden" name="item_detalle[]" value="<?= htmlspecialchars($sub['detalle']) ?>">
-                                    <input type="hidden" name="item_cantidad[]" value="<?= htmlspecialchars((string) $sub['cantidad']) ?>">
-                                    <input type="hidden" name="item_valor[]" value="<?= $sub['valor'] !== null ? htmlspecialchars((string) $sub['valor']) : '' ?>">
-                                    <input type="hidden" name="item_ruta_ver[]" value="<?= htmlspecialchars($sub['ruta_ver']) ?>">
-                                    <input type="hidden" name="item_ruta_origen[]" value="<?= htmlspecialchars($sub['ruta_origen']) ?>">
-                                    <?php endforeach; ?>
-                                    <?php else: ?>
-                                    <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
-                                    <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
-                                    <input type="hidden" name="tipo" value="<?= htmlspecialchars($item['tipo']) ?>">
-                                    <input type="hidden" name="detalle" value="<?= htmlspecialchars($item['detalle']) ?>">
-                                    <input type="hidden" name="cantidad" value="<?= htmlspecialchars((string) $item['cantidad']) ?>">
-                                    <input type="hidden" name="valor" value="<?= $item['valor'] !== null ? htmlspecialchars((string) $item['valor']) : '' ?>">
-                                    <input type="hidden" name="ruta_ver" value="<?= htmlspecialchars($item['ruta_ver']) ?>">
-                                    <?php endif; ?>
-                                    <button type="submit" class="boton-accion">Archivar</button>
-                                </form>
-                                <form method="POST" action="index.php?ruta=peticiones" onsubmit="return confirm('¿Eliminar permanentemente el/los registro(s) de origen de este ítem? Esta acción no se puede deshacer.');">
-                                    <?php if ($esGrupo): ?>
-                                    <input type="hidden" name="accion" value="eliminar_pendientes_grupo">
-                                    <?php else: ?>
-                                    <input type="hidden" name="accion" value="eliminar_pendiente">
-                                    <?php endif; ?>
-                                    <input type="hidden" name="vista" value="pendientes">
-                                    <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
-                                    <?php if ($esGrupo): ?>
-                                    <?php foreach ($item['items'] as $sub): ?>
-                                    <input type="hidden" name="item_origen[]" value="<?= htmlspecialchars($sub['origen']) ?>">
-                                    <input type="hidden" name="item_origen_id[]" value="<?= (int) $sub['origen_id'] ?>">
-                                    <?php endforeach; ?>
-                                    <?php else: ?>
-                                    <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
-                                    <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
-                                    <?php endif; ?>
-                                    <button type="submit" class="boton-accion boton-accion-eliminar">Eliminar</button>
-                                </form>
-                            </div>
-                        </td>
                     </tr>
                     <?php endforeach; ?>
                     <?php if (empty($pendientes)): ?>
                     <tr>
-                        <td colspan="6">No hay peticiones pendientes para este año.</td>
+                        <td colspan="5">No hay peticiones pendientes para este año.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
@@ -626,32 +526,24 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     $nombreCampoDependencia = 'dependencia_destino';
                     $idBaseDependenciaOverride = 'redireccionar-consolidado-dependencia';
                     $dependenciasOpciones = $dependenciasSugeridas;
-                    $dependenciaDataSelectRol = 'redireccionar-consolidado-rol';
                     require __DIR__ . '/../parciales/selector-dependencia.php';
                     ?>
                 </div>
 
                 <div class="campo">
-                    <label for="redireccionar-consolidado-rol">Rol *</label>
-                    <select id="redireccionar-consolidado-rol" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo" style="display:none;">
-                    <label for="redireccionar-consolidado-destinatario">¿A quién exactamente? *</label>
+                    <label for="redireccionar-consolidado-destinatario">¿A quién se enviará? *</label>
                     <select
                         id="redireccionar-consolidado-destinatario"
-                        name="usuario_destinatario_id"
-                        class="selector-destinatario"
+                        class="selector-rol-destinatario"
                         data-campo-dependencia="redireccionar-consolidado-dependencia"
-                        data-campo-rol="redireccionar-consolidado-rol"
+                        data-campo-rol-oculto="redireccionar-consolidado-rol"
+                        data-campo-usuario-oculto="redireccionar-consolidado-usuario"
+                        required
                     >
                         <option value="">Selecciona a quién enviarlo</option>
                     </select>
+                    <input type="hidden" id="redireccionar-consolidado-rol" name="rol_destinatario_id">
+                    <input type="hidden" id="redireccionar-consolidado-usuario" name="usuario_destinatario_id">
                 </div>
 
                 <button type="submit" class="boton-enviar">Redireccionar</button>
@@ -680,32 +572,24 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     $nombreCampoDependencia = 'dependencia_destino';
                     $idBaseDependenciaOverride = 'enviar-archivado-dependencia';
                     $dependenciasOpciones = $dependenciasSugeridas;
-                    $dependenciaDataSelectRol = 'enviar-archivado-rol';
                     require __DIR__ . '/../parciales/selector-dependencia.php';
                     ?>
                 </div>
 
                 <div class="campo">
-                    <label for="enviar-archivado-rol">Rol *</label>
-                    <select id="enviar-archivado-rol" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo" style="display:none;">
-                    <label for="enviar-archivado-destinatario">¿A quién exactamente? *</label>
+                    <label for="enviar-archivado-destinatario">¿A quién se enviará? *</label>
                     <select
                         id="enviar-archivado-destinatario"
-                        name="usuario_destinatario_id"
-                        class="selector-destinatario"
+                        class="selector-rol-destinatario"
                         data-campo-dependencia="enviar-archivado-dependencia"
-                        data-campo-rol="enviar-archivado-rol"
+                        data-campo-rol-oculto="enviar-archivado-rol"
+                        data-campo-usuario-oculto="enviar-archivado-usuario"
+                        required
                     >
                         <option value="">Selecciona a quién enviarlo</option>
                     </select>
+                    <input type="hidden" id="enviar-archivado-rol" name="rol_destinatario_id">
+                    <input type="hidden" id="enviar-archivado-usuario" name="usuario_destinatario_id">
                 </div>
 
                 <button type="submit" class="boton-enviar">Enviar</button>
@@ -782,32 +666,24 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     $nombreCampoDependencia = 'dependencia_destino';
                     $idBaseDependenciaOverride = 'enviar-enviado-dependencia';
                     $dependenciasOpciones = $dependenciasSugeridas;
-                    $dependenciaDataSelectRol = 'enviar-enviado-rol';
                     require __DIR__ . '/../parciales/selector-dependencia.php';
                     ?>
                 </div>
 
                 <div class="campo">
-                    <label for="enviar-enviado-rol">Rol *</label>
-                    <select id="enviar-enviado-rol" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo" style="display:none;">
-                    <label for="enviar-enviado-destinatario">¿A quién exactamente? *</label>
+                    <label for="enviar-enviado-destinatario">¿A quién se enviará? *</label>
                     <select
                         id="enviar-enviado-destinatario"
-                        name="usuario_destinatario_id"
-                        class="selector-destinatario"
+                        class="selector-rol-destinatario"
                         data-campo-dependencia="enviar-enviado-dependencia"
-                        data-campo-rol="enviar-enviado-rol"
+                        data-campo-rol-oculto="enviar-enviado-rol"
+                        data-campo-usuario-oculto="enviar-enviado-usuario"
+                        required
                     >
                         <option value="">Selecciona a quién enviarlo</option>
                     </select>
+                    <input type="hidden" id="enviar-enviado-rol" name="rol_destinatario_id">
+                    <input type="hidden" id="enviar-enviado-usuario" name="usuario_destinatario_id">
                 </div>
 
                 <button type="submit" class="boton-enviar">Enviar</button>

@@ -471,7 +471,14 @@ class SolicitudControlador
             $this->modeloMensaje->crear($remitenteId, (int) $destinatario['id'], $asunto, $cuerpo);
         }
 
-        $modelo->enviar($id, $rol['nombre']);
+        // Solo se guarda un destinatario específico cuando el envío está acotado a una
+        // dependencia y quedó resuelto a exactamente una persona — para 'otros' (broadcast a
+        // todos los que tengan ese rol) se deja NULL a propósito (ver comentario arriba).
+        $usuarioDestinatarioResuelto = ($dependenciaNombre !== null && isset($destinatarios[0]))
+            ? (int) $destinatarios[0]['id']
+            : null;
+
+        $modelo->enviar($id, $rol['nombre'], $usuarioDestinatarioResuelto);
 
         $mensajeDestino = count($destinatarios) === 1
             ? $destinatarios[0]['nombre']

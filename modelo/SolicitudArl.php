@@ -122,12 +122,12 @@ class SolicitudArl
         return $consulta->execute(['id' => $id]);
     }
 
-    public function enviar(int $id, string $dependenciaDestino): bool
+    public function enviar(int $id, string $dependenciaDestino, ?int $usuarioDestinatarioId = null): bool
     {
         $consulta = $this->db->prepare(
-            "UPDATE solicitudes_arl SET estado = 'enviada', enviada_a = :enviada_a WHERE id = :id"
+            "UPDATE solicitudes_arl SET estado = 'enviada', enviada_a = :enviada_a, usuario_destinatario_id = :usuario_destinatario_id WHERE id = :id"
         );
 
-        return $consulta->execute(['id' => $id, 'enviada_a' => $dependenciaDestino]);
+        return $consulta->execute(['id' => $id, 'enviada_a' => $dependenciaDestino, 'usuario_destinatario_id' => $usuarioDestinatarioId]);
     }
 }

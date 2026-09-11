@@ -661,10 +661,14 @@ class GastoControlador
                 return true;
             }
 
+            // Si se guardó un destinatario específico (porque había más de uno con ese rol en la
+            // dependencia), solo esa persona lo ve — si no (envíos antiguos, o cuando había un
+            // único destinatario), se mantiene la visibilidad por rol+dependencia de siempre.
             return $item['estado'] === 'enviado'
                 && $rolUsuarioId !== null
                 && (int) ($item['rol_destinatario_id'] ?? 0) === $rolUsuarioId
-                && $item['dependencia_destino'] === $dependenciaUsuarioNombre;
+                && $item['dependencia_destino'] === $dependenciaUsuarioNombre
+                && (empty($item['usuario_destinatario_id']) || (int) $item['usuario_destinatario_id'] === $usuarioActualId);
         }));
     }
 
@@ -837,7 +841,12 @@ class GastoControlador
             }
         }
 
-        $enviados = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaNombre, $rolDestinatarioId, $nombresDumi);
+        // Una vez resuelto (por ser el único con ese rol, o por desambiguación arriba), se guarda
+        // quién es exactamente el destinatario — si no, cualquiera con ese rol en la dependencia
+        // vería la petición en Pendientes, no solo la persona elegida.
+        $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
+
+        $enviados = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaNombre, $rolDestinatarioId, $nombresDumi, $usuarioDestinatarioResuelto);
 
         if ($enviados === 0) {
             return ['No hay gastos en borrador para enviar en "' . $dependenciaNombre . '".', ''];

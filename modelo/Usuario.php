@@ -104,15 +104,19 @@ class Usuario
     }
 
     /**
-     * Mapa [nombre de dependencia][rol_id] => [nombres de usuario], para mostrar en el frontend
-     * a quién se le va a enviar/redireccionar algo antes de confirmar, sin ir al servidor.
+     * Mapa [nombre de dependencia][rol_id] => [usuarios], para mostrar en el frontend a quién se
+     * le va a enviar/redireccionar algo antes de confirmar, sin ir al servidor. Cada usuario trae
+     * también el nombre de su rol y su correo, para poder mostrar en un solo campo combinado
+     * "Rol · Nombre (correo)" al elegir un destinatario específico.
      */
     public function obtenerMapaPorDependenciaYRol(): array
     {
         $consulta = $this->db->query(
-            "SELECT d.nombre AS dependencia_nombre, u.rol_id, u.id AS usuario_id, u.nombre AS usuario_nombre
+            "SELECT d.nombre AS dependencia_nombre, u.rol_id, r.nombre AS rol_nombre,
+                    u.id AS usuario_id, u.nombre AS usuario_nombre, u.correo AS usuario_correo
              FROM usuarios u
              JOIN dependencias d ON d.id = u.dependencia_id
+             JOIN roles r ON r.id = u.rol_id
              WHERE u.rol_id IS NOT NULL"
         );
 
@@ -121,6 +125,8 @@ class Usuario
             $mapa[$fila['dependencia_nombre']][(string) $fila['rol_id']][] = [
                 'id' => (int) $fila['usuario_id'],
                 'nombre' => $fila['usuario_nombre'],
+                'correo' => $fila['usuario_correo'],
+                'rol_nombre' => $fila['rol_nombre'],
             ];
         }
 

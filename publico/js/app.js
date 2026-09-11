@@ -2263,18 +2263,21 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 /**
- * Selector de destinatario específico: cuando una dependencia+rol elegidos en un formulario de
- * "enviar"/"redireccionar" tienen más de un usuario coincidente (más de un Gestor o Avalador),
- * muestra y exige un <select class="selector-destinatario" data-campo-dependencia="idCampoDep"
- * data-campo-rol="idCampoRol"> para que el usuario elija a cuál de ellos remitir la petición. Si
- * hay 0 o 1 coincidencia, el campo se oculta y no es obligatorio (0 lo maneja el backend con su
- * propio mensaje; 1 se envía automáticamente a esa única persona).
+ * Selector combinado de destinatario: en vez de elegir primero un "Rol" y luego (solo si hay
+ * ambigüedad) una persona específica, un solo <select class="selector-rol-destinatario"
+ * data-campo-dependencia="idCampoDep" data-campo-rol-oculto="idCampoRolOculto"
+ * data-campo-usuario-oculto="idCampoUsuarioOculto"> lista de una vez cada combinación
+ * rol+persona de la dependencia elegida, con la etiqueta "Rol · Nombre (correo)". Al elegir una
+ * opción, llena por detrás los campos ocultos rol_destinatario_id / usuario_destinatario_id que
+ * el backend ya espera — así no cambia nada del lado del servidor. Si la dependencia tiene un
+ * tipo con roles restringidos (datos-roles-por-tipo), solo se listan las combinaciones cuyo rol
+ * esté permitido para ese tipo.
  */
 document.addEventListener('DOMContentLoaded', function () {
     var datosUsuariosElemento = document.getElementById('datos-usuarios-por-dependencia-rol');
-    var selectoresDestinatario = document.querySelectorAll('.selector-destinatario');
+    var selectoresCombo = document.querySelectorAll('.selector-rol-destinatario');
 
-    if (!datosUsuariosElemento || selectoresDestinatario.length === 0) {
+    if (!datosUsuariosElemento || selectoresCombo.length === 0) {
         return;
     }
 
@@ -2285,49 +2288,84 @@ document.addEventListener('DOMContentLoaded', function () {
         usuariosPorDependenciaYRol = {};
     }
 
-    selectoresDestinatario.forEach(function (selectDestinatario) {
-        var idCampoDependencia = selectDestinatario.dataset.campoDependencia;
-        var idCampoRol = selectDestinatario.dataset.campoRol;
-        var campoDependencia = idCampoDependencia ? document.getElementById(idCampoDependencia) : null;
-        var campoRol = idCampoRol ? document.getElementById(idCampoRol) : null;
-        var contenedor = selectDestinatario.closest('.campo');
+    var datosRolesPorTipoElemento = document.getElementById('datos-roles-por-tipo');
+    var rolesPorTipo = null;
+    if (datosRolesPorTipoElemento) {
+        try {
+            rolesPorTipo = JSON.parse(datosRolesPorTipoElemento.textContent || '{}');
+        } catch (error) {
+            rolesPorTipo = null;
+        }
+    }
 
-        if (!campoDependencia || !campoRol || !contenedor) {
+    function obtenerTipoDependenciaSeleccionadaCombo(campoDependencia) {
+        if (campoDependencia.tagName === 'SELECT') {
+            var opcion = campoDependencia.options[campoDependencia.selectedIndex];
+
+            return opcion ? (opcion.dataset.tipo || '') : '';
+        }
+
+        var contenedorBuscable = campoDependencia.closest('.selector-buscable');
+
+        if (!contenedorBuscable || campoDependencia.value === '') {
+            return '';
+        }
+
+        var opcionElegida = contenedorBuscable.querySelector('.selector-buscable-opcion[data-id="' + CSS.escape(campoDependencia.value) + '"]');
+
+        return opcionElegida ? (opcionElegida.dataset.tipo || '') : '';
+    }
+
+    selectoresCombo.forEach(function (selectCombo) {
+        var idCampoDependencia = selectCombo.dataset.campoDependencia;
+        var idCampoRolOculto = selectCombo.dataset.campoRolOculto;
+        var idCampoUsuarioOculto = selectCombo.dataset.campoUsuarioOculto;
+        var campoDependencia = idCampoDependencia ? document.getElementById(idCampoDependencia) : null;
+        var campoRolOculto = idCampoRolOculto ? document.getElementById(idCampoRolOculto) : null;
+        var campoUsuarioOculto = idCampoUsuarioOculto ? document.getElementById(idCampoUsuarioOculto) : null;
+
+        if (!campoDependencia || !campoRolOculto || !campoUsuarioOculto) {
             return;
         }
 
-        function actualizar() {
+        function actualizarOpciones() {
             var dependencia = campoDependencia.value;
-            var rol = campoRol.value;
-            var candidatos = (dependencia && rol && usuariosPorDependenciaYRol[dependencia] && usuariosPorDependenciaYRol[dependencia][rol]) || [];
+            var combosPorRol = (dependencia && usuariosPorDependenciaYRol[dependencia]) || {};
+            var tipo = rolesPorTipo ? obtenerTipoDependenciaSeleccionadaCombo(campoDependencia) : '';
+            var rolesPermitidos = tipo && rolesPorTipo && rolesPorTipo[tipo] ? rolesPorTipo[tipo].map(String) : null;
 
-            selectDestinatario.innerHTML = '';
+            selectCombo.innerHTML = '';
 
             var opcionVacia = document.createElement('option');
             opcionVacia.value = '';
             opcionVacia.textContent = 'Selecciona a quién enviarlo';
-            selectDestinatario.appendChild(opcionVacia);
+            selectCombo.appendChild(opcionVacia);
 
-            candidatos.forEach(function (usuario) {
-                var opcion = document.createElement('option');
-                opcion.value = usuario.id;
-                opcion.textContent = usuario.nombre;
-                selectDestinatario.appendChild(opcion);
+            Object.keys(combosPorRol).forEach(function (rolId) {
+                if (rolesPermitidos !== null && rolesPermitidos.indexOf(rolId) === -1) {
+                    return;
+                }
+
+                combosPorRol[rolId].forEach(function (usuario) {
+                    var opcion = document.createElement('option');
+                    opcion.value = rolId + ':' + usuario.id;
+                    opcion.textContent = (usuario.rol_nombre || '') + ' · ' + usuario.nombre + ' (' + usuario.correo + ')';
+                    selectCombo.appendChild(opcion);
+                });
             });
 
-            if (candidatos.length > 1) {
-                contenedor.style.display = '';
-                selectDestinatario.required = true;
-            } else {
-                contenedor.style.display = 'none';
-                selectDestinatario.required = false;
-                selectDestinatario.value = '';
-            }
+            campoRolOculto.value = '';
+            campoUsuarioOculto.value = '';
         }
 
-        campoDependencia.addEventListener('change', actualizar);
-        campoRol.addEventListener('change', actualizar);
-        actualizar();
+        selectCombo.addEventListener('change', function () {
+            var partes = selectCombo.value ? selectCombo.value.split(':') : ['', ''];
+            campoRolOculto.value = partes[0] || '';
+            campoUsuarioOculto.value = partes[1] || '';
+        });
+
+        campoDependencia.addEventListener('change', actualizarOpciones);
+        actualizarOpciones();
     });
 });
 
@@ -2591,8 +2629,10 @@ document.addEventListener('DOMContentLoaded', function () {
     var bandejaPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.bandeja : '';
     var modoPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.modo : '';
 
+    var botonPendientesVer = document.getElementById('boton-pendientes-ver');
     var botonPendientesAprobar = document.getElementById('boton-pendientes-aprobar');
     var botonPendientesArchivar = document.getElementById('boton-pendientes-archivar');
+    var botonPendientesEliminar = document.getElementById('boton-pendientes-eliminar');
 
     function obtenerSeleccionadosPendientes() {
         return Array.prototype.filter.call(checkboxesPendientes, function (casilla) {
@@ -2604,11 +2644,17 @@ document.addEventListener('DOMContentLoaded', function () {
         var seleccionados = obtenerSeleccionadosPendientes();
         var hay = seleccionados.length > 0;
 
+        if (botonPendientesVer) {
+            botonPendientesVer.disabled = seleccionados.length !== 1;
+        }
         if (botonPendientesAprobar) {
             botonPendientesAprobar.disabled = !hay;
         }
         if (botonPendientesArchivar) {
             botonPendientesArchivar.disabled = !hay;
+        }
+        if (botonPendientesEliminar) {
+            botonPendientesEliminar.disabled = !hay;
         }
 
         if (checkboxPendientesTodos) {
@@ -2717,6 +2763,38 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             enviarFormularioPendientes('archivar_pendientes_grupo', seleccionados);
+        });
+    }
+
+    if (botonPendientesVer) {
+        botonPendientesVer.addEventListener('click', function () {
+            if (botonPendientesVer.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosPendientes();
+
+            if (seleccionados.length !== 1 || !seleccionados[0].dataset.rutaVer) {
+                return;
+            }
+
+            window.location.href = seleccionados[0].dataset.rutaVer;
+        });
+    }
+
+    if (botonPendientesEliminar) {
+        botonPendientesEliminar.addEventListener('click', function () {
+            if (botonPendientesEliminar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosPendientes();
+
+            if (!window.confirm('¿Eliminar permanentemente el/los registro(s) de origen de ' + seleccionados.length + ' ítem(s) seleccionado(s)? Esta acción no se puede deshacer.')) {
+                return;
+            }
+
+            enviarFormularioPendientes('eliminar_pendientes_grupo', seleccionados);
         });
     }
 });
@@ -4528,7 +4606,7 @@ document.addEventListener('DOMContentLoaded', function () {
             candidatos.forEach(function (usuario) {
                 var opcion = document.createElement('option');
                 opcion.value = usuario.id;
-                opcion.textContent = usuario.nombre;
+                opcion.textContent = (usuario.rol_nombre || '') + ' · ' + usuario.nombre + ' (' + usuario.correo + ')';
                 selectDestinatario.appendChild(opcion);
             });
 

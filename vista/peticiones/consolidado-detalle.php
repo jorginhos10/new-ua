@@ -204,32 +204,24 @@ if ($tipoFiltro !== '') {
                     $nombreCampoDependencia = 'dependencia_destino';
                     $idBaseDependenciaOverride = 'redireccionar-consolidado-dependencia';
                     $dependenciasOpciones = $dependenciasSugeridas;
-                    $dependenciaDataSelectRol = 'redireccionar-consolidado-rol';
                     require __DIR__ . '/../parciales/selector-dependencia.php';
                     ?>
                 </div>
 
                 <div class="campo">
-                    <label for="redireccionar-consolidado-rol">Rol *</label>
-                    <select id="redireccionar-consolidado-rol" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo" style="display:none;">
-                    <label for="redireccionar-consolidado-destinatario">¿A quién exactamente? *</label>
+                    <label for="redireccionar-consolidado-destinatario">¿A quién se enviará? *</label>
                     <select
                         id="redireccionar-consolidado-destinatario"
-                        name="usuario_destinatario_id"
-                        class="selector-destinatario"
+                        class="selector-rol-destinatario"
                         data-campo-dependencia="redireccionar-consolidado-dependencia"
-                        data-campo-rol="redireccionar-consolidado-rol"
+                        data-campo-rol-oculto="redireccionar-consolidado-rol"
+                        data-campo-usuario-oculto="redireccionar-consolidado-usuario"
+                        required
                     >
                         <option value="">Selecciona a quién enviarlo</option>
                     </select>
+                    <input type="hidden" id="redireccionar-consolidado-rol" name="rol_destinatario_id">
+                    <input type="hidden" id="redireccionar-consolidado-usuario" name="usuario_destinatario_id">
                 </div>
 
                 <button type="submit" class="boton-enviar">Redireccionar</button>

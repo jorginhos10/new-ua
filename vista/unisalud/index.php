@@ -688,26 +688,19 @@ require __DIR__ . '/../parciales/encabezado.php';
                 </div>
 
                 <div class="campo">
-                    <label for="enviar-todo-unisalud-rol">Rol al que se enviará *</label>
-                    <select id="enviar-todo-unisalud-rol" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-
-                <div class="campo" style="display:none;">
-                    <label for="enviar-todo-unisalud-destinatario">¿A quién exactamente? *</label>
+                    <label for="enviar-todo-unisalud-destinatario">¿A quién se enviará? *</label>
                     <select
                         id="enviar-todo-unisalud-destinatario"
-                        name="usuario_destinatario_id"
-                        class="selector-destinatario"
+                        class="selector-rol-destinatario"
                         data-campo-dependencia="enviar-todo-unisalud-destino"
-                        data-campo-rol="enviar-todo-unisalud-rol"
+                        data-campo-rol-oculto="enviar-todo-unisalud-rol"
+                        data-campo-usuario-oculto="enviar-todo-unisalud-usuario"
+                        required
                     >
                         <option value="">Selecciona a quién enviarlo</option>
                     </select>
+                    <input type="hidden" id="enviar-todo-unisalud-rol" name="rol_destinatario_id">
+                    <input type="hidden" id="enviar-todo-unisalud-usuario" name="usuario_destinatario_id">
                 </div>
 
                 <button type="submit" class="boton-enviar">Enviar todo</button>

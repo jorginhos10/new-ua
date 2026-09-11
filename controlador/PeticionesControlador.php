@@ -1117,7 +1117,12 @@ class PeticionesControlador
             $pares[] = ['origen' => trim((string) $origen), 'origen_id' => (int) ($origenIds[$indice] ?? 0)];
         }
 
-        $cantidadItems = $this->modeloArchivada->redireccionarItems($pares, $dependenciaNombre);
+        // Se guarda quién es exactamente el destinatario (único con ese rol, o desambiguado
+        // arriba) — si no, cualquiera con ese rol en la dependencia vería el ítem redireccionado
+        // en Pendientes, no solo la persona elegida.
+        $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
+
+        $cantidadItems = $this->modeloArchivada->redireccionarItems($pares, $dependenciaNombre, 'aprobada', $rolDestinatarioId, $usuarioDestinatarioResuelto);
 
         if ($cantidadItems === 0) {
             return ['No hay ítems seleccionados para redireccionar.', ''];
@@ -1350,7 +1355,12 @@ class PeticionesControlador
             $pares[] = ['origen' => trim((string) $origen), 'origen_id' => (int) ($origenIds[$indice] ?? 0)];
         }
 
-        $cantidadItems = $this->modeloArchivada->redireccionarItems($pares, $dependenciaNombre, 'archivada');
+        // Se guarda quién es exactamente el destinatario (único con ese rol, o desambiguado
+        // arriba) — si no, cualquiera con ese rol en la dependencia vería el ítem en Pendientes,
+        // no solo la persona elegida.
+        $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
+
+        $cantidadItems = $this->modeloArchivada->redireccionarItems($pares, $dependenciaNombre, 'archivada', $rolDestinatarioId, $usuarioDestinatarioResuelto);
 
         if ($cantidadItems === 0) {
             return ['No hay ítems seleccionados para enviar.', ''];
@@ -1534,6 +1544,11 @@ class PeticionesControlador
             }
         }
 
+        // Se guarda quién es exactamente el destinatario (único con ese rol, o desambiguado
+        // arriba) — si no, cualquiera con ese rol en la dependencia vería el ítem en Pendientes,
+        // no solo la persona elegida.
+        $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
+
         foreach ($items as $item) {
             $this->modeloArchivada->redireccionarDirecto([
                 'origen' => $item['origen'],
@@ -1544,7 +1559,7 @@ class PeticionesControlador
                 'valor' => $item['valor'],
                 'ruta_ver' => $item['ruta_ver'],
                 'ruta_origen' => $this->construirRutaOrigen($item['origen']),
-            ], $dependenciaNombre);
+            ], $dependenciaNombre, $rolDestinatarioId, $usuarioDestinatarioResuelto);
 
             $this->modeloHistorial->registrar($item['origen'], $item['origen_id'], 'redireccionada', 'Enviado desde Enviadas a ' . $dependenciaNombre);
         }
@@ -1892,7 +1907,7 @@ class PeticionesControlador
                 continue;
             }
 
-            if ($this->visibilidadSolicitud($fila['dependencia_destino'] ?? $fila['dependencia'], $fila['rol_destinatario_id'])) {
+            if ($this->visibilidadSolicitud($fila['dependencia_destino'] ?? $fila['dependencia'], $fila['rol_destinatario_id'], $fila['usuario_destinatario_id'] ?? null)) {
                 $visibles[] = $fila;
             }
         }
@@ -2027,28 +2042,28 @@ class PeticionesControlador
             $totalValor = (float) $fila['riesgo1_valor'] + (float) $fila['riesgo2_valor']
                 + (float) $fila['riesgo3_valor'] + (float) $fila['riesgo4_valor'] + (float) $fila['riesgo5_valor'];
 
-            if ($this->visibilidadSolicitud($fila['facultad'], $fila['rol_destinatario_id'])) {
+            if ($this->visibilidadSolicitud($fila['facultad'], $fila['rol_destinatario_id'], $fila['usuario_destinatario_id'] ?? null)) {
                 $pendientesSolicitudes[] = $this->fila('arl', (int) $fila['id'], 'ARL', $fila['facultad'], $totalPracticantes . ' practicantes', $totalValor, 'solicitud', 'index.php?ruta=solicitudes&tab=arl', 'index.php?ruta=solicitud-detalle&tipo=arl&id=' . (int) $fila['id'] . $volver);
             }
         }
 
         foreach ($this->modeloMonitor->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             $totalMonitores = (int) $fila['monitores_semestre1'] + (int) $fila['monitores_semestre2'];
-            if ($this->visibilidadSolicitud($fila['dependencia'], $fila['rol_destinatario_id'])) {
+            if ($this->visibilidadSolicitud($fila['dependencia'], $fila['rol_destinatario_id'], $fila['usuario_destinatario_id'] ?? null)) {
                 $pendientesSolicitudes[] = $this->fila('monitores', (int) $fila['id'], 'Monitores', $fila['dependencia'], $totalMonitores . ' monitores', null, 'solicitud', 'index.php?ruta=solicitudes&tab=monitores', 'index.php?ruta=solicitud-detalle&tipo=monitores&id=' . (int) $fila['id'] . $volver);
             }
         }
 
         foreach ($this->modeloOps->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             $totalOps = (float) $fila['valor'] * (int) $fila['cantidad'];
-            if ($this->visibilidadSolicitud($fila['dependencia'], $fila['rol_destinatario_id'])) {
+            if ($this->visibilidadSolicitud($fila['dependencia'], $fila['rol_destinatario_id'], $fila['usuario_destinatario_id'] ?? null)) {
                 $pendientesSolicitudes[] = $this->fila('ops', (int) $fila['id'], 'OPS', $fila['dependencia'], $fila['cantidad'] . ' und.', $totalOps, 'solicitud', 'index.php?ruta=solicitudes&tab=ops', 'index.php?ruta=solicitud-detalle&tipo=ops&id=' . (int) $fila['id'] . $volver);
             }
         }
 
         foreach ($this->modeloPeticion->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             $totalValor = (float) $fila['valor_s1'] + (float) $fila['valor_s2'];
-            if ($this->visibilidadSolicitud(null, $fila['rol_destinatario_id'])) {
+            if ($this->visibilidadSolicitud(null, $fila['rol_destinatario_id'], $fila['usuario_destinatario_id'] ?? null)) {
                 $pendientesSolicitudes[] = $this->fila('otros', (int) $fila['id'], 'Petición', $fila['concepto'], null, $totalValor, 'solicitud', 'index.php?ruta=solicitudes&tab=otros', 'index.php?ruta=solicitud-detalle&tipo=otros&id=' . (int) $fila['id'] . $volver);
             }
         }
@@ -2086,7 +2101,10 @@ class PeticionesControlador
         }));
 
         foreach ($this->modeloArchivada->obtenerRedireccionadas() as $redirigida) {
-            $pendientes[] = $this->filaRedireccionada($redirigida);
+            $filaRedirigida = $this->filaRedireccionada($redirigida);
+            if ($filaRedirigida !== null) {
+                $pendientes[] = $filaRedirigida;
+            }
         }
 
         $pendientes = $this->filtrarPorDependencia($pendientes, $dependenciasPermitidas);
@@ -2257,8 +2275,9 @@ class PeticionesControlador
             }
 
             $rolDestinatarioId = !empty($fila['rol_destinatario_id']) ? (int) $fila['rol_destinatario_id'] : null;
+            $usuarioDestinatarioId = !empty($fila['usuario_destinatario_id']) ? (int) $fila['usuario_destinatario_id'] : null;
 
-            if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId)) {
+            if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId, $usuarioDestinatarioId)) {
                 continue;
             }
 
@@ -2383,16 +2402,28 @@ class PeticionesControlador
     }
 
     /**
-     * Una solicitud (ARL/Monitores/OPS/Otros) solo debe ser visible en Peticiones para el usuario
-     * que coincide exactamente con la dependencia y el rol al que fue enviada — nadie más la ve.
+     * Una solicitud (ARL/Monitores/OPS/Otros/gasto/ingreso/etc.) solo debe ser visible en
+     * Peticiones para el usuario que coincide exactamente con la dependencia y el rol al que fue
+     * enviada — nadie más la ve. Cuando además se conoce el usuario específico elegido como
+     * destinatario ($usuarioDestinatarioId, guardado al enviar si había más de uno con ese rol en
+     * la dependencia), la visibilidad se restringe a esa persona exacta — si no, cualquier otro
+     * usuario con el mismo rol en la misma dependencia también vería la petición, aunque no fue
+     * a quien se le envió. Los envíos antiguos (sin ese dato guardado) mantienen el comportamiento
+     * de siempre: visible para cualquiera con ese rol en esa dependencia.
      */
-    private function visibilidadSolicitud(?string $dependenciaNombre, ?int $rolDestinatarioId): bool
+    private function visibilidadSolicitud(?string $dependenciaNombre, ?int $rolDestinatarioId, ?int $usuarioDestinatarioId = null): bool
     {
         if ($rolDestinatarioId === null) {
             return false;
         }
 
-        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+        $usuarioActualId = (int) ($_SESSION['usuario_id'] ?? 0);
+
+        if ($usuarioDestinatarioId !== null && $usuarioDestinatarioId !== $usuarioActualId) {
+            return false;
+        }
+
+        $usuarioActual = $this->modeloUsuario->obtenerPorId($usuarioActualId);
         $rolUsuarioId = !empty($usuarioActual['rol_id']) ? (int) $usuarioActual['rol_id'] : null;
 
         if ($rolUsuarioId !== $rolDestinatarioId) {
@@ -2422,9 +2453,10 @@ class PeticionesControlador
     private function filaGasto(string $origen, array $fila, string $tipo, string $rutaOrigen, string $rutaVer): ?array
     {
         $rolDestinatarioId = !empty($fila['rol_destinatario_id']) ? (int) $fila['rol_destinatario_id'] : null;
+        $usuarioDestinatarioId = !empty($fila['usuario_destinatario_id']) ? (int) $fila['usuario_destinatario_id'] : null;
         $dependenciaDestino = $fila['dependencia_destino'] ?? $fila['dependencia'];
 
-        if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId)) {
+        if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId, $usuarioDestinatarioId)) {
             return null;
         }
 
@@ -2439,22 +2471,51 @@ class PeticionesControlador
     private function filaIngreso(string $origen, array $fila, string $tipo, string $rutaOrigen, string $rutaVer): ?array
     {
         $rolDestinatarioId = !empty($fila['rol_destinatario_id']) ? (int) $fila['rol_destinatario_id'] : null;
+        $usuarioDestinatarioId = !empty($fila['usuario_destinatario_id']) ? (int) $fila['usuario_destinatario_id'] : null;
         $dependenciaDestino = $fila['dependencia_destino'] ?? $fila['dependencia'];
 
-        if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId)) {
+        if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId, $usuarioDestinatarioId)) {
             return null;
         }
 
         return $this->fila($origen, (int) $fila['id'], $tipo, $dependenciaDestino, null, (float) $fila['valor_total'], 'gasto', $rutaOrigen, $rutaVer);
     }
 
-    private function filaRedireccionada(array $redirigida): array
+    /**
+     * Un ítem redirigido solo debe ser visible para el rol+usuario específico al que se
+     * redireccionó (ver visibilidadSolicitud()) — antes no se filtraba nada, así que cualquiera en
+     * la dependencia destino lo veía sin importar su rol. Los redireccionamientos hechos ANTES de
+     * este fix no tienen rol_destinatario_id guardado (la columna no existía); para esos se
+     * conserva el comportamiento histórico (visible por dependencia, sin filtrar rol) para no
+     * ocultar de golpe peticiones ya en curso — los redireccionamientos nuevos sí quedan acotados
+     * al rol/usuario exactos.
+     */
+    private function filaRedireccionada(array $redirigida): ?array
     {
+        $dependenciaDestino = $redirigida['redireccionado_a_dependencia'] ?? $redirigida['detalle'];
+        $rolDestinatarioId = !empty($redirigida['rol_destinatario_id']) ? (int) $redirigida['rol_destinatario_id'] : null;
+
+        if ($rolDestinatarioId !== null) {
+            $usuarioDestinatarioId = !empty($redirigida['usuario_destinatario_id']) ? (int) $redirigida['usuario_destinatario_id'] : null;
+
+            if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId, $usuarioDestinatarioId)) {
+                return null;
+            }
+        } else {
+            $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+            $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
+            $dependenciaUsuario = $dependenciaUsuarioId !== null ? $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId) : null;
+
+            if ($dependenciaUsuario === null || $dependenciaUsuario['nombre'] !== $dependenciaDestino) {
+                return null;
+            }
+        }
+
         return [
             'origen' => $redirigida['origen'],
             'origen_id' => (int) $redirigida['origen_id'],
             'tipo' => $redirigida['tipo'],
-            'detalle' => $redirigida['redireccionado_a_dependencia'] ?? $redirigida['detalle'],
+            'detalle' => $dependenciaDestino,
             'cantidad' => $redirigida['cantidad'],
             'valor' => $redirigida['valor'] !== null ? (float) $redirigida['valor'] : null,
             'accion_aprobar' => 'Consolidar',

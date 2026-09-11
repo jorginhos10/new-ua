@@ -95,7 +95,7 @@ class IngresoSinExcedentes
         return array_column($consulta->fetchAll(), 'dependencia');
     }
 
-    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaDestinoNombre, int $rolDestinatarioId, string $categoriaPeticion, array $dependenciasOrigen): int
+    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaDestinoNombre, int $rolDestinatarioId, string $categoriaPeticion, array $dependenciasOrigen, ?int $usuarioDestinatarioId = null): int
     {
         if (empty($dependenciasOrigen)) {
             return 0;
@@ -105,6 +105,7 @@ class IngresoSinExcedentes
             'anio_presupuestal_id' => $anioPresupuestalId,
             'dependencia' => $dependenciaDestinoNombre,
             'rol_destinatario_id' => $rolDestinatarioId,
+            'usuario_destinatario_id' => $usuarioDestinatarioId,
             'categoria_peticion' => $categoriaPeticion,
         ];
         $marcadores = [];
@@ -119,7 +120,7 @@ class IngresoSinExcedentes
         // año, no solo los del usuario que envía.
         $consulta = $this->db->prepare(
             "UPDATE ingresos_sin_excedentes
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, dependencia_destino = :dependencia, categoria_peticion = :categoria_peticion
+             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, usuario_destinatario_id = :usuario_destinatario_id, dependencia_destino = :dependencia, categoria_peticion = :categoria_peticion
              WHERE anio_presupuestal_id = :anio_presupuestal_id
                 AND estado = 'borrador'
                 AND dependencia IN (" . implode(', ', $marcadores) . ')'
