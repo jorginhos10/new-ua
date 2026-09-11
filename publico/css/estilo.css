@@ -2593,6 +2593,30 @@ a.barra-progreso:hover {
     color: var(--color-error-texto);
 }
 
+.boton-accion-icono {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    padding: 0.35rem 0;
+    text-decoration: none;
+}
+
+.banner-impersonando {
+    background: var(--color-naranja-fondo);
+    color: var(--color-naranja-texto);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: center;
+    padding: 0.5rem 1rem;
+}
+
+.banner-impersonando a {
+    color: inherit;
+    text-decoration: underline;
+    margin-left: 0.4rem;
+}
+
 .fila-menu {
     position: relative;
     display: inline-block;

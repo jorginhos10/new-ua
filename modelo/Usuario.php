@@ -60,6 +60,29 @@ class Usuario
         return $fila !== false ? $fila : null;
     }
 
+    /**
+     * Igual que obtenerPorId(), pero con los nombres ya resueltos (rol, dependencia, estamento) —
+     * la misma forma que deja en $_SESSION el login normal. La usa la impersonación de usuarios
+     * (Usuarios > Administradores > "Ingresar como") para reconstruir esas claves de sesión sin
+     * pasar por verificarCredenciales(), que exige contraseña.
+     */
+    public function obtenerPorIdConNombres(int $id): ?array
+    {
+        $consulta = $this->db->prepare(
+            'SELECT u.id, u.nombre, u.correo, u.rol, u.rol_id, u.dependencia_id, u.estamento_id, u.es_super_admin,
+                    r.nombre AS rol_nombre, d.nombre AS dependencia_nombre, e.nombre AS estamento_nombre
+             FROM usuarios u
+             LEFT JOIN roles r ON r.id = u.rol_id
+             LEFT JOIN dependencias d ON d.id = u.dependencia_id
+             LEFT JOIN estamentos e ON e.id = u.estamento_id
+             WHERE u.id = :id LIMIT 1'
+        );
+        $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
     public function obtenerPorDependenciaYRol(int $dependenciaId, int $rolId): array
     {
         $consulta = $this->db->prepare(

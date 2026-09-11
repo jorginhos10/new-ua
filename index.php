@@ -119,6 +119,14 @@ switch ($ruta) {
         (new UsuarioControlador())->index();
         break;
 
+    case 'impersonar':
+        (new UsuarioControlador())->impersonar();
+        break;
+
+    case 'dejar-de-impersonar':
+        (new UsuarioControlador())->dejarDeImpersonar();
+        break;
+
     case 'sedes':
         (new SedeControlador())->index();
         break;

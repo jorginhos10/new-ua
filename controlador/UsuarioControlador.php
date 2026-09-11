@@ -72,7 +72,91 @@ class UsuarioControlador
         }
         unset($admin);
 
+        $usuarioActualIndex = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+        $esSuperAdminActual = $usuarioActualIndex !== null && (int) ($usuarioActualIndex['es_super_admin'] ?? 0) === 1;
+
         require __DIR__ . '/../vista/usuarios/index.php';
+    }
+
+    /**
+     * Permite a un superadmin entrar a la cuenta de otro usuario administrativo (Gestor, Avalador,
+     * etc.) para ver la aplicación tal como la ve él, sin conocer ni cambiar su contraseña. Guarda
+     * el id del superadmin en 'impersonador_id' para poder volver con dejarDeImpersonar(); no anida
+     * impersonaciones (si ya se está impersonando, no se sobrescribe el id original).
+     */
+    public function impersonar(): void
+    {
+        $this->requerirSuperAdmin();
+
+        $idObjetivo = (int) ($_GET['id'] ?? 0);
+        $usuarioObjetivo = $idObjetivo > 0 ? $this->modeloUsuario->obtenerPorIdConNombres($idObjetivo) : null;
+
+        if ($usuarioObjetivo === null || (int) ($usuarioObjetivo['es_super_admin'] ?? 0) === 1 || $idObjetivo === (int) $_SESSION['usuario_id']) {
+            header('Location: index.php?ruta=usuarios');
+            exit;
+        }
+
+        if (empty($_SESSION['impersonador_id'])) {
+            $_SESSION['impersonador_id'] = (int) $_SESSION['usuario_id'];
+        }
+
+        $_SESSION['usuario_id'] = (int) $usuarioObjetivo['id'];
+        $_SESSION['usuario_nombre'] = $usuarioObjetivo['nombre'];
+        $_SESSION['usuario_rol'] = $usuarioObjetivo['rol'];
+        $_SESSION['usuario_rol_nombre'] = $usuarioObjetivo['rol_nombre'] ?? '—';
+        $_SESSION['usuario_estamento'] = $usuarioObjetivo['estamento_nombre'] ?? '—';
+        $_SESSION['usuario_dependencia'] = $usuarioObjetivo['dependencia_nombre'] ?? '—';
+        $_SESSION['usuario_super_admin'] = false;
+
+        header('Location: index.php?ruta=dashboard');
+        exit;
+    }
+
+    /**
+     * Restaura la sesión del superadmin que estaba impersonando a alguien. No usa logout.php
+     * porque ese destruye toda la sesión; aquí solo se reponen las claves de usuario.
+     */
+    public function dejarDeImpersonar(): void
+    {
+        if (empty($_SESSION['impersonador_id'])) {
+            header('Location: index.php?ruta=dashboard');
+            exit;
+        }
+
+        $superAdmin = $this->modeloUsuario->obtenerPorIdConNombres((int) $_SESSION['impersonador_id']);
+        unset($_SESSION['impersonador_id']);
+
+        if ($superAdmin === null) {
+            header('Location: index.php?ruta=logout');
+            exit;
+        }
+
+        $_SESSION['usuario_id'] = (int) $superAdmin['id'];
+        $_SESSION['usuario_nombre'] = $superAdmin['nombre'];
+        $_SESSION['usuario_rol'] = $superAdmin['rol'];
+        $_SESSION['usuario_rol_nombre'] = $superAdmin['rol_nombre'] ?? '—';
+        $_SESSION['usuario_estamento'] = $superAdmin['estamento_nombre'] ?? '—';
+        $_SESSION['usuario_dependencia'] = $superAdmin['dependencia_nombre'] ?? '—';
+        $_SESSION['usuario_super_admin'] = (int) ($superAdmin['es_super_admin'] ?? 0) === 1;
+
+        header('Location: index.php?ruta=usuarios');
+        exit;
+    }
+
+    private function requerirSuperAdmin(): void
+    {
+        if (empty($_SESSION['usuario_id'])) {
+            header('Location: index.php?ruta=login');
+            exit;
+        }
+
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+        $esSuperAdmin = $usuarioActual !== null && (int) ($usuarioActual['es_super_admin'] ?? 0) === 1;
+
+        if (!$esSuperAdmin) {
+            header('Location: index.php?ruta=dashboard');
+            exit;
+        }
     }
 
     private function guardarAdministrador(): array

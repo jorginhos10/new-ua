@@ -49,6 +49,18 @@
                             <td><?= $admin['ultimo_acceso'] !== null ? htmlspecialchars($admin['ultimo_acceso']) : '<span class="texto-atenuado">Nunca</span>' ?></td>
                             <td class="celda-acciones">
                                 <div class="acciones-fila">
+                                    <?php if ($esSuperAdminActual && (int) ($admin['es_super_admin'] ?? 0) !== 1 && (int) $admin['id'] !== (int) $_SESSION['usuario_id']): ?>
+                                    <a
+                                        href="index.php?ruta=impersonar&id=<?= (int) $admin['id'] ?>"
+                                        target="_blank"
+                                        rel="opener"
+                                        class="boton-accion boton-accion-enviar boton-accion-icono"
+                                        title="Ingresar a la cuenta de <?= htmlspecialchars($admin['nombre']) ?> (se abre en una pestaña nueva)"
+                                        aria-label="Ingresar a la cuenta de <?= htmlspecialchars($admin['nombre']) ?>"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                                    </a>
+                                    <?php endif; ?>
                                     <button
                                         type="button"
                                         class="boton-accion boton-accion-editar boton-editar-usuario"

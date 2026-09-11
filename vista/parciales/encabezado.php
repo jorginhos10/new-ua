@@ -72,6 +72,12 @@ if (!empty($_SESSION['usuario_id'])) {
         <?php require __DIR__ . '/sidebar.php'; ?>
 
         <div class="contenido-principal">
+            <?php if (!empty($_SESSION['impersonador_id'])): ?>
+            <div class="banner-impersonando">
+                Estás viendo la aplicación como <strong><?= htmlspecialchars($nombreActual) ?></strong>.
+                <a href="index.php?ruta=dejar-de-impersonar">Volver a mi cuenta</a>
+            </div>
+            <?php endif; ?>
             <header class="encabezado">
                 <div class="titulo-pagina-grupo">
                     <button type="button" id="boton-hamburguesa" class="boton-hamburguesa" aria-label="Mostrar u ocultar menú">
