@@ -822,6 +822,31 @@ class GastoControlador
         return $total;
     }
 
+    /**
+     * Recolecta los nombres de las dependencias descendientes que no tienen techo propio
+     * asignado: sus gastos se atribuyen presupuestalmente a la rama del ancestro con techo
+     * (ver resolverDependenciaConTecho()), así que deben incluirse junto con la dependencia
+     * remitente al enviar o consultar sus borradores. Una dependencia con techo propio se
+     * gestiona y envía de forma independiente, así que su rama se detiene ahí.
+     */
+    private function recolectarDependenciasSinTecho(array $nodos, array $presupuestosDependencia): array
+    {
+        $nombres = [];
+
+        foreach ($nodos as $nodo) {
+            $techoNodo = $presupuestosDependencia[(int) $nodo['dependencia']['id']]['techo'] ?? null;
+
+            if ($techoNodo !== null && (float) $techoNodo > 0) {
+                continue;
+            }
+
+            $nombres[] = $nodo['dependencia']['nombre'];
+            $nombres = array_merge($nombres, $this->recolectarDependenciasSinTecho($nodo['hijos'], $presupuestosDependencia));
+        }
+
+        return $nombres;
+    }
+
     private function eliminar(): array
     {
         $id = (int) ($_POST['id'] ?? 0);
@@ -905,13 +930,27 @@ class GastoControlador
         }
 
         $nombresDumi = [];
+        $nombresSinTechoPropio = [];
         if ($dependenciaObjetivo !== null) {
             foreach ($this->modeloDependencia->obtenerHijasDirectas((int) $dependenciaObjetivo['id']) as $hija) {
                 if (($hija['tipo'] ?? '') === 'Dumi') {
                     $nombresDumi[] = $hija['nombre'];
                 }
             }
+
+            // Además de las "Dumi", también se envían los gastos de cualquier dependencia
+            // descendiente que no tenga techo propio asignado: esos gastos se atribuyen a una
+            // hija solo para categorizarlos, pero presupuestalmente son del remitente (ver
+            // validarLimiteTecho()), así que deben salir en el mismo "Enviar todo". Una hija con
+            // techo propio se gestiona y se envía de forma independiente, así que no se incluye.
+            $presupuestosDependencia = $this->modeloPresupuestoDependencia->obtenerPorAnio($anioId);
+            $nombresSinTechoPropio = $this->recolectarDependenciasSinTecho(
+                $this->modeloDependencia->construirArbolDescendientes((int) $dependenciaObjetivo['id']),
+                $presupuestosDependencia
+            );
         }
+
+        $nombresAdicionales = array_values(array_unique(array_merge($nombresDumi, $nombresSinTechoPropio)));
 
         $destinatarios = $dependenciaObjetivo !== null
             ? $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaObjetivo['id'], $rolDestinatarioId)
@@ -931,7 +970,7 @@ class GastoControlador
         // vería la petición en Pendientes, no solo la persona elegida.
         $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
 
-        $enviados = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaNombre, $rolDestinatarioId, $nombresDumi, $usuarioDestinatarioResuelto);
+        $enviados = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaNombre, $rolDestinatarioId, $nombresAdicionales, $usuarioDestinatarioResuelto);
 
         if ($enviados === 0) {
             return ['No hay gastos en borrador para enviar en "' . $dependenciaNombre . '".', ''];
