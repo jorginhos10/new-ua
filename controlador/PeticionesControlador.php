@@ -318,13 +318,6 @@ class PeticionesControlador
             $aprobados = $this->filtrarPorOrigenes($aprobados, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
         }
 
-        $tiposRedireccionados = [];
-        if ($bandeja !== null && $vista === 'consolidado') {
-            foreach ($this->modeloArchivada->obtenerRedireccionadas() as $redirigida) {
-                $tiposRedireccionados[$redirigida['tipo']] = true;
-            }
-        }
-
         $filasDetalladasConsolidado = ($bandeja !== null && $vista === 'consolidado') ? $this->construirFilasDetalleCompleto($aprobados, $anioSeleccionadoId) : [];
 
         $consolidado = [];

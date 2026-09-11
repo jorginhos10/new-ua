@@ -324,7 +324,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                                 data-anio-id="<?= (int) $anioSeleccionadoId ?>"
                                 data-items="<?= htmlspecialchars(json_encode($grupo['items'])) ?>"
                                 data-puede-editar="<?= $grupo['puede_editar'] ? '1' : '0' ?>"
-                                data-redireccionado="<?= !empty($tiposRedireccionados[$grupo['tipo']]) ? '1' : '0' ?>"
                             >
                         </td>
                         <td><?= htmlspecialchars($grupo['tipo']) ?></td>

@@ -3011,10 +3011,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var hay = seleccionados.length > 0;
 
         var todosEditables = hay && seleccionados.every(function (casilla) {
-            return casilla.dataset.puedeEditar === '1' && casilla.dataset.redireccionado !== '1';
-        });
-        var ningunoRedireccionado = hay && seleccionados.every(function (casilla) {
-            return casilla.dataset.redireccionado !== '1';
+            return casilla.dataset.puedeEditar === '1';
         });
 
         if (botonVer) {
@@ -3024,13 +3021,13 @@ document.addEventListener('DOMContentLoaded', function () {
             botonEditar.disabled = !todosEditables;
         }
         if (botonRedireccionar) {
-            botonRedireccionar.disabled = !ningunoRedireccionado;
+            botonRedireccionar.disabled = !hay;
         }
         if (botonArchivar) {
-            botonArchivar.disabled = !ningunoRedireccionado;
+            botonArchivar.disabled = !hay;
         }
         if (botonDesconsolidar) {
-            botonDesconsolidar.disabled = !ningunoRedireccionado;
+            botonDesconsolidar.disabled = !hay;
         }
 
         if (checkboxTodos) {
