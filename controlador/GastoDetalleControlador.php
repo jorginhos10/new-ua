@@ -32,6 +32,23 @@ class GastoDetalleControlador
         'ingreso_sin_excedentes' => ['modelo' => 'IngresoSinExcedentes', 'titulo' => 'Ingreso — Sin excedentes', 'esGasto' => false],
     ];
 
+    /**
+     * A dónde vuelve el botón azul de esta pantalla: siempre al módulo de origen del registro
+     * (donde quien lo envió puede editarlo), no a Peticiones — esta pantalla es solo una parada
+     * de lectura para el destinatario, no el lugar "anterior" en el flujo de quien la abrió.
+     */
+    private const RUTA_VOLVER = [
+        'gasto_principal' => ['ruta' => 'index.php?ruta=gastos', 'etiqueta' => 'Volver a Gastos'],
+        'gasto_extension' => ['ruta' => 'index.php?ruta=extension', 'etiqueta' => 'Volver a Extensión'],
+        'gasto_postgrado' => ['ruta' => 'index.php?ruta=postgrado', 'etiqueta' => 'Volver a Postgrado'],
+        'gasto_unisalud' => ['ruta' => 'index.php?ruta=unisalud', 'etiqueta' => 'Volver a Unidad de Salud'],
+        'gasto_sin_excedentes' => ['ruta' => 'index.php?ruta=sin-excedentes', 'etiqueta' => 'Volver a Sin excedentes'],
+        'ingreso_extension' => ['ruta' => 'index.php?ruta=extension', 'etiqueta' => 'Volver a Extensión'],
+        'ingreso_postgrado' => ['ruta' => 'index.php?ruta=postgrado', 'etiqueta' => 'Volver a Postgrado'],
+        'ingreso_unisalud' => ['ruta' => 'index.php?ruta=unisalud', 'etiqueta' => 'Volver a Unidad de Salud'],
+        'ingreso_sin_excedentes' => ['ruta' => 'index.php?ruta=sin-excedentes', 'etiqueta' => 'Volver a Sin excedentes'],
+    ];
+
     public function index(): void
     {
         if (empty($_SESSION['usuario_id'])) {
@@ -71,13 +88,9 @@ class GastoDetalleControlador
 
         $tituloPagina = $definicion['titulo'];
 
-        $volverSolicitado = $_GET['volver'] ?? '';
-        $rutaVolver = 'index.php?ruta=peticiones';
-        $etiquetaVolver = 'Volver a Peticiones';
-
-        if (str_starts_with($volverSolicitado, 'index.php?') && !str_contains($volverSolicitado, '://')) {
-            $rutaVolver = $volverSolicitado;
-        }
+        $destinoVolver = self::RUTA_VOLVER[$origen] ?? ['ruta' => 'index.php?ruta=peticiones', 'etiqueta' => 'Volver a Peticiones'];
+        $rutaVolver = $destinoVolver['ruta'];
+        $etiquetaVolver = $destinoVolver['etiqueta'];
 
         require __DIR__ . '/../vista/peticiones/detalle-gasto.php';
     }
