@@ -278,6 +278,131 @@ class GeneradorXlsx
         unlink($archivoTemporal);
     }
 
+    /**
+     * Genera y descarga un .xlsx de solo lectura con una o más hojas de datos simples: cada hoja
+     * es una tabla con fila de encabezados en negrilla y filas de datos, sin validaciones, tabla
+     * de Excel ni metadatos de plantilla — sirve para exportar el contenido tal cual, no para
+     * volver a importarlo (a diferencia de descargar(), usado por "Exportar plantilla").
+     *
+     * @param array<int, array{nombre: string, encabezados: string[], filas: array<int, array<int, string>>}> $hojas
+     */
+    public static function descargarHojas(string $nombreArchivo, array $hojas): void
+    {
+        $celdaTexto = static function (string $referencia, string $valor, ?int $estilo = null): string {
+            $texto = htmlspecialchars($valor, ENT_QUOTES | ENT_XML1, 'UTF-8');
+            $atributoEstilo = $estilo !== null ? ' s="' . $estilo . '"' : '';
+
+            return '<c r="' . $referencia . '"' . $atributoEstilo . ' t="inlineStr"><is><t xml:space="preserve">' . $texto . '</t></is></c>';
+        };
+
+        $hojas = array_values($hojas);
+        $sheetsXml = [];
+        $sheetsTags = '';
+        $workbookRelsTags = '';
+
+        foreach ($hojas as $indice => $hoja) {
+            $numeroHoja = $indice + 1;
+            $columnas = count($hoja['encabezados']);
+
+            $filasXml = '<row r="1">';
+            for ($col = 0; $col < $columnas; $col++) {
+                $filasXml .= $celdaTexto(self::columnaLetra($col) . '1', $hoja['encabezados'][$col], 1);
+            }
+            $filasXml .= '</row>';
+
+            foreach ($hoja['filas'] as $indiceFila => $fila) {
+                $numeroFila = $indiceFila + 2;
+                $filaXml = '<row r="' . $numeroFila . '">';
+                for ($col = 0; $col < $columnas; $col++) {
+                    $filaXml .= $celdaTexto(self::columnaLetra($col) . $numeroFila, (string) ($fila[$col] ?? ''));
+                }
+                $filaXml .= '</row>';
+                $filasXml .= $filaXml;
+            }
+
+            $sheetsXml[] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+                . '<sheetData>' . $filasXml . '</sheetData>'
+                . '</worksheet>';
+
+            $nombreHojaSeguro = htmlspecialchars(mb_substr($hoja['nombre'], 0, 31), ENT_QUOTES | ENT_XML1, 'UTF-8');
+            $sheetsTags .= '<sheet name="' . $nombreHojaSeguro . '" sheetId="' . $numeroHoja . '" r:id="rId' . $numeroHoja . '"/>';
+            $workbookRelsTags .= '<Relationship Id="rId' . $numeroHoja . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet' . $numeroHoja . '.xml"/>';
+        }
+
+        $stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . '<fonts count="2">'
+            . '<font><sz val="11"/><name val="Calibri"/></font>'
+            . '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>'
+            . '</fonts>'
+            . '<fills count="3">'
+            . '<fill><patternFill patternType="none"/></fill>'
+            . '<fill><patternFill patternType="gray125"/></fill>'
+            . '<fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/><bgColor indexed="64"/></patternFill></fill>'
+            . '</fills>'
+            . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+            . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+            . '<cellXfs count="2">'
+            . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+            . '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            . '</cellXfs>'
+            . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+            . '</styleSheet>';
+
+        $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            . '<Default Extension="xml" ContentType="application/xml"/>'
+            . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            . implode('', array_map(
+                static fn (int $numero): string => '<Override PartName="/xl/worksheets/sheet' . $numero . '.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>',
+                range(1, count($hojas))
+            ))
+            . '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+            . '</Types>';
+
+        $rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            . '</Relationships>';
+
+        $workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            . '<sheets>' . $sheetsTags . '</sheets></workbook>';
+
+        $idRelacionEstilos = count($hojas) + 1;
+        $workbookRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . $workbookRelsTags
+            . '<Relationship Id="rId' . $idRelacionEstilos . '" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+            . '</Relationships>';
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $nombreArchivo . '"');
+        header('Cache-Control: max-age=0');
+
+        $archivoTemporal = tempnam(sys_get_temp_dir(), 'xlsx');
+        $zip = new ZipArchive();
+        $zip->open($archivoTemporal, ZipArchive::OVERWRITE);
+        $zip->addEmptyDir('_rels');
+        $zip->addEmptyDir('xl');
+        $zip->addEmptyDir('xl/_rels');
+        $zip->addEmptyDir('xl/worksheets');
+        $zip->addFromString('[Content_Types].xml', $contentTypes);
+        $zip->addFromString('_rels/.rels', $rootRels);
+        $zip->addFromString('xl/workbook.xml', $workbook);
+        $zip->addFromString('xl/_rels/workbook.xml.rels', $workbookRels);
+        $zip->addFromString('xl/styles.xml', $stylesXml);
+        foreach ($sheetsXml as $indice => $sheetXml) {
+            $zip->addFromString('xl/worksheets/sheet' . ($indice + 1) . '.xml', $sheetXml);
+        }
+        $zip->close();
+
+        readfile($archivoTemporal);
+        unlink($archivoTemporal);
+    }
+
     private static function columnaLetraLista(string $nombreLista, array $listas): string
     {
         $indice = array_search($nombreLista, array_keys($listas), true);

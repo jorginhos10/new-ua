@@ -74,6 +74,7 @@ require __DIR__ . '/../parciales/encabezado.php';
 
         <div class="acciones-importar-exportar">
             <a href="index.php?ruta=gastos-exportar-plantilla" class="boton-secundario">Exportar plantilla (.xlsx)</a>
+            <a href="index.php?ruta=gastos-exportar<?= $anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : '' ?>" class="boton-secundario">Exportar gastos (.xlsx)</a>
             <form method="POST" action="index.php?ruta=gastos<?= $anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : '' ?>" enctype="multipart/form-data" class="form-importar">
                 <input type="hidden" name="accion" value="importar">
                 <input type="file" name="archivo" accept=".xlsx" required>

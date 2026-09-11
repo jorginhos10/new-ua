@@ -207,6 +207,10 @@ switch ($ruta) {
         (new GastoControlador())->exportarPlantilla();
         break;
 
+    case 'gastos-exportar':
+        (new GastoControlador())->exportar();
+        break;
+
     case 'extension':
         (new ExtensionControlador())->index();
         break;

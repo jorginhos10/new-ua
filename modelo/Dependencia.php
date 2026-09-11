@@ -285,7 +285,7 @@ class Dependencia
     /**
      * Aplana el árbol de construirArbolDescendientes() en una lista simple de dependencias.
      */
-    public function obtenerDescendientesPlano(int $dependenciaId): array
+    public function obtenerDescendientesPlano(int $dependenciaId, bool $incluirNoMonetizables = false): array
     {
         $aplanar = function (array $nodos) use (&$aplanar): array {
             $plano = [];
@@ -298,6 +298,6 @@ class Dependencia
             return $plano;
         };
 
-        return $aplanar($this->construirArbolDescendientes($dependenciaId));
+        return $aplanar($this->construirArbolDescendientes($dependenciaId, $incluirNoMonetizables));
     }
 }

@@ -260,6 +260,81 @@ class GastoControlador
         exit;
     }
 
+    /**
+     * Exporta a .xlsx los gastos visibles para el usuario actual en el año presupuestal indicado,
+     * en dos hojas ("Borradores" y "Enviados"), con las mismas columnas y el mismo alcance de
+     * dependencias/propietario que se ve en pantalla (ver index() y filtrarPorPropietarioODestinatario()).
+     */
+    public function exportar(): void
+    {
+        if (empty($_SESSION['usuario_id']) || $_SESSION['usuario_rol'] !== 'administrador') {
+            header('Location: index.php?ruta=login');
+            exit;
+        }
+
+        $aniosActivos = $this->modeloAnio->obtenerActivos();
+        $anioSeleccionadoId = isset($_GET['anio_id']) ? (int) $_GET['anio_id'] : (int) ($aniosActivos[0]['id'] ?? 0);
+
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+        $dependenciasPermitidas = $this->obtenerDependenciasPermitidas();
+
+        $gastos = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : [];
+        $gastos = $this->filtrarPorPropietarioODestinatario($gastos, $usuarioActual, $dependenciasPermitidas);
+
+        $nombresMeses = [
+            1 => 'Ene', 2 => 'Feb', 3 => 'Mar', 4 => 'Abr',
+            5 => 'May', 6 => 'Jun', 7 => 'Jul', 8 => 'Ago',
+            9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dic',
+        ];
+
+        $encabezados = [
+            'Sede', 'Dependencia', 'Línea estratégica', 'Motor de desarrollo', 'Proyecto PDI',
+            'Contratos comunes', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario',
+            'Valor total', 'Meses',
+        ];
+
+        $filaDatos = static function (array $gasto) use ($nombresMeses): array {
+            $mesesGasto = $gasto['meses'] !== ''
+                ? array_map(static fn ($mes) => $nombresMeses[(int) $mes] ?? $mes, explode(',', $gasto['meses']))
+                : [];
+
+            return [
+                $gasto['sede_codigo'] . ' - ' . $gasto['sede_nombre'],
+                $gasto['dependencia'],
+                $gasto['linea_codigo'] . ' - ' . $gasto['linea_nombre'],
+                $gasto['motor_codigo'] . ' - ' . $gasto['motor_nombre'],
+                $gasto['proyecto_codigo'] . ' - ' . $gasto['proyecto_nombre'],
+                (string) ($gasto['objeto_proyecto_paa'] ?? ''),
+                $gasto['actividad'],
+                $gasto['rubro_id'] !== null ? $gasto['rubro_codigo'] . ' - ' . $gasto['rubro_descripcion'] : ($gasto['rubro_texto'] ?? '—'),
+                $gasto['insumo'],
+                (string) (int) $gasto['cantidad'],
+                number_format((float) $gasto['costo_unitario'], 2, '.', ''),
+                number_format((float) $gasto['valor_total'], 2, '.', ''),
+                implode(', ', $mesesGasto),
+            ];
+        };
+
+        $gastosBorrador = array_values(array_filter($gastos, static fn (array $g): bool => $g['estado'] === 'borrador'));
+        $gastosEnviado = array_values(array_filter($gastos, static fn (array $g): bool => $g['estado'] === 'enviado'));
+
+        $hojas = [
+            ['nombre' => 'Borradores', 'encabezados' => $encabezados, 'filas' => array_map($filaDatos, $gastosBorrador)],
+            ['nombre' => 'Enviados', 'encabezados' => $encabezados, 'filas' => array_map($filaDatos, $gastosEnviado)],
+        ];
+
+        $anioTexto = (string) $anioSeleccionadoId;
+        foreach ($aniosActivos as $anioFila) {
+            if ((int) $anioFila['id'] === $anioSeleccionadoId) {
+                $anioTexto = (string) $anioFila['anio'];
+                break;
+            }
+        }
+
+        GeneradorXlsx::descargarHojas('gastos_' . $anioTexto . '.xlsx', $hojas);
+        exit;
+    }
+
     private static function textoProyecto(array $proyecto): string
     {
         return $proyecto['linea_codigo'] . ' · ' . $proyecto['motor_codigo'] . ' · ' . $proyecto['codigo'] . ' - ' . $proyecto['nombre'];
@@ -929,28 +1004,16 @@ class GastoControlador
             $dependenciaNombre = $dependenciaObjetivo['nombre'];
         }
 
-        $nombresDumi = [];
-        $nombresSinTechoPropio = [];
-        if ($dependenciaObjetivo !== null) {
-            foreach ($this->modeloDependencia->obtenerHijasDirectas((int) $dependenciaObjetivo['id']) as $hija) {
-                if (($hija['tipo'] ?? '') === 'Dumi') {
-                    $nombresDumi[] = $hija['nombre'];
-                }
-            }
-
-            // Además de las "Dumi", también se envían los gastos de cualquier dependencia
-            // descendiente que no tenga techo propio asignado: esos gastos se atribuyen a una
-            // hija solo para categorizarlos, pero presupuestalmente son del remitente (ver
-            // validarLimiteTecho()), así que deben salir en el mismo "Enviar todo". Una hija con
-            // techo propio se gestiona y se envía de forma independiente, así que no se incluye.
-            $presupuestosDependencia = $this->modeloPresupuestoDependencia->obtenerPorAnio($anioId);
-            $nombresSinTechoPropio = $this->recolectarDependenciasSinTecho(
-                $this->modeloDependencia->construirArbolDescendientes((int) $dependenciaObjetivo['id'], true),
-                $presupuestosDependencia
-            );
-        }
-
-        $nombresAdicionales = array_values(array_unique(array_merge($nombresDumi, $nombresSinTechoPropio)));
+        // "Enviar todo" agrupa por USUARIO, no por techo: toda la sub-rama de dependencias que
+        // cuelga de $dependenciaObjetivo es la misma que ve y edita este usuario en su tabla de
+        // Borradores (ver obtenerDependenciasPermitidas()), sin importar si cada hija tiene o no
+        // su propio techo — una hija con techo propio igual puede ser gestionada por el mismo
+        // gestor de la dependencia padre, solo usa el nombre de la hija como categoría. Se incluyen
+        // también las no monetizables, por si alguna quedó sin techo propio (ver
+        // resolverDependenciaConTecho()).
+        $nombresAdicionales = $dependenciaObjetivo !== null
+            ? array_column($this->modeloDependencia->obtenerDescendientesPlano((int) $dependenciaObjetivo['id'], true), 'nombre')
+            : [];
 
         $destinatarios = $dependenciaObjetivo !== null
             ? $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaObjetivo['id'], $rolDestinatarioId)
