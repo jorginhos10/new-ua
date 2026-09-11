@@ -263,6 +263,10 @@ switch ($ruta) {
         (new PeticionesControlador())->historialItem();
         break;
 
+    case 'peticiones-pendientes-grupo':
+        (new PeticionesControlador())->pendientesGrupo();
+        break;
+
     case 'jerarquias':
         (new JerarquiaControlador())->index();
         break;

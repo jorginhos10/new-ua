@@ -2654,6 +2654,26 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         seleccionados.forEach(function (casilla) {
+            if (casilla.dataset.items) {
+                var items = [];
+                try {
+                    items = JSON.parse(casilla.dataset.items);
+                } catch (error) {
+                    items = [];
+                }
+                items.forEach(function (item) {
+                    agregarCampo('item_origen[]', item.origen || '');
+                    agregarCampo('item_origen_id[]', item.origen_id || '');
+                    agregarCampo('item_tipo[]', item.tipo || '');
+                    agregarCampo('item_detalle[]', item.detalle || '');
+                    agregarCampo('item_cantidad[]', item.cantidad || '');
+                    agregarCampo('item_valor[]', item.valor || '');
+                    agregarCampo('item_ruta_ver[]', item.ruta_ver || '');
+                    agregarCampo('item_ruta_origen[]', item.ruta_origen || '');
+                });
+                return;
+            }
+
             agregarCampo('item_origen[]', casilla.dataset.origen || '');
             agregarCampo('item_origen_id[]', casilla.dataset.origenId || '');
             agregarCampo('item_tipo[]', casilla.dataset.tipo || '');

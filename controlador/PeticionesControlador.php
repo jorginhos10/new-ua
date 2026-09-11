@@ -206,6 +206,10 @@ class PeticionesControlador
                 );
                 $_SESSION['peticiones_flash_error'] = $errorPendGrupo;
                 $_SESSION['peticiones_flash_exito'] = $exitoPendGrupo;
+            } elseif ($accion === 'eliminar_pendientes_grupo') {
+                [$errorEliminarGrupo, $exitoEliminarGrupo] = $this->eliminarPendientesGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorEliminarGrupo;
+                $_SESSION['peticiones_flash_exito'] = $exitoEliminarGrupo;
             } elseif ($accion === 'archivar_consolidado') {
                 [$errorArchivarCons, $exitoArchivarCons] = $this->archivarConsolidadoGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorArchivarCons;
@@ -294,6 +298,10 @@ class PeticionesControlador
             }
         } else {
             $pendientes = $this->filtrarPorOrigenes($pendientes, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
+
+            if ($bandeja === 'gastos' && !$modoJerarquia) {
+                $pendientes = $this->agruparPendientesPorDependencia($pendientes, $anioSeleccionadoId, $bandeja);
+            }
         }
 
         $aprobados = ($bandeja !== null && $vista === 'consolidado') ? $this->modeloArchivada->obtenerPorAccion('aprobada') : [];
@@ -1701,6 +1709,50 @@ class PeticionesControlador
             return ['El elemento que intentas eliminar no existe.', ''];
         }
 
+        if (!$this->eliminarUnPendiente($origen, $origenId)) {
+            return ['No se pudo eliminar el elemento.', ''];
+        }
+
+        return ['', 'Elemento eliminado correctamente.'];
+    }
+
+    /**
+     * Elimina en lote una selección de ítems pendientes (ver agruparPendientesPorDependencia()) —
+     * misma lógica que eliminarPendiente(), pero sobre arrays item_origen[]/item_origen_id[].
+     */
+    private function eliminarPendientesGrupo(): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem pendiente.', ''];
+        }
+
+        $eliminados = 0;
+
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+
+            if ($origen === '' || $origenId <= 0) {
+                continue;
+            }
+
+            if ($this->eliminarUnPendiente($origen, $origenId)) {
+                $eliminados++;
+            }
+        }
+
+        if ($eliminados === 0) {
+            return ['No se pudo eliminar ningún ítem.', ''];
+        }
+
+        return ['', 'Se eliminaron ' . $eliminados . ' ítem(s).'];
+    }
+
+    private function eliminarUnPendiente(string $origen, int $origenId): bool
+    {
         $eliminado = match ($origen) {
             'arl' => $this->modeloSolicitud->eliminar($origenId),
             'monitores' => $this->modeloMonitor->eliminar($origenId),
@@ -1720,13 +1772,13 @@ class PeticionesControlador
         };
 
         if (!$eliminado) {
-            return ['No se pudo eliminar el elemento.', ''];
+            return false;
         }
 
         $this->modeloHistorial->registrar($origen, $origenId, 'eliminada', 'Eliminado permanentemente desde Pendientes');
         $this->modeloArchivada->eliminarPorOrigen($origen, $origenId);
 
-        return ['', 'Elemento eliminado correctamente.'];
+        return true;
     }
 
     private function obtenerDependenciasPermitidas(): array
@@ -2111,6 +2163,117 @@ class PeticionesControlador
         }));
 
         return array_merge($pendientes, $pendientesSolicitudes, $pendientesGasto);
+    }
+
+    /**
+     * Agrupa en una sola fila los ítems pendientes que comparten dependencia (columna "Origen") —
+     * hoy solo para la bandeja "Gastos", donde una misma dependencia suele enviar muchos gastos
+     * sueltos a la vez y verlos uno por uno hace la lista muy larga. Cada fila resultante conserva
+     * los ítems originales en 'items' para que Aprobar/Archivar/Eliminar actúen sobre todos a la vez
+     * (mismo patrón de "seleccionar todo" ya usado en Consolidado por tipo), y "Ver" lleva a una
+     * página aparte con el detalle (actividad/insumo) de cada uno.
+     */
+    private function agruparPendientesPorDependencia(array $pendientes, int $anioPresupuestalId, string $bandeja): array
+    {
+        $grupos = [];
+
+        foreach ($pendientes as $item) {
+            $clave = $item['detalle'];
+
+            if (!isset($grupos[$clave])) {
+                $grupos[$clave] = [
+                    'origen' => $item['origen'],
+                    'origen_id' => 0,
+                    'tipo' => $item['tipo'],
+                    'detalle' => $item['detalle'],
+                    'cantidad' => 0,
+                    'valor' => 0.0,
+                    'accion_aprobar' => $item['accion_aprobar'],
+                    'accion_rechazar' => $item['accion_rechazar'],
+                    'ruta_origen' => $item['ruta_origen'],
+                    'ruta_ver' => 'index.php?ruta=peticiones-pendientes-grupo&bandeja=' . urlencode($bandeja)
+                        . '&anio_id=' . $anioPresupuestalId . '&dependencia=' . urlencode($clave),
+                    'redireccionado' => false,
+                    'semaforo' => null,
+                    'puede_actuar' => true,
+                    'items' => [],
+                ];
+            }
+
+            $grupos[$clave]['cantidad']++;
+            $grupos[$clave]['valor'] += $item['valor'] !== null ? (float) $item['valor'] : 0.0;
+            $grupos[$clave]['items'][] = $item;
+        }
+
+        return array_values(array_map(static function (array $grupo): array {
+            $grupo['cantidad'] = $grupo['cantidad'] . ' ítem(s)';
+
+            return $grupo;
+        }, $grupos));
+    }
+
+    /**
+     * Página de detalle de un grupo de pendientes (ver agruparPendientesPorDependencia()): lista
+     * cada gasto de la dependencia solicitada con su actividad, insumo, cantidad y valor, con un
+     * enlace "Ver" por ítem hacia el detalle completo (GastoDetalleControlador).
+     */
+    public function pendientesGrupo(): void
+    {
+        if (empty($_SESSION['usuario_id'])) {
+            header('Location: index.php?ruta=login');
+            exit;
+        }
+
+        if ($_SESSION['usuario_rol'] !== 'administrador') {
+            header('Location: index.php?ruta=dashboard');
+            exit;
+        }
+
+        $dependencia = trim($_GET['dependencia'] ?? '');
+        $anioPresupuestalId = (int) ($_GET['anio_id'] ?? 0);
+        $bandeja = ($_GET['bandeja'] ?? '') === 'gastos' ? 'gastos' : null;
+
+        if ($dependencia === '' || $anioPresupuestalId <= 0 || $bandeja === null) {
+            header('Location: index.php?ruta=peticiones');
+            exit;
+        }
+
+        $archivadas = $this->modeloArchivada->obtenerClavesProcesadas();
+        $items = [];
+
+        foreach ($this->modeloGasto->obtenerEnviadosPorAnio($anioPresupuestalId) as $fila) {
+            if (($fila['tipo_automatico'] ?? null) !== null) {
+                continue;
+            }
+
+            $dependenciaDestino = $fila['dependencia_destino'] ?? $fila['dependencia'];
+
+            if ($dependenciaDestino !== $dependencia) {
+                continue;
+            }
+
+            if (isset($archivadas['gasto_principal:' . $fila['id']])) {
+                continue;
+            }
+
+            $rolDestinatarioId = !empty($fila['rol_destinatario_id']) ? (int) $fila['rol_destinatario_id'] : null;
+
+            if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId)) {
+                continue;
+            }
+
+            $items[] = [
+                'actividad' => $fila['actividad'],
+                'insumo' => $fila['insumo'],
+                'cantidad' => (int) $fila['cantidad'],
+                'valor_total' => (float) $fila['valor_total'],
+                'ruta_ver' => 'index.php?ruta=gasto-detalle&origen=gasto_principal&id=' . (int) $fila['id'],
+            ];
+        }
+
+        $tituloPagina = 'Pendientes — ' . $dependencia;
+
+        require __DIR__ . '/../vista/peticiones/pendientes-grupo.php';
     }
 
     /**

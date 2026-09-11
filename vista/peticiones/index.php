@@ -226,8 +226,12 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 </thead>
                 <tbody>
                     <?php foreach ($pendientes as $item): ?>
+                    <?php $esGrupo = isset($item['items']); ?>
                     <tr>
                         <td>
+                            <?php if ($esGrupo): ?>
+                            <input type="checkbox" class="checkbox-pendiente" data-items="<?= htmlspecialchars(json_encode($item['items'])) ?>">
+                            <?php else: ?>
                             <input
                                 type="checkbox"
                                 class="checkbox-pendiente"
@@ -240,6 +244,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                                 data-ruta-ver="<?= htmlspecialchars($item['ruta_ver']) ?>"
                                 data-ruta-origen="<?= htmlspecialchars($item['ruta_origen']) ?>"
                             >
+                            <?php endif; ?>
                         </td>
                         <td>
                             <?= htmlspecialchars($item['tipo']) ?>
@@ -254,10 +259,26 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                             <div class="acciones-fila">
                                 <a href="<?= htmlspecialchars($item['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>
                                 <form method="POST" action="index.php?ruta=peticiones">
+                                    <?php if ($esGrupo): ?>
+                                    <input type="hidden" name="accion" value="aprobar_pendientes_grupo">
+                                    <?php else: ?>
                                     <input type="hidden" name="accion" value="aprobar">
+                                    <?php endif; ?>
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
                                     <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
+                                    <?php if ($esGrupo): ?>
+                                    <?php foreach ($item['items'] as $sub): ?>
+                                    <input type="hidden" name="item_origen[]" value="<?= htmlspecialchars($sub['origen']) ?>">
+                                    <input type="hidden" name="item_origen_id[]" value="<?= (int) $sub['origen_id'] ?>">
+                                    <input type="hidden" name="item_tipo[]" value="<?= htmlspecialchars($sub['tipo']) ?>">
+                                    <input type="hidden" name="item_detalle[]" value="<?= htmlspecialchars($sub['detalle']) ?>">
+                                    <input type="hidden" name="item_cantidad[]" value="<?= htmlspecialchars((string) $sub['cantidad']) ?>">
+                                    <input type="hidden" name="item_valor[]" value="<?= $sub['valor'] !== null ? htmlspecialchars((string) $sub['valor']) : '' ?>">
+                                    <input type="hidden" name="item_ruta_ver[]" value="<?= htmlspecialchars($sub['ruta_ver']) ?>">
+                                    <input type="hidden" name="item_ruta_origen[]" value="<?= htmlspecialchars($sub['ruta_origen']) ?>">
+                                    <?php endforeach; ?>
+                                    <?php else: ?>
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
                                     <input type="hidden" name="tipo" value="<?= htmlspecialchars($item['tipo']) ?>">
@@ -266,6 +287,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                                     <input type="hidden" name="valor" value="<?= $item['valor'] !== null ? htmlspecialchars((string) $item['valor']) : '' ?>">
                                     <input type="hidden" name="ruta_ver" value="<?= htmlspecialchars($item['ruta_ver']) ?>">
                                     <input type="hidden" name="ruta_origen" value="<?= htmlspecialchars($item['ruta_origen']) ?>">
+                                    <?php endif; ?>
                                     <button type="submit" class="boton-accion boton-accion-enviar"><?= htmlspecialchars($item['accion_aprobar']) ?></button>
                                 </form>
                                 <?php if (!empty($item['redireccionado'])): ?>
@@ -282,10 +304,26 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                                 <button type="button" class="boton-accion boton-accion-eliminar"><?= htmlspecialchars($item['accion_rechazar']) ?></button>
                                 <?php endif; ?>
                                 <form method="POST" action="index.php?ruta=peticiones">
+                                    <?php if ($esGrupo): ?>
+                                    <input type="hidden" name="accion" value="archivar_pendientes_grupo">
+                                    <?php else: ?>
                                     <input type="hidden" name="accion" value="archivar">
+                                    <?php endif; ?>
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
                                     <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
+                                    <?php if ($esGrupo): ?>
+                                    <?php foreach ($item['items'] as $sub): ?>
+                                    <input type="hidden" name="item_origen[]" value="<?= htmlspecialchars($sub['origen']) ?>">
+                                    <input type="hidden" name="item_origen_id[]" value="<?= (int) $sub['origen_id'] ?>">
+                                    <input type="hidden" name="item_tipo[]" value="<?= htmlspecialchars($sub['tipo']) ?>">
+                                    <input type="hidden" name="item_detalle[]" value="<?= htmlspecialchars($sub['detalle']) ?>">
+                                    <input type="hidden" name="item_cantidad[]" value="<?= htmlspecialchars((string) $sub['cantidad']) ?>">
+                                    <input type="hidden" name="item_valor[]" value="<?= $sub['valor'] !== null ? htmlspecialchars((string) $sub['valor']) : '' ?>">
+                                    <input type="hidden" name="item_ruta_ver[]" value="<?= htmlspecialchars($sub['ruta_ver']) ?>">
+                                    <input type="hidden" name="item_ruta_origen[]" value="<?= htmlspecialchars($sub['ruta_origen']) ?>">
+                                    <?php endforeach; ?>
+                                    <?php else: ?>
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
                                     <input type="hidden" name="tipo" value="<?= htmlspecialchars($item['tipo']) ?>">
@@ -293,15 +331,27 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                                     <input type="hidden" name="cantidad" value="<?= htmlspecialchars((string) $item['cantidad']) ?>">
                                     <input type="hidden" name="valor" value="<?= $item['valor'] !== null ? htmlspecialchars((string) $item['valor']) : '' ?>">
                                     <input type="hidden" name="ruta_ver" value="<?= htmlspecialchars($item['ruta_ver']) ?>">
+                                    <?php endif; ?>
                                     <button type="submit" class="boton-accion">Archivar</button>
                                 </form>
-                                <form method="POST" action="index.php?ruta=peticiones" onsubmit="return confirm('¿Eliminar permanentemente el registro de origen de este ítem? Esta acción no se puede deshacer.');">
+                                <form method="POST" action="index.php?ruta=peticiones" onsubmit="return confirm('¿Eliminar permanentemente el/los registro(s) de origen de este ítem? Esta acción no se puede deshacer.');">
+                                    <?php if ($esGrupo): ?>
+                                    <input type="hidden" name="accion" value="eliminar_pendientes_grupo">
+                                    <?php else: ?>
                                     <input type="hidden" name="accion" value="eliminar_pendiente">
+                                    <?php endif; ?>
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
                                     <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
+                                    <?php if ($esGrupo): ?>
+                                    <?php foreach ($item['items'] as $sub): ?>
+                                    <input type="hidden" name="item_origen[]" value="<?= htmlspecialchars($sub['origen']) ?>">
+                                    <input type="hidden" name="item_origen_id[]" value="<?= (int) $sub['origen_id'] ?>">
+                                    <?php endforeach; ?>
+                                    <?php else: ?>
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
+                                    <?php endif; ?>
                                     <button type="submit" class="boton-accion boton-accion-eliminar">Eliminar</button>
                                 </form>
                             </div>
