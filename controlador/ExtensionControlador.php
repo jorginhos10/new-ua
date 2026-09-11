@@ -311,7 +311,9 @@ class ExtensionControlador
             return ['No se pudo registrar el egreso: ' . $excepcion->getMessage(), ''];
         }
 
-        return ['', 'Egreso registrado correctamente.'];
+        $destino = 'index.php?ruta=extension&tab=egresos&anio_id=' . $datos['anio_presupuestal_id'] . '&autogestion_id=' . $datos['autogestion_id'];
+        header('Location: ' . $destino);
+        exit;
     }
 
     private function actualizarEgreso(): array
@@ -627,7 +629,9 @@ class ExtensionControlador
 
         $this->generarEgresosAutomaticos($ingresoId, $cabecera['anio_presupuestal_id'], $cabecera['autogestion_id'], $cabecera['dependencia']);
 
-        return ['', 'Ingreso registrado correctamente.'];
+        $destino = 'index.php?ruta=extension&tab=ingresos&anio_id=' . $cabecera['anio_presupuestal_id'] . '&autogestion_id=' . $cabecera['autogestion_id'];
+        header('Location: ' . $destino);
+        exit;
     }
 
     private function actualizarIngreso(): array

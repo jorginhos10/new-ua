@@ -91,8 +91,8 @@ require __DIR__ . '/../parciales/encabezado.php';
         ?>
 
         <div class="pestanas">
-            <a href="index.php?ruta=extension&tab=ingresos" class="pestana<?= $tab === 'ingresos' ? ' activa' : '' ?>">Ingresos</a>
-            <a href="index.php?ruta=extension&tab=egresos" class="pestana<?= $tab === 'egresos' ? ' activa' : '' ?>">Egresos</a>
+            <a href="index.php?ruta=extension&tab=ingresos&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" class="pestana<?= $tab === 'ingresos' ? ' activa' : '' ?>">Ingresos</a>
+            <a href="index.php?ruta=extension&tab=egresos&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" class="pestana<?= $tab === 'egresos' ? ' activa' : '' ?>">Egresos</a>
             <?php if ($tab === 'ingresos'): ?>
             <span class="total-pestanas">Total ingresos: <?= number_format($totalGastado, 2) ?></span>
             <?php endif; ?>

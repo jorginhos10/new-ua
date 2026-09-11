@@ -645,6 +645,30 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
         </div>
     </div>
 
+    <div id="modal-ver-pendientes" class="modal-fondo">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Detalle de los ítems seleccionados</h2>
+                <button type="button" id="boton-cerrar-modal-ver-pendientes" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <div class="tabla-scroll">
+                <table class="tabla-usuarios tabla-consolidado-detalle">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th>
+                            <th>Detalle</th>
+                            <th>Cantidad</th>
+                            <th>Valor</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="ver-pendientes-cuerpo"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div id="modal-ver-archivado" class="modal-fondo">
         <div class="modal-caja">
             <div class="modal-cabecera">

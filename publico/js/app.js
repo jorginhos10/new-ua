@@ -2646,7 +2646,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var hay = seleccionados.length > 0;
 
         if (botonPendientesVer) {
-            botonPendientesVer.disabled = seleccionados.length !== 1;
+            botonPendientesVer.disabled = seleccionados.length === 0;
         }
         if (botonPendientesAprobar) {
             botonPendientesAprobar.disabled = !hay;
@@ -2780,6 +2780,10 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    var modalVerPendientes = document.getElementById('modal-ver-pendientes');
+    var cuerpoVerPendientes = document.getElementById('ver-pendientes-cuerpo');
+    var botonCerrarVerPendientes = document.getElementById('boton-cerrar-modal-ver-pendientes');
+
     if (botonPendientesVer) {
         botonPendientesVer.addEventListener('click', function () {
             if (botonPendientesVer.disabled) {
@@ -2788,11 +2792,83 @@ document.addEventListener('DOMContentLoaded', function () {
 
             var seleccionados = obtenerSeleccionadosPendientes();
 
-            if (seleccionados.length !== 1 || !seleccionados[0].dataset.rutaVer) {
+            // Un solo ítem (individual o ya agrupado, como el de Gastos por dependencia) navega
+            // directo a su propia página de detalle, igual que antes.
+            if (seleccionados.length === 1 && seleccionados[0].dataset.rutaVer) {
+                window.location.href = seleccionados[0].dataset.rutaVer;
                 return;
             }
 
-            window.location.href = seleccionados[0].dataset.rutaVer;
+            // Varias filas seleccionadas a la vez (o un paquete ya consolidado que llegó como
+            // varios ítems): se muestran todas juntas en un popup en vez de navegar.
+            if (!modalVerPendientes || !cuerpoVerPendientes) {
+                return;
+            }
+
+            var items = obtenerItemsPlanosPendientes(seleccionados);
+            cuerpoVerPendientes.innerHTML = '';
+
+            if (items.length === 0) {
+                var filaVacia = document.createElement('tr');
+                filaVacia.innerHTML = '<td colspan="5">No hay elementos.</td>';
+                cuerpoVerPendientes.appendChild(filaVacia);
+            }
+
+            items.forEach(function (item) {
+                var fila = document.createElement('tr');
+
+                var celdaTipo = document.createElement('td');
+                celdaTipo.textContent = item.tipo || '—';
+                fila.appendChild(celdaTipo);
+
+                var celdaDetalle = document.createElement('td');
+                celdaDetalle.textContent = item.detalle || '—';
+                fila.appendChild(celdaDetalle);
+
+                var celdaCantidad = document.createElement('td');
+                celdaCantidad.textContent = item.cantidad !== null && item.cantidad !== undefined && item.cantidad !== '' ? item.cantidad : '—';
+                fila.appendChild(celdaCantidad);
+
+                var celdaValor = document.createElement('td');
+                celdaValor.textContent = item.valor !== null && item.valor !== undefined && item.valor !== ''
+                    ? '$ ' + Number(item.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                    : '—';
+                fila.appendChild(celdaValor);
+
+                var celdaAccion = document.createElement('td');
+                if (item.ruta_ver) {
+                    var enlace = document.createElement('a');
+                    enlace.href = item.ruta_ver;
+                    enlace.className = 'boton-accion boton-accion-ver';
+                    enlace.textContent = 'Ver';
+                    celdaAccion.appendChild(enlace);
+                }
+                fila.appendChild(celdaAccion);
+
+                cuerpoVerPendientes.appendChild(fila);
+            });
+
+            modalVerPendientes.classList.add('abierto');
+        });
+    }
+
+    if (botonCerrarVerPendientes && modalVerPendientes) {
+        botonCerrarVerPendientes.addEventListener('click', function () {
+            modalVerPendientes.classList.remove('abierto');
+        });
+    }
+
+    if (modalVerPendientes) {
+        modalVerPendientes.addEventListener('click', function (evento) {
+            if (evento.target === modalVerPendientes) {
+                modalVerPendientes.classList.remove('abierto');
+            }
+        });
+
+        document.addEventListener('keydown', function (evento) {
+            if (evento.key === 'Escape') {
+                modalVerPendientes.classList.remove('abierto');
+            }
         });
     }
 
