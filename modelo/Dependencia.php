@@ -243,16 +243,20 @@ class Dependencia
     /**
      * Construye el árbol completo de descendientes (hijas, nietas, etc.) de una dependencia,
      * usando el flujo_id de cada una. Cada nodo es ['dependencia' => array, 'hijos' => array de nodos].
-     * Las dependencias marcadas como no monetizables se excluyen del árbol (con toda su rama),
-     * ya que no pueden recibir ni asignar techo presupuestal.
+     * Por defecto, las dependencias marcadas como no monetizables se excluyen del árbol (con toda
+     * su rama), ya que no pueden recibir ni asignar techo presupuestal — esto es lo correcto para
+     * listas de asignación de techo (ver TechosControlador). Pero una dependencia no monetizable
+     * puede tener gastos reales registrados a su nombre (heredan el techo de su ancestro con techo
+     * propio), así que quien necesite ubicar esos gastos reales (sumarlos, enviarlos, etc.) debe
+     * pasar $incluirNoMonetizables = true para no perder esas ramas.
      */
-    public function construirArbolDescendientes(int $dependenciaId): array
+    public function construirArbolDescendientes(int $dependenciaId, bool $incluirNoMonetizables = false): array
     {
         $todas = $this->obtenerTodas();
 
         $porFlujo = [];
         foreach ($todas as $dependencia) {
-            if (!empty($dependencia['flujo_id']) && (int) ($dependencia['no_monetizable'] ?? 0) !== 1) {
+            if (!empty($dependencia['flujo_id']) && ($incluirNoMonetizables || (int) ($dependencia['no_monetizable'] ?? 0) !== 1)) {
                 $porFlujo[(int) $dependencia['flujo_id']][] = $dependencia;
             }
         }

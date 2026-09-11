@@ -799,7 +799,7 @@ class GastoControlador
         $total = $gastadoPorDependencia[$dependencia['nombre']] ?? 0.0;
 
         return $total + $this->sumarGastadoDescendientesSinTecho(
-            $this->modeloDependencia->construirArbolDescendientes((int) $dependencia['id']),
+            $this->modeloDependencia->construirArbolDescendientes((int) $dependencia['id'], true),
             $presupuestosDependencia,
             $gastadoPorDependencia
         );
@@ -945,7 +945,7 @@ class GastoControlador
             // techo propio se gestiona y se envía de forma independiente, así que no se incluye.
             $presupuestosDependencia = $this->modeloPresupuestoDependencia->obtenerPorAnio($anioId);
             $nombresSinTechoPropio = $this->recolectarDependenciasSinTecho(
-                $this->modeloDependencia->construirArbolDescendientes((int) $dependenciaObjetivo['id']),
+                $this->modeloDependencia->construirArbolDescendientes((int) $dependenciaObjetivo['id'], true),
                 $presupuestosDependencia
             );
         }
