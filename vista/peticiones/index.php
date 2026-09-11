@@ -121,10 +121,10 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <thead>
                     <tr>
                         <th><input type="checkbox" id="checkbox-pendientes-todos" <?= empty(array_filter($pendientes, static fn (array $i): bool => $i['estado_item'] === 'pendiente')) ? 'disabled' : '' ?>></th>
-                        <th>Tipo</th>
-                        <th>Origen</th>
-                        <th>Cantidad</th>
-                        <th>Valor</th>
+                        <th class="th-ordenable">Tipo</th>
+                        <th class="th-ordenable">Origen</th>
+                        <th class="th-ordenable columna-derecha">Cantidad</th>
+                        <th class="th-ordenable columna-derecha">Valor</th>
                         <th>Estado</th>
                         <th></th>
                     </tr>
@@ -150,8 +150,8 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                         </td>
                         <td><?= htmlspecialchars($item['tipo']) ?></td>
                         <td><?= htmlspecialchars($item['detalle']) ?></td>
-                        <td><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
-                        <td><?= $item['valor'] !== null ? '$ ' . number_format($item['valor'], 2) : '—' ?></td>
+                        <td class="columna-derecha" data-orden="<?= $item['cantidad'] !== null ? (float) $item['cantidad'] : 0 ?>"><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
+                        <td class="columna-derecha" data-orden="<?= $item['valor'] ?? 0 ?>"><?= $item['valor'] !== null ? '$ ' . number_format($item['valor'], 2) : '—' ?></td>
                         <td>
                             <?php if ($item['estado_item'] === 'aprobada'): ?>
                             <span class="etiqueta-consolidado" title="Ya fue aceptado y consolidado">&#10003; Consolidado</span>
@@ -217,10 +217,10 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <thead>
                     <tr>
                         <th><input type="checkbox" id="checkbox-pendientes-todos" <?= empty($pendientes) ? 'disabled' : '' ?>></th>
-                        <th>Tipo</th>
-                        <th>Origen</th>
-                        <th>Cantidad</th>
-                        <th>Valor</th>
+                        <th class="th-ordenable">Tipo</th>
+                        <th class="th-ordenable">Origen</th>
+                        <th class="th-ordenable columna-derecha">Cantidad</th>
+                        <th class="th-ordenable columna-derecha">Valor</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -253,8 +253,8 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                             <?php endif; ?>
                         </td>
                         <td><?= htmlspecialchars($item['detalle']) ?></td>
-                        <td><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
-                        <td><?= $item['valor'] !== null ? '$ ' . number_format($item['valor'], 2) : '—' ?></td>
+                        <td class="columna-derecha" data-orden="<?= $item['cantidad'] !== null ? (float) $item['cantidad'] : 0 ?>"><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
+                        <td class="columna-derecha" data-orden="<?= $item['valor'] ?? 0 ?>"><?= $item['valor'] !== null ? '$ ' . number_format($item['valor'], 2) : '—' ?></td>
                         <td class="celda-acciones">
                             <div class="acciones-fila">
                                 <a href="<?= htmlspecialchars($item['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>

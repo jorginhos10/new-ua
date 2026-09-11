@@ -2544,6 +2544,38 @@ a.barra-progreso:hover {
     white-space: nowrap;
 }
 
+.columna-derecha {
+    text-align: right;
+}
+
+.th-ordenable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.th-ordenable:hover {
+    color: var(--color-texto);
+}
+
+.th-ordenable::after {
+    content: '⇅';
+    display: inline-block;
+    margin-left: 0.35rem;
+    color: var(--color-texto-tenue);
+    font-size: 0.75rem;
+}
+
+.th-ordenable.orden-asc::after {
+    content: '↑';
+    color: var(--color-primario);
+}
+
+.th-ordenable.orden-desc::after {
+    content: '↓';
+    color: var(--color-primario);
+}
+
 .acciones-fila {
     display: inline-flex;
     gap: 0.4rem;
@@ -2948,6 +2980,16 @@ a.barra-progreso:hover {
 .modal-cerrar:hover {
     background: var(--color-fondo);
     color: var(--color-texto);
+}
+
+.recuperar-paso {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.recuperar-paso .enlace-secundario {
+    margin: 0;
 }
 
 .detalle-solicitud {

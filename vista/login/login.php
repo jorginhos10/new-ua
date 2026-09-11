@@ -46,35 +46,37 @@
                 <button type="button" id="boton-cerrar-modal-recuperar" class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
 
-            <p id="recuperar-mensaje" class="mensaje-error" style="display:none;"></p>
+            <div class="recuperar-cuerpo">
+                <p id="recuperar-mensaje" class="mensaje-error" style="display:none;"></p>
 
-            <div id="recuperar-paso-correo">
-                <p class="texto-atenuado">Ingresa tu correo electrónico y te enviaremos un código de 9 dígitos.</p>
-                <div class="campo">
-                    <label for="recuperar-correo">Correo electrónico</label>
-                    <input type="email" id="recuperar-correo" placeholder="Correo electrónico" required>
+                <div id="recuperar-paso-correo" class="recuperar-paso">
+                    <p class="texto-atenuado">Ingresa tu correo electrónico y te enviaremos un código de 9 dígitos.</p>
+                    <div class="campo">
+                        <label for="recuperar-correo">Correo electrónico</label>
+                        <input type="email" id="recuperar-correo" placeholder="Correo electrónico" required>
+                    </div>
+                    <button type="button" id="boton-recuperar-enviar-codigo" class="boton-enviar">Enviar código</button>
                 </div>
-                <button type="button" id="boton-recuperar-enviar-codigo" class="boton-enviar">Enviar código</button>
-            </div>
 
-            <div id="recuperar-paso-codigo" style="display:none;">
-                <p class="texto-atenuado">Revisa tu correo e ingresa el código de 9 dígitos junto con tu nueva contraseña.</p>
-                <div class="campo">
-                    <label for="recuperar-codigo">Código de 9 dígitos</label>
-                    <input type="text" id="recuperar-codigo" inputmode="numeric" maxlength="9" placeholder="000000000" required>
+                <div id="recuperar-paso-codigo" class="recuperar-paso" style="display:none;">
+                    <p class="texto-atenuado">Revisa tu correo e ingresa el código de 9 dígitos junto con tu nueva contraseña.</p>
+                    <div class="campo">
+                        <label for="recuperar-codigo">Código de 9 dígitos</label>
+                        <input type="text" id="recuperar-codigo" inputmode="numeric" maxlength="9" placeholder="000000000" required>
+                    </div>
+                    <div class="campo">
+                        <label for="recuperar-password-nueva">Contraseña nueva</label>
+                        <input type="password" id="recuperar-password-nueva" placeholder="Contraseña nueva" required>
+                    </div>
+                    <div class="campo">
+                        <label for="recuperar-password-confirmar">Confirmar contraseña</label>
+                        <input type="password" id="recuperar-password-confirmar" placeholder="Confirmar contraseña" required>
+                    </div>
+                    <button type="button" id="boton-recuperar-confirmar" class="boton-enviar">Restablecer contraseña</button>
+                    <p class="enlace-secundario">
+                        <a href="#" id="enlace-recuperar-reenviar">¿No te llegó? Enviar otro código</a>
+                    </p>
                 </div>
-                <div class="campo">
-                    <label for="recuperar-password-nueva">Contraseña nueva</label>
-                    <input type="password" id="recuperar-password-nueva" placeholder="Contraseña nueva" required>
-                </div>
-                <div class="campo">
-                    <label for="recuperar-password-confirmar">Confirmar contraseña</label>
-                    <input type="password" id="recuperar-password-confirmar" placeholder="Confirmar contraseña" required>
-                </div>
-                <button type="button" id="boton-recuperar-confirmar" class="boton-enviar">Restablecer contraseña</button>
-                <p class="enlace-secundario">
-                    <a href="#" id="enlace-recuperar-reenviar">¿No te llegó? Enviar otro código</a>
-                </p>
             </div>
         </div>
     </div>

@@ -4762,3 +4762,59 @@ document.addEventListener('DOMContentLoaded', function () {
         actualizarBotones();
     });
 });
+
+/**
+ * Ordenamiento de tablas al hacer clic en el encabezado: cualquier <th class="th-ordenable"> ordena
+ * las filas de su <tbody> por esa columna. Si la celda trae data-orden, se compara como número
+ * (columnas de cantidad/valor); si no, se compara el texto visible (columnas de texto). El primer
+ * clic ordena de mayor a menor; un segundo clic sobre el mismo encabezado invierte a menor a mayor.
+ */
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('th.th-ordenable').forEach(function (encabezado) {
+        encabezado.addEventListener('click', function () {
+            var fila = encabezado.parentElement;
+            var tabla = encabezado.closest('table');
+            var cuerpo = tabla ? tabla.querySelector('tbody') : null;
+
+            if (!fila || !cuerpo) {
+                return;
+            }
+
+            var encabezados = Array.prototype.slice.call(fila.children);
+            var indice = encabezados.indexOf(encabezado);
+            var nuevaDireccion = encabezado.classList.contains('orden-desc') ? 'asc' : 'desc';
+
+            encabezados.forEach(function (th) {
+                th.classList.remove('orden-asc', 'orden-desc');
+            });
+            encabezado.classList.add(nuevaDireccion === 'asc' ? 'orden-asc' : 'orden-desc');
+
+            var filas = Array.prototype.slice.call(cuerpo.querySelectorAll(':scope > tr'));
+
+            filas.sort(function (filaA, filaB) {
+                var celdaA = filaA.children[indice];
+                var celdaB = filaB.children[indice];
+
+                if (!celdaA || !celdaB) {
+                    return 0;
+                }
+
+                var esNumero = celdaA.dataset.orden !== undefined;
+                var valorA = esNumero ? parseFloat(celdaA.dataset.orden) : celdaA.textContent.trim().toLowerCase();
+                var valorB = esNumero ? parseFloat(celdaB.dataset.orden) : celdaB.textContent.trim().toLowerCase();
+
+                if (valorA < valorB) {
+                    return nuevaDireccion === 'asc' ? -1 : 1;
+                }
+                if (valorA > valorB) {
+                    return nuevaDireccion === 'asc' ? 1 : -1;
+                }
+                return 0;
+            });
+
+            filas.forEach(function (fila) {
+                cuerpo.appendChild(fila);
+            });
+        });
+    });
+});
