@@ -1772,6 +1772,34 @@ document.addEventListener('DOMContentLoaded', function () {
             actualizarIcono(null);
         });
 
+        function elegirOpcion(opcion) {
+            input.value = opcion.dataset.mostrar || opcion.dataset.texto;
+            oculto.value = opcion.dataset.id;
+            actualizarIcono(opcion);
+            cerrar();
+            oculto.dispatchEvent(new Event('change'));
+        }
+
+        // Si el usuario escribe y presiona Enter en vez de hacer clic en una sugerencia, el
+        // formulario se enviaría de inmediato con el campo oculto todavía vacío (rechazado por el
+        // servidor). En vez de eso, Enter selecciona la única sugerencia visible que quede (si hay
+        // más de una o ninguna, no hace nada — el usuario debe desambiguar haciendo clic).
+        input.addEventListener('keydown', function (evento) {
+            if (evento.key !== 'Enter') {
+                return;
+            }
+
+            evento.preventDefault();
+
+            var visibles = opciones.filter(function (opcion) {
+                return !opcion.classList.contains('oculta');
+            });
+
+            if (visibles.length === 1) {
+                elegirOpcion(visibles[0]);
+            }
+        });
+
         lista.addEventListener('mousedown', function (evento) {
             evento.preventDefault();
         });
@@ -1783,11 +1811,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 return;
             }
 
-            input.value = opcion.dataset.mostrar || opcion.dataset.texto;
-            oculto.value = opcion.dataset.id;
-            actualizarIcono(opcion);
-            cerrar();
-            oculto.dispatchEvent(new Event('change'));
+            elegirOpcion(opcion);
         });
 
         document.addEventListener('click', function (evento) {
@@ -2244,6 +2268,10 @@ document.addEventListener('DOMContentLoaded', function () {
             var rol = campoRol.value;
 
             if (!dependencia || !rol) {
+                evento.preventDefault();
+                alert(!dependencia
+                    ? 'Selecciona una dependencia de la lista (haz clic en una sugerencia, no basta con escribir el nombre).'
+                    : 'Selecciona a quién se enviará.');
                 return;
             }
 
