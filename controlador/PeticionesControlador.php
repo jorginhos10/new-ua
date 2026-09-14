@@ -711,10 +711,12 @@ class PeticionesControlador
                 $gastoOriginal = $modelosGasto[$item['origen']]->obtenerPorId((int) $item['origen_id']);
             }
 
-            // Si el registro original todavía existe, se prefiere su dependencia actual sobre la
-            // guardada en el archivo aprobado — esta última es una foto fija que puede quedar
-            // desactualizada (ej. reaprobaciones, sustitución de dependencias tipo Dumi al enviar).
-            $dependenciaNombre = $gastoOriginal['dependencia_destino'] ?? $gastoOriginal['dependencia'] ?? $item['detalle'];
+            // Se usa la dependencia de ORIGEN del gasto (a qué programa/dependencia pertenece el
+            // dinero), no la de DESTINO (a quién se le envió) — esta última es solo para saber quién
+            // debe verlo, y puede ser una dependencia distinta (ej. la Facultad, cuando el gasto es
+            // de un programa hijo suyo sin destinatario propio). Si el registro original ya no
+            // existe, se usa el detalle guardado en el archivo aprobado como respaldo.
+            $dependenciaNombre = $gastoOriginal['dependencia'] ?? $gastoOriginal['dependencia_destino'] ?? $item['detalle'];
 
             $dependenciaOrigen = $dependenciaNombre !== null && $dependenciaNombre !== ''
                 ? $this->modeloDependencia->obtenerPorNombre($dependenciaNombre)
@@ -933,9 +935,10 @@ class PeticionesControlador
                 }
             }
 
-            // Se prefiere la dependencia actual del registro original (si todavía existe) sobre
-            // la guardada en el archivo aprobado, que es una foto fija y puede quedar desactualizada.
-            $dependenciaNombre = $gastoOriginal['dependencia_destino'] ?? $gastoOriginal['dependencia'] ?? $item['detalle'];
+            // Se usa la dependencia de ORIGEN del gasto (ver construirFilasDetalleCompleto()), no la
+            // de destino (a quién se envió) — se prefiere el registro original si todavía existe
+            // sobre lo guardado en el archivo aprobado, que es una foto fija y puede desactualizarse.
+            $dependenciaNombre = $gastoOriginal['dependencia'] ?? $gastoOriginal['dependencia_destino'] ?? $item['detalle'];
 
             $techo = null;
             $dependenciaOrigen = $dependenciaNombre !== null ? $this->modeloDependencia->obtenerPorNombre($dependenciaNombre) : null;
@@ -2332,14 +2335,18 @@ class PeticionesControlador
         $grupos = [];
 
         foreach ($pendientes as $item) {
-            $clave = $item['detalle'];
+            // Se agrupa por la dependencia de ORIGEN del gasto (dependencia_origen), no por la
+            // dependencia DESTINO a la que se envió (detalle): varios gastos de programas distintos
+            // (ej. "INGENIERÍA QUÍMICA", "INGENIERÍA MECÁNICA") pueden llegar al mismo destinatario
+            // en un solo envío, y deben verse como grupos separados, no fusionados en uno solo.
+            $clave = $item['dependencia_origen'] ?? $item['detalle'];
 
             if (!isset($grupos[$clave])) {
                 $grupos[$clave] = [
                     'origen' => $item['origen'],
                     'origen_id' => 0,
                     'tipo' => $item['tipo'],
-                    'detalle' => $item['detalle'],
+                    'detalle' => $clave,
                     'cantidad' => 0,
                     'valor' => 0.0,
                     'accion_aprobar' => $item['accion_aprobar'],
@@ -2400,9 +2407,9 @@ class PeticionesControlador
                 continue;
             }
 
-            $dependenciaDestino = $fila['dependencia_destino'] ?? $fila['dependencia'];
-
-            if ($dependenciaDestino !== $dependencia) {
+            // El grupo se arma por dependencia de ORIGEN (ver agruparPendientesPorDependencia()),
+            // no por la de destino; la de destino solo se usa abajo para la visibilidad.
+            if ($fila['dependencia'] !== $dependencia) {
                 continue;
             }
 
@@ -2410,6 +2417,7 @@ class PeticionesControlador
                 continue;
             }
 
+            $dependenciaDestino = $fila['dependencia_destino'] ?? $fila['dependencia'];
             $rolDestinatarioId = !empty($fila['rol_destinatario_id']) ? (int) $fila['rol_destinatario_id'] : null;
             $usuarioDestinatarioId = !empty($fila['usuario_destinatario_id']) ? (int) $fila['usuario_destinatario_id'] : null;
 
@@ -2596,7 +2604,14 @@ class PeticionesControlador
             return null;
         }
 
-        return $this->fila($origen, (int) $fila['id'], $tipo, $dependenciaDestino, $fila['cantidad'] . ' und.', (float) $fila['valor_total'], 'gasto', $rutaOrigen, $rutaVer);
+        $item = $this->fila($origen, (int) $fila['id'], $tipo, $dependenciaDestino, $fila['cantidad'] . ' und.', (float) $fila['valor_total'], 'gasto', $rutaOrigen, $rutaVer);
+        // 'detalle' es la dependencia DESTINO (a quién se le envió, usada para visibilidad); para
+        // agrupar/mostrar en Pendientes por Gastos necesitamos la dependencia de ORIGEN del propio
+        // gasto (a qué programa/dependencia pertenece el dinero), que puede ser otra distinta —
+        // ver agruparPendientesPorDependencia().
+        $item['dependencia_origen'] = $fila['dependencia'];
+
+        return $item;
     }
 
     /**
