@@ -3404,7 +3404,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             agregarCampo('accion', 'desconsolidar_grupo');
-            agregarCampo('vista', 'consolidado');
+            agregarCampo('vista', 'pendientes');
             agregarCampo('anio_id', anioIdConsolidado || '');
             agregarCampo('bandeja', bandejaConsolidado || '');
 

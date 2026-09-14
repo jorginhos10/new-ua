@@ -1201,10 +1201,25 @@ class PeticionesControlador
     }
 
     /**
+     * Orígenes cuya tabla tiene columnas dependencia_destino/rol_destinatario_id/usuario_destinatario_id
+     * homogéneas (mismo patrón que resolverDependenciaActualItem()) — son los que
+     * reasignarDestinatarioAUsuarioActual() sabe reasignar al desconsolidar. "arl" usa "facultad" en
+     * vez de "dependencia_destino" y se maneja aparte; "monitores"/"ops"/"otros" no comparten este
+     * patrón de destinatario y se dejan sin reasignar (solo se desconsolidan, sin cambiar a quién
+     * quedan visibles).
+     */
+    private const ORIGENES_CON_DEPENDENCIA_DESTINO = [
+        'gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes',
+        'ingreso_extension', 'ingreso_postgrado', 'ingreso_unisalud', 'ingreso_sin_excedentes', 'necesidad',
+    ];
+
+    /**
      * Desconsolida una selección arbitraria de ítems ya aprobados (Consolidado por tipo): elimina
      * su fila de peticiones_archivadas, lo que los devuelve a "no procesado" — vuelven a aparecer
      * en Pendientes, ahí agrupados por dependencia de origen (agruparPendientesPorDependencia())
-     * en vez de fusionados por tipo.
+     * en vez de fusionados por tipo. Además, quedan asignados al usuario que desconsolida (no a
+     * quien los recibió originalmente): quien deshace la consolidación es quien vuelve a
+     * gestionarlos en su propia bandeja de Pendientes.
      */
     private function desconsolidarGrupo(): array
     {
@@ -1228,7 +1243,8 @@ class PeticionesControlador
             }
 
             $this->modeloArchivada->eliminarPorOrigen($origen, $origenId);
-            $this->modeloHistorial->registrar($origen, $origenId, 'desconsolidada', 'Desconsolidado desde Consolidado, vuelve a Pendientes');
+            $this->reasignarDestinatarioAUsuarioActual($origen, $origenId);
+            $this->modeloHistorial->registrar($origen, $origenId, 'desconsolidada', 'Desconsolidado desde Consolidado, vuelve a Pendientes de quien lo desconsolidó');
 
             $desconsolidados++;
         }
@@ -1237,7 +1253,49 @@ class PeticionesControlador
             return ['No se pudo desconsolidar ningún ítem.', ''];
         }
 
-        return ['', 'Se desconsolidaron ' . $desconsolidados . ' ítem(s). Vuelven a aparecer en Pendientes.'];
+        return ['', 'Se desconsolidaron ' . $desconsolidados . ' ítem(s). Vuelven a tu bandeja de Pendientes.'];
+    }
+
+    /**
+     * Reasigna el destinatario (dependencia/rol/usuario) de un ítem al usuario que está
+     * desconsolidando, para que aparezca en SU Pendientes en vez de quedar visible solo para quien
+     * lo recibió originalmente. Es un no-op para orígenes que no comparten el patrón homogéneo de
+     * destinatario (ver ORIGENES_CON_DEPENDENCIA_DESTINO).
+     */
+    private function reasignarDestinatarioAUsuarioActual(string $origen, int $origenId): void
+    {
+        if ($origen !== 'arl' && !in_array($origen, self::ORIGENES_CON_DEPENDENCIA_DESTINO, true)) {
+            return;
+        }
+
+        if (!isset(self::TABLAS_ORIGEN[$origen])) {
+            return;
+        }
+
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+
+        if ($usuarioActual === null || empty($usuarioActual['dependencia_id']) || empty($usuarioActual['rol_id'])) {
+            return;
+        }
+
+        $dependenciaUsuario = $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id']);
+
+        if ($dependenciaUsuario === null) {
+            return;
+        }
+
+        $columnaDependencia = $origen === 'arl' ? 'facultad' : 'dependencia_destino';
+        $tabla = self::TABLAS_ORIGEN[$origen];
+
+        $consulta = $this->db->prepare(
+            "UPDATE {$tabla} SET {$columnaDependencia} = :dependencia, rol_destinatario_id = :rol, usuario_destinatario_id = :usuario WHERE id = :id"
+        );
+        $consulta->execute([
+            'dependencia' => $dependenciaUsuario['nombre'],
+            'rol' => (int) $usuarioActual['rol_id'],
+            'usuario' => (int) $usuarioActual['id'],
+            'id' => $origenId,
+        ]);
     }
 
     /**
