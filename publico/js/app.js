@@ -2761,16 +2761,12 @@ document.addEventListener('DOMContentLoaded', function () {
             agregarCampo('modo', 'jerarquia');
         }
 
-        obtenerItemsPlanosPendientes(seleccionados).forEach(function (item) {
-            agregarCampo('item_origen[]', item.origen || '');
-            agregarCampo('item_origen_id[]', item.origen_id || '');
-            agregarCampo('item_tipo[]', item.tipo || '');
-            agregarCampo('item_detalle[]', item.detalle || '');
-            agregarCampo('item_cantidad[]', item.cantidad || '');
-            agregarCampo('item_valor[]', item.valor || '');
-            agregarCampo('item_ruta_ver[]', item.ruta_ver || '');
-            agregarCampo('item_ruta_origen[]', item.ruta_origen || '');
-        });
+        // Un solo campo JSON en vez de 8 inputs ocultos por ítem: con selecciones grandes (un
+        // grupo de Pendientes puede traer cientos de gastos) los inputs paralelos superaban el
+        // límite de variables por petición de PHP (max_input_vars, 1000 por defecto) y el servidor
+        // truncaba la petición en silencio, perdiendo justo los campos que vienen después (como
+        // dependencia_destino) — el formulario se veía lleno en el navegador pero llegaba vacío.
+        agregarCampo('items_json', JSON.stringify(obtenerItemsPlanosPendientes(seleccionados)));
 
         document.body.appendChild(formulario);
         formulario.submit();
@@ -2938,16 +2934,14 @@ document.addEventListener('DOMContentLoaded', function () {
             var seleccionados = obtenerSeleccionadosPendientes();
             var items = obtenerItemsPlanosPendientes(seleccionados);
 
+            // Un solo campo JSON — ver el comentario en enviarFormularioPendientes() sobre por qué
+            // no se usan inputs paralelos item_x[] (max_input_vars con selecciones grandes).
             contenedorCamposItemsEnviarPendientes.innerHTML = '';
-            items.forEach(function (item) {
-                ['origen', 'origen_id', 'tipo', 'detalle', 'cantidad', 'valor', 'ruta_ver', 'ruta_origen'].forEach(function (clave) {
-                    var campo = document.createElement('input');
-                    campo.type = 'hidden';
-                    campo.name = 'item_' + clave + '[]';
-                    campo.value = item[clave] || '';
-                    contenedorCamposItemsEnviarPendientes.appendChild(campo);
-                });
-            });
+            var campoItemsJson = document.createElement('input');
+            campoItemsJson.type = 'hidden';
+            campoItemsJson.name = 'items_json';
+            campoItemsJson.value = JSON.stringify(items);
+            contenedorCamposItemsEnviarPendientes.appendChild(campoItemsJson);
 
             campoDependenciaEnviarPendientes.value = '';
             if (campoDestinatarioComboEnviarPendientes) {

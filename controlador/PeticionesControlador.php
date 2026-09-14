@@ -1686,18 +1686,11 @@ class PeticionesControlador
      */
     private function enviarPendientesGrupo(): array
     {
-        $origenes = $_POST['item_origen'] ?? [];
-        $origenIds = $_POST['item_origen_id'] ?? [];
-        $tipos = $_POST['item_tipo'] ?? [];
-        $detalles = $_POST['item_detalle'] ?? [];
-        $cantidades = $_POST['item_cantidad'] ?? [];
-        $valores = $_POST['item_valor'] ?? [];
-        $rutasVer = $_POST['item_ruta_ver'] ?? [];
-        $rutasOrigen = $_POST['item_ruta_origen'] ?? [];
+        $items = $this->leerItemsJson();
         $dependenciaNombre = trim($_POST['dependencia_destino'] ?? '');
         $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
 
-        if (empty($origenes)) {
+        if (empty($items)) {
             return ['No seleccionaste ningún ítem para enviar.', ''];
         }
 
@@ -1732,24 +1725,24 @@ class PeticionesControlador
         $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
         $enviados = 0;
 
-        foreach ($origenes as $indice => $origen) {
-            $origen = trim((string) $origen);
+        foreach ($items as $item) {
+            $origen = $item['origen'];
 
             if ($origen === '' || $origen === 'necesidad_grupo') {
                 continue;
             }
 
-            $origenId = (int) ($origenIds[$indice] ?? 0);
+            $origenId = $item['origen_id'];
 
             $this->modeloArchivada->redireccionarDirecto([
                 'origen' => $origen,
                 'origen_id' => $origenId,
-                'tipo' => $tipos[$indice] ?? '',
-                'detalle' => $detalles[$indice] ?? '',
-                'cantidad' => ($cantidades[$indice] ?? '') !== '' ? $cantidades[$indice] : null,
-                'valor' => ($valores[$indice] ?? '') !== '' ? (float) $valores[$indice] : null,
-                'ruta_ver' => $rutasVer[$indice] ?? 'index.php?ruta=peticiones',
-                'ruta_origen' => $rutasOrigen[$indice] ?? null,
+                'tipo' => $item['tipo'],
+                'detalle' => $item['detalle'],
+                'cantidad' => $item['cantidad'],
+                'valor' => $item['valor'],
+                'ruta_ver' => $item['ruta_ver'],
+                'ruta_origen' => $item['ruta_origen'],
             ], $dependenciaNombre, $rolDestinatarioId, $usuarioDestinatarioResuelto);
 
             $this->modeloHistorial->registrar($origen, $origenId, 'redireccionada', 'Enviado desde Pendientes a ' . $dependenciaNombre);
@@ -1934,18 +1927,17 @@ class PeticionesControlador
      */
     private function eliminarPendientesGrupo(): array
     {
-        $origenes = $_POST['item_origen'] ?? [];
-        $origenIds = $_POST['item_origen_id'] ?? [];
+        $items = $this->leerItemsJson();
 
-        if (empty($origenes)) {
+        if (empty($items)) {
             return ['No seleccionaste ningún ítem pendiente.', ''];
         }
 
         $eliminados = 0;
 
-        foreach ($origenes as $indice => $origen) {
-            $origen = trim((string) $origen);
-            $origenId = (int) ($origenIds[$indice] ?? 0);
+        foreach ($items as $item) {
+            $origen = $item['origen'];
+            $origenId = $item['origen_id'];
 
             if ($origen === '' || $origenId <= 0) {
                 continue;
@@ -2151,6 +2143,53 @@ class PeticionesControlador
     }
 
     /**
+     * Decodifica el snapshot de ítems seleccionados en Pendientes, enviado como un solo campo JSON
+     * (items_json) en vez de arrays paralelos item_origen[]/item_tipo[]/... — una fila de Pendientes
+     * agrupada por dependencia puede traer cientos de gastos, y con un campo por dato de cada ítem
+     * se superaba fácilmente el límite de variables por petición de PHP (max_input_vars, 1000 por
+     * defecto): el navegador mostraba el formulario lleno, pero el servidor recibía la petición
+     * truncada en silencio, perdiendo los campos que venían después (como dependencia_destino). Ver
+     * enviarFormularioPendientes() y el manejador de #modal-enviar-pendientes en app.js.
+     *
+     * @return array<int, array{origen: string, origen_id: int, tipo: string, detalle: string, cantidad: ?string, valor: ?float, ruta_ver: string, ruta_origen: ?string}>
+     */
+    private function leerItemsJson(): array
+    {
+        $crudo = $_POST['items_json'] ?? '';
+
+        if ($crudo === '') {
+            return [];
+        }
+
+        $decodificado = json_decode($crudo, true);
+
+        if (!is_array($decodificado)) {
+            return [];
+        }
+
+        $items = [];
+
+        foreach ($decodificado as $item) {
+            if (!is_array($item) || empty($item['origen'])) {
+                continue;
+            }
+
+            $items[] = [
+                'origen' => trim((string) $item['origen']),
+                'origen_id' => (int) ($item['origen_id'] ?? 0),
+                'tipo' => (string) ($item['tipo'] ?? ''),
+                'detalle' => (string) ($item['detalle'] ?? ''),
+                'cantidad' => isset($item['cantidad']) && $item['cantidad'] !== '' ? (string) $item['cantidad'] : null,
+                'valor' => isset($item['valor']) && $item['valor'] !== '' ? (float) $item['valor'] : null,
+                'ruta_ver' => (string) ($item['ruta_ver'] ?? 'index.php?ruta=peticiones'),
+                'ruta_origen' => isset($item['ruta_origen']) && $item['ruta_origen'] !== '' ? (string) $item['ruta_origen'] : null,
+            ];
+        }
+
+        return $items;
+    }
+
+    /**
      * Aprueba o archiva una selección arbitraria de ítems de "Pendientes" (seleccionar todo /
      * aceptar seleccionados / archivar seleccionados). A diferencia de `archivarConsolidadoGrupo()`,
      * los ítems pendientes no necesitan resolverse contra la BD: sus datos ya viajan completos desde
@@ -2160,24 +2199,17 @@ class PeticionesControlador
      */
     private function procesarPendientesGrupo(string $accionArchivada): array
     {
-        $origenes = $_POST['item_origen'] ?? [];
-        $origenIds = $_POST['item_origen_id'] ?? [];
-        $tipos = $_POST['item_tipo'] ?? [];
-        $detalles = $_POST['item_detalle'] ?? [];
-        $cantidades = $_POST['item_cantidad'] ?? [];
-        $valores = $_POST['item_valor'] ?? [];
-        $rutasVer = $_POST['item_ruta_ver'] ?? [];
-        $rutasOrigen = $_POST['item_ruta_origen'] ?? [];
+        $items = $this->leerItemsJson();
 
-        if (empty($origenes)) {
+        if (empty($items)) {
             return ['No seleccionaste ningún ítem pendiente.', ''];
         }
 
         $procesados = 0;
         $mensajesExtra = [];
 
-        foreach ($origenes as $indice => $origen) {
-            $origen = trim((string) $origen);
+        foreach ($items as $item) {
+            $origen = $item['origen'];
 
             if ($origen === 'necesidad_grupo') {
                 [, $exitoGrupoNecesidades] = $this->procesarGrupoNecesidades($accionArchivada);
@@ -2187,18 +2219,18 @@ class PeticionesControlador
                 continue;
             }
 
-            $origenId = (int) ($origenIds[$indice] ?? 0);
+            $origenId = $item['origen_id'];
 
             $this->modeloArchivada->archivar([
                 'origen' => $origen,
                 'origen_id' => $origenId,
                 'accion' => $accionArchivada,
-                'tipo' => $tipos[$indice] ?? '',
-                'detalle' => $detalles[$indice] ?? '',
-                'cantidad' => ($cantidades[$indice] ?? '') !== '' ? $cantidades[$indice] : null,
-                'valor' => ($valores[$indice] ?? '') !== '' ? (float) $valores[$indice] : null,
-                'ruta_ver' => $rutasVer[$indice] ?? 'index.php?ruta=peticiones',
-                'ruta_origen' => $rutasOrigen[$indice] ?? null,
+                'tipo' => $item['tipo'],
+                'detalle' => $item['detalle'],
+                'cantidad' => $item['cantidad'],
+                'valor' => $item['valor'],
+                'ruta_ver' => $item['ruta_ver'],
+                'ruta_origen' => $item['ruta_origen'],
             ]);
 
             $this->modeloHistorial->registrar(
