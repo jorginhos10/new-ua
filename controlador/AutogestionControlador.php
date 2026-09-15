@@ -91,7 +91,13 @@ class AutogestionControlador
             return ['Ese ítem ya existe.', ''];
         }
 
-        $this->modeloAutogestion->crear($nombre, $modulo);
+        [$errorTope, $tope] = $this->leerTope();
+
+        if ($errorTope !== '') {
+            return [$errorTope, ''];
+        }
+
+        $this->modeloAutogestion->crear($nombre, $modulo, $tope);
 
         return ['', 'Ítem de autogestión agregado correctamente.'];
     }
@@ -113,9 +119,36 @@ class AutogestionControlador
             return ['Ese ítem ya existe.', ''];
         }
 
-        $this->modeloAutogestion->actualizar($id, $nombre);
+        [$errorTope, $tope] = $this->leerTope();
+
+        if ($errorTope !== '') {
+            return [$errorTope, ''];
+        }
+
+        $this->modeloAutogestion->actualizar($id, $nombre, $tope);
 
         return ['', 'Ítem de autogestión actualizado correctamente.'];
+    }
+
+    /**
+     * El tope es opcional: vacío significa "sin tope". Si viene diligenciado, debe ser un número
+     * no negativo.
+     *
+     * @return array{0: string, 1: ?float} [mensaje de error, valor de tope o null]
+     */
+    private function leerTope(): array
+    {
+        $tope = trim($_POST['tope'] ?? '');
+
+        if ($tope === '') {
+            return ['', null];
+        }
+
+        if (!is_numeric($tope) || (float) $tope < 0) {
+            return ['El tope debe ser un número mayor o igual a 0.', null];
+        }
+
+        return ['', (float) $tope];
     }
 
     private function guardarPorcentaje(string $modulo): array

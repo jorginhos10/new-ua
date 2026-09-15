@@ -4749,6 +4749,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             document.getElementById('editar-autogestion-item-id').value = item.id;
             document.getElementById('editar-autogestion-item-nombre').value = item.nombre;
+            document.getElementById('editar-autogestion-item-tope').value = item.tope !== null && item.tope !== undefined ? item.tope : '';
 
             modalEditarItem.classList.add('abierto');
         });

@@ -13,7 +13,7 @@ class AutogestionItem
 
     public function obtenerTodos(string $modulo): array
     {
-        $consulta = $this->db->prepare('SELECT id, nombre, estado, creado_en FROM autogestion_items WHERE modulo = :modulo ORDER BY nombre');
+        $consulta = $this->db->prepare('SELECT id, nombre, tope, estado, creado_en FROM autogestion_items WHERE modulo = :modulo ORDER BY nombre');
         $consulta->execute(['modulo' => $modulo]);
 
         return $consulta->fetchAll();
@@ -47,25 +47,25 @@ class AutogestionItem
 
     public function obtenerPorId(int $id): ?array
     {
-        $consulta = $this->db->prepare('SELECT id, nombre, modulo, estado, creado_en FROM autogestion_items WHERE id = :id');
+        $consulta = $this->db->prepare('SELECT id, nombre, tope, modulo, estado, creado_en FROM autogestion_items WHERE id = :id');
         $consulta->execute(['id' => $id]);
         $fila = $consulta->fetch();
 
         return $fila !== false ? $fila : null;
     }
 
-    public function crear(string $nombre, string $modulo): bool
+    public function crear(string $nombre, string $modulo, ?float $tope = null): bool
     {
-        $consulta = $this->db->prepare('INSERT INTO autogestion_items (nombre, modulo) VALUES (:nombre, :modulo)');
+        $consulta = $this->db->prepare('INSERT INTO autogestion_items (nombre, modulo, tope) VALUES (:nombre, :modulo, :tope)');
 
-        return $consulta->execute(['nombre' => $nombre, 'modulo' => $modulo]);
+        return $consulta->execute(['nombre' => $nombre, 'modulo' => $modulo, 'tope' => $tope]);
     }
 
-    public function actualizar(int $id, string $nombre): bool
+    public function actualizar(int $id, string $nombre, ?float $tope = null): bool
     {
-        $consulta = $this->db->prepare('UPDATE autogestion_items SET nombre = :nombre WHERE id = :id');
+        $consulta = $this->db->prepare('UPDATE autogestion_items SET nombre = :nombre, tope = :tope WHERE id = :id');
 
-        return $consulta->execute(['id' => $id, 'nombre' => $nombre]);
+        return $consulta->execute(['id' => $id, 'nombre' => $nombre, 'tope' => $tope]);
     }
 
     public function cambiarEstado(int $id): bool
