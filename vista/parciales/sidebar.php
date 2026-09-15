@@ -83,11 +83,19 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <p class="grupo-menu">Administración</p>
             <a href="index.php?ruta=configuraciones" class="<?= in_array($rutaActual, ['configuraciones', 'usuarios', 'roles', 'estamentos', 'lineas', 'motores', 'proyectos', 'rubros', 'anios-presupuestales', 'sedes', 'dependencias', 'facultades', 'jerarquias', 'variables-macroeconomicas', 'reloj-arena'], true) ? 'activo' : '' ?>">Configuraciones</a>
             <?php endif; ?>
+
+            <p class="grupo-menu">Documentación</p>
+            <a href="publico/documentos/ficha-tecnica.docx">Ficha técnica</a>
+            <a href="publico/documentos/esencia-del-software.docx">¿Para qué sirve?</a>
     <?php else: ?>
             <p class="grupo-menu">Resumen</p>
             <a href="index.php">Inicio</a>
             <a href="index.php?ruta=dashboard" class="<?= $rutaActual === 'dashboard' ? 'activo' : '' ?>">Dashboard</a>
             <a href="index.php?ruta=formulario-invitado" class="<?= $rutaActual === 'formulario-invitado' ? 'activo' : '' ?>">Formulario de necesidades</a>
+
+            <p class="grupo-menu">Documentación</p>
+            <a href="publico/documentos/ficha-tecnica.docx">Ficha técnica</a>
+            <a href="publico/documentos/esencia-del-software.docx">¿Para qué sirve?</a>
     <?php endif; ?>
         </nav>
 </aside>
