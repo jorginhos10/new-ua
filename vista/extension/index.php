@@ -94,7 +94,7 @@ require __DIR__ . '/../parciales/encabezado.php';
             <a href="index.php?ruta=extension&tab=ingresos&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" class="pestana<?= $tab === 'ingresos' ? ' activa' : '' ?>">Ingresos</a>
             <a href="index.php?ruta=extension&tab=egresos&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" class="pestana<?= $tab === 'egresos' ? ' activa' : '' ?>">Egresos</a>
             <?php if ($tab === 'ingresos'): ?>
-            <span class="total-pestanas">Total ingresos: <?= number_format($totalGastado, 2) ?></span>
+            <span class="total-pestanas">Total ingresos: <?= number_format($totalGastado, 2, ',', '.') ?></span>
             <?php endif; ?>
         </div>
 
@@ -151,7 +151,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <span class="progreso-presupuesto-porcentaje">
                         <?php if ($presupuestoAnio > 0): ?>
                             <?= number_format($porcentajeGastado, 1) ?>% de los ingresos <?= (int) $anioSeleccionado['anio'] ?> asignados
-                            (<?= number_format($totalEjecutado, 2) ?> / <?= number_format($presupuestoAnio, 2) ?>)
+                            (<?= number_format($totalEjecutado, 2, ',', '.') ?> / <?= number_format($presupuestoAnio, 2, ',', '.') ?>)
                         <?php else: ?>
                             Este ítem todavía no tiene ingresos registrados: no se pueden agregar egresos hasta que tenga.
                         <?php endif; ?>
@@ -164,9 +164,9 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <div class="barra-progreso-segmento excedentes" style="width: <?= number_format($pctExcedentes, 2, '.', '') ?>%;"></div>
                 </div>
                 <div class="progreso-presupuesto-leyenda">
-                    <span><span class="punto costos"></span>Costos: <?= number_format($totalCostos, 2) ?></span>
-                    <span><span class="punto inversion"></span>Inversión: <?= number_format($totalInversion, 2) ?></span>
-                    <span><span class="punto excedentes"></span>Excedentes: <?= number_format($totalExcedentes, 2) ?></span>
+                    <span><span class="punto costos"></span>Costos: <?= number_format($totalCostos, 2, ',', '.') ?></span>
+                    <span><span class="punto inversion"></span>Inversión: <?= number_format($totalInversion, 2, ',', '.') ?></span>
+                    <span><span class="punto excedentes"></span>Excedentes: <?= number_format($totalExcedentes, 2, ',', '.') ?></span>
                 </div>
             </div>
         <?php elseif ($tab === 'ingresos' && $anioSeleccionado): ?>
@@ -174,15 +174,15 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <span class="resumen-egresos-titulo">
                     <?php if ($presupuestoAnio > 0): ?>
                         <?= number_format($porcentajeGastado, 1) ?>% de los ingresos <?= (int) $anioSeleccionado['anio'] ?> asignados
-                        (<?= number_format($totalEjecutado, 2) ?> / <?= number_format($presupuestoAnio, 2) ?>)
+                        (<?= number_format($totalEjecutado, 2, ',', '.') ?> / <?= number_format($presupuestoAnio, 2, ',', '.') ?>)
                     <?php else: ?>
                         Este ítem todavía no tiene ingresos registrados.
                     <?php endif; ?>
                 </span>
                 <div class="progreso-presupuesto-leyenda">
-                    <span><span class="punto costos"></span>Costos: <?= number_format($totalCostos, 2) ?></span>
-                    <span><span class="punto inversion"></span>Inversión: <?= number_format($totalInversion, 2) ?></span>
-                    <span><span class="punto excedentes"></span>Excedentes: <?= number_format($totalExcedentes, 2) ?></span>
+                    <span><span class="punto costos"></span>Costos: <?= number_format($totalCostos, 2, ',', '.') ?></span>
+                    <span><span class="punto inversion"></span>Inversión: <?= number_format($totalInversion, 2, ',', '.') ?></span>
+                    <span><span class="punto excedentes"></span>Excedentes: <?= number_format($totalExcedentes, 2, ',', '.') ?></span>
                 </div>
             </div>
         <?php endif; ?>
@@ -236,8 +236,8 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td><?= $gasto['rubro_id'] !== null ? htmlspecialchars($gasto['rubro_codigo'] . ' - ' . $gasto['rubro_descripcion']) : htmlspecialchars((string) $gasto['rubro_texto']) ?></td>
                         <td><?= htmlspecialchars($gasto['insumo']) ?></td>
                         <td><?= (int) $gasto['cantidad'] ?></td>
-                        <td><?= number_format((float) $gasto['costo_unitario'], 2) ?></td>
-                        <td><?= number_format((float) $gasto['valor_total'], 2) ?></td>
+                        <td><?= number_format((float) $gasto['costo_unitario'], 2, ',', '.') ?></td>
+                        <td><?= number_format((float) $gasto['valor_total'], 2, ',', '.') ?></td>
                         <td><?= htmlspecialchars(implode(', ', $mesesGasto)) ?></td>
                     </tr>
             <?php
@@ -387,15 +387,15 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td>
                             <div class="lista-conceptos-celda">
                                 <?php foreach ($ingreso['conceptos'] as $concepto): ?>
-                                <span><?= number_format((float) $concepto['valor'], 2) ?></span>
+                                <span><?= number_format((float) $concepto['valor'], 2, ',', '.') ?></span>
                                 <?php endforeach; ?>
                                 <?php if (empty($ingreso['conceptos'])): ?>
                                 <span class="texto-atenuado">—</span>
                                 <?php endif; ?>
                             </div>
                         </td>
-                        <td><?= $ingreso['concepto_adicional'] !== '' ? htmlspecialchars($ingreso['concepto_adicional']) . ' (' . number_format((float) $ingreso['valor_adicional'], 2) . ')' : '—' ?></td>
-                        <td><?= number_format((float) $ingreso['valor_total'], 2) ?></td>
+                        <td><?= $ingreso['concepto_adicional'] !== '' ? htmlspecialchars($ingreso['concepto_adicional']) . ' (' . number_format((float) $ingreso['valor_adicional'], 2, ',', '.') . ')' : '—' ?></td>
+                        <td><?= number_format((float) $ingreso['valor_total'], 2, ',', '.') ?></td>
                     </tr>
             <?php
         };

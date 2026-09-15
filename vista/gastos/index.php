@@ -134,7 +134,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <span class="progreso-presupuesto-porcentaje">
                         <?php if ($presupuestoAnio > 0): ?>
                             <?= number_format($porcentajeGastado, 1) ?>% del <?= $dependenciaUsuarioEsRaiz ? 'presupuesto' : 'techo' ?> <?= (int) $anioSeleccionado['anio'] ?><?= $dependenciaUsuarioEsRaiz ? '' : ' de tu dependencia' ?>
-                            (<?= number_format($totalGastado, 2) ?> / <?= number_format($presupuestoAnio, 2) ?>)
+                            (<?= number_format($totalGastado, 2, ',', '.') ?> / <?= number_format($presupuestoAnio, 2, ',', '.') ?>)
                         <?php elseif ($dependenciaUsuarioId === null): ?>
                             No tienes una dependencia asignada, así que no se puede mostrar un techo presupuestal.
                         <?php else: ?>
@@ -200,8 +200,8 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td><?= $gasto['rubro_id'] !== null ? htmlspecialchars($gasto['rubro_codigo'] . ' - ' . $gasto['rubro_descripcion']) : htmlspecialchars($gasto['rubro_texto'] ?? '—') ?></td>
                         <td><?= htmlspecialchars($gasto['insumo']) ?></td>
                         <td><?= (int) $gasto['cantidad'] ?></td>
-                        <td><?= number_format((float) $gasto['costo_unitario'], 2) ?></td>
-                        <td><?= number_format((float) $gasto['valor_total'], 2) ?></td>
+                        <td><?= number_format((float) $gasto['costo_unitario'], 2, ',', '.') ?></td>
+                        <td><?= number_format((float) $gasto['valor_total'], 2, ',', '.') ?></td>
                         <td><?= htmlspecialchars(implode(', ', $mesesGasto)) ?></td>
                     </tr>
             <?php

@@ -195,7 +195,7 @@
                         <td><?= htmlspecialchars($necesidad['sublinea_inversion_nombre'] ?? $necesidad['sublinea_inversion']) ?></td>
                         <td><?= htmlspecialchars($necesidad['sede_nombre'] ?? '—') ?></td>
                         <td><?= htmlspecialchars($necesidad['dependencia']) ?></td>
-                        <td><?= number_format((float) $necesidad['valor'], 2) ?></td>
+                        <td><?= number_format((float) $necesidad['valor'], 2, ',', '.') ?></td>
                         <td><?= htmlspecialchars($necesidad['fuente_financiacion']) ?></td>
                         <td><?= htmlspecialchars($necesidad['responsable_nombre'] ?? '—') ?></td>
                         <td><?= htmlspecialchars($necesidad['creado_en']) ?></td>

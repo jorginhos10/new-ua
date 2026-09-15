@@ -249,7 +249,7 @@ class SinExcedentesControlador
         if ($egresosActuales + $nuevoValor > $ingresosDisponibles) {
             $disponible = max(0, $ingresosDisponibles - $egresosActuales);
 
-            return ['Este egreso supera los ingresos disponibles de este año. Disponible: ' . number_format($disponible, 2) . '.', ''];
+            return ['Este egreso supera los ingresos disponibles de este año. Disponible: ' . number_format($disponible, 2, ',', '.') . '.', ''];
         }
 
         $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, 0.0, $dependenciasPermitidas);
@@ -290,7 +290,7 @@ class SinExcedentesControlador
         if ($egresosActuales + $nuevoValor > $ingresosDisponibles) {
             $disponible = max(0, $ingresosDisponibles - $egresosActuales);
 
-            return ['Este egreso supera los ingresos disponibles de este año. Disponible: ' . number_format($disponible, 2) . '.', ''];
+            return ['Este egreso supera los ingresos disponibles de este año. Disponible: ' . number_format($disponible, 2, ',', '.') . '.', ''];
         }
 
         $valorExcluidoCategoria = $existente['categoria'] === $datos['categoria'] ? (float) $existente['valor_total'] : 0.0;
@@ -336,7 +336,7 @@ class SinExcedentesControlador
         if ($totalCategoriaActual + $nuevoValor > $limiteCategoria) {
             $disponibleCategoria = max(0, $limiteCategoria - $totalCategoriaActual);
 
-            return "Este egreso supera el porcentaje disponible para {$categoria}. Disponible: " . number_format($disponibleCategoria, 2) . '.';
+            return "Este egreso supera el porcentaje disponible para {$categoria}. Disponible: " . number_format($disponibleCategoria, 2, ',', '.') . '.';
         }
 
         return '';

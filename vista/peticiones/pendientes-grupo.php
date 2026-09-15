@@ -29,7 +29,7 @@
                         <td><?= htmlspecialchars($item['actividad']) ?></td>
                         <td><?= htmlspecialchars($item['insumo']) ?></td>
                         <td><?= (int) $item['cantidad'] ?></td>
-                        <td>$ <?= number_format($item['valor_total'], 2) ?></td>
+                        <td>$ <?= number_format($item['valor_total'], 2, ',', '.') ?></td>
                         <td class="celda-acciones">
                             <a href="<?= htmlspecialchars($item['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>
                         </td>

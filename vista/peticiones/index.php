@@ -155,7 +155,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                         <td><?= htmlspecialchars($item['tipo']) ?></td>
                         <td><?= htmlspecialchars($item['detalle']) ?></td>
                         <td class="columna-derecha" data-orden="<?= $item['cantidad'] !== null ? (float) $item['cantidad'] : 0 ?>"><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
-                        <td class="columna-derecha" data-orden="<?= $item['valor'] ?? 0 ?>"><?= $item['valor'] !== null ? '$ ' . number_format($item['valor'], 2) : '—' ?></td>
+                        <td class="columna-derecha" data-orden="<?= $item['valor'] ?? 0 ?>"><?= $item['valor'] !== null ? '$ ' . number_format($item['valor'], 2, ',', '.') : '—' ?></td>
                         <td>
                             <?php if ($item['estado_item'] === 'aprobada'): ?>
                             <span class="etiqueta-consolidado" title="Ya fue aceptado y consolidado">&#10003; Consolidado</span>
@@ -257,7 +257,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                         </td>
                         <td><?= htmlspecialchars($item['detalle']) ?></td>
                         <td class="columna-derecha" data-orden="<?= $item['cantidad'] !== null ? (float) $item['cantidad'] : 0 ?>"><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
-                        <td class="columna-derecha" data-orden="<?= $item['valor'] ?? 0 ?>"><?= $item['valor'] !== null ? '$ ' . number_format($item['valor'], 2) : '—' ?></td>
+                        <td class="columna-derecha" data-orden="<?= $item['valor'] ?? 0 ?>"><?= $item['valor'] !== null ? '$ ' . number_format($item['valor'], 2, ',', '.') : '—' ?></td>
                     </tr>
                     <?php endforeach; ?>
                     <?php if (empty($pendientes)): ?>
@@ -288,8 +288,8 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                         <td><?= htmlspecialchars($fila['tipo']) ?></td>
                         <td><?= $fila['dependencia'] !== null ? htmlspecialchars($fila['dependencia']) : '—' ?></td>
                         <td><?= $fila['rubro'] !== null ? htmlspecialchars($fila['rubro']) : '—' ?></td>
-                        <td><?= $fila['techo'] !== null ? '$ ' . number_format($fila['techo'], 2) : '—' ?></td>
-                        <td><?= $fila['valor'] !== null ? '$ ' . number_format($fila['valor'], 2) : '—' ?></td>
+                        <td><?= $fila['techo'] !== null ? '$ ' . number_format($fila['techo'], 2, ',', '.') : '—' ?></td>
+                        <td><?= $fila['valor'] !== null ? '$ ' . number_format($fila['valor'], 2, ',', '.') : '—' ?></td>
                         <td class="celda-acciones">
                             <a href="<?= htmlspecialchars($fila['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>
                         </td>
@@ -371,7 +371,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                         <td><?= htmlspecialchars($item['tipo']) ?></td>
                         <td><?= htmlspecialchars($item['detalle']) ?></td>
                         <td><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
-                        <td><?= $item['valor'] !== null ? '$ ' . number_format((float) $item['valor'], 2) : '—' ?></td>
+                        <td><?= $item['valor'] !== null ? '$ ' . number_format((float) $item['valor'], 2, ',', '.') : '—' ?></td>
                         <td><?= htmlspecialchars($item['archivado_en']) ?></td>
                         <td class="celda-acciones">
                             <div class="acciones-fila">
@@ -432,7 +432,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                         <td><?= htmlspecialchars($item['detalle']) ?></td>
                         <td><?= htmlspecialchars($item['estado_enviada']) ?></td>
                         <td><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
-                        <td><?= $item['valor'] !== null ? '$ ' . number_format((float) $item['valor'], 2) : '—' ?></td>
+                        <td><?= $item['valor'] !== null ? '$ ' . number_format((float) $item['valor'], 2, ',', '.') : '—' ?></td>
                         <td class="celda-acciones">
                             <div class="acciones-fila">
                                 <a href="<?= htmlspecialchars($item['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>

@@ -61,10 +61,10 @@ $nombresMeses = [
                 <dd><?= (int) $registro['cantidad'] ?></dd>
 
                 <dt>Costo unitario</dt>
-                <dd><?= number_format((float) $registro['costo_unitario'], 2) ?></dd>
+                <dd><?= number_format((float) $registro['costo_unitario'], 2, ',', '.') ?></dd>
 
                 <dt>Valor total</dt>
-                <dd><?= number_format((float) $registro['valor_total'], 2) ?></dd>
+                <dd><?= number_format((float) $registro['valor_total'], 2, ',', '.') ?></dd>
 
                 <dt>Meses</dt>
                 <dd>
@@ -85,7 +85,7 @@ $nombresMeses = [
                 <dd><?= htmlspecialchars($registro['dependencia']) ?></dd>
 
                 <dt>Valor total</dt>
-                <dd><?= number_format((float) $registro['valor_total'], 2) ?></dd>
+                <dd><?= number_format((float) $registro['valor_total'], 2, ',', '.') ?></dd>
             </dl>
         </section>
 
@@ -105,7 +105,7 @@ $nombresMeses = [
                         <tr>
                             <td><?= htmlspecialchars($concepto['concepto']) ?></td>
                             <td><?= (int) $concepto['cantidad'] ?></td>
-                            <td><?= number_format((float) $concepto['valor'], 2) ?></td>
+                            <td><?= number_format((float) $concepto['valor'], 2, ',', '.') ?></td>
                         </tr>
                         <?php endforeach; ?>
                         <?php if (empty($registro['conceptos'])): ?>
@@ -123,7 +123,7 @@ $nombresMeses = [
             <h2>Concepto adicional</h2>
             <dl class="detalle-solicitud">
                 <dt><?= htmlspecialchars($registro['concepto_adicional']) ?></dt>
-                <dd><?= number_format((float) $registro['valor_adicional'], 2) ?></dd>
+                <dd><?= number_format((float) $registro['valor_adicional'], 2, ',', '.') ?></dd>
             </dl>
         </section>
         <?php endif; ?>

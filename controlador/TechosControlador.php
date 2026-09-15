@@ -434,7 +434,7 @@ class TechosControlador
             foreach ($avaladores as $avalador) {
                 $asunto = 'Techo presupuestal actualizado — ' . $item['dependencia']['nombre'];
                 $cuerpo = 'Se definió un nuevo techo presupuestal para "' . $item['dependencia']['nombre']
-                    . '" en el año ' . $anio['anio'] . ': $' . number_format($item['techo'], 2) . '.';
+                    . '" en el año ' . $anio['anio'] . ': $' . number_format($item['techo'], 2, ',', '.') . '.';
 
                 $this->modeloMensaje->crear($remitenteId, (int) $avalador['id'], $asunto, $cuerpo);
                 $notificados++;

@@ -49,7 +49,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <tr>
                         <td><?= htmlspecialchars($resumen['dependencia']) ?></td>
                         <td><?= (int) $resumen['cantidad_items'] ?></td>
-                        <td>$ <?= number_format($resumen['valor_total'], 2) ?></td>
+                        <td>$ <?= number_format($resumen['valor_total'], 2, ',', '.') ?></td>
                     </tr>
                     <?php endforeach; ?>
                     <?php if (empty($resumenPorDependencia)): ?>
@@ -101,8 +101,8 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td><?= htmlspecialchars($fila['rubro']) ?></td>
                         <td><?= htmlspecialchars($fila['insumo']) ?></td>
                         <td><?= $fila['cantidad'] !== null ? htmlspecialchars((string) $fila['cantidad']) : '—' ?></td>
-                        <td><?= $fila['costo_unitario'] !== null ? number_format($fila['costo_unitario'], 2) : '—' ?></td>
-                        <td><?= $fila['valor_total'] !== null ? '$ ' . number_format($fila['valor_total'], 2) : '—' ?></td>
+                        <td><?= $fila['costo_unitario'] !== null ? number_format($fila['costo_unitario'], 2, ',', '.') : '—' ?></td>
+                        <td><?= $fila['valor_total'] !== null ? '$ ' . number_format($fila['valor_total'], 2, ',', '.') : '—' ?></td>
                         <td><?= !empty($mesesFila) ? htmlspecialchars(implode(', ', $mesesFila)) : '—' ?></td>
                     </tr>
                     <?php endforeach; ?>

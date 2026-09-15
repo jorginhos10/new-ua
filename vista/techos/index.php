@@ -115,9 +115,9 @@
                             </span>
                             <?php endif; ?>
                         </div>
-                        <span class="etiqueta-monto">$<?= number_format($gastado, 2) ?></span>
+                        <span class="etiqueta-monto">$<?= number_format($gastado, 2, ',', '.') ?></span>
                         <span class="etiqueta-monto <?= $restante !== null && $restante < 0 ? 'etiqueta-restante-negativo' : '' ?>">
-                            <?= $restante !== null ? '$' . number_format($restante, 2) : '—' ?>
+                            <?= $restante !== null ? '$' . number_format($restante, 2, ',', '.') : '—' ?>
                         </span>
                         <p class="advertencia-minimo oculto">El techo es menor al mínimo presupuestal de esta dependencia.</p>
                     </div>
@@ -140,11 +140,11 @@
             <div class="fila-presupuesto-total <?= $esSuperAdmin ? '' : 'sin-minimo' ?>">
                 <span>Total</span>
                 <?php if ($esSuperAdmin): ?>
-                <span>$<?= number_format($totalMinimo, 2) ?></span>
+                <span>$<?= number_format($totalMinimo, 2, ',', '.') ?></span>
                 <?php endif; ?>
-                <span>$<?= number_format($totalTecho, 2) ?></span>
-                <span>$<?= number_format($totalAsignado, 2) ?></span>
-                <span class="<?= $totalRestante < 0 ? 'etiqueta-restante-negativo' : '' ?>">$<?= number_format($totalRestante, 2) ?></span>
+                <span>$<?= number_format($totalTecho, 2, ',', '.') ?></span>
+                <span>$<?= number_format($totalAsignado, 2, ',', '.') ?></span>
+                <span class="<?= $totalRestante < 0 ? 'etiqueta-restante-negativo' : '' ?>">$<?= number_format($totalRestante, 2, ',', '.') ?></span>
             </div>
 
             <div class="acciones-formulario-presupuestos">

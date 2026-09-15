@@ -30,7 +30,7 @@
                 <?php foreach ($anios as $anioFila): ?>
                 <tr>
                     <td><?= htmlspecialchars((string) $anioFila['anio']) ?></td>
-                    <td><?= number_format((float) $anioFila['presupuesto'], 2) ?></td>
+                    <td><?= number_format((float) $anioFila['presupuesto'], 2, ',', '.') ?></td>
                     <td>
                         <form method="POST" action="index.php?ruta=anios-presupuestales" class="form-toggle">
                             <input type="hidden" name="accion" value="cambiar_estado">

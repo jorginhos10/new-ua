@@ -96,7 +96,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td><?= htmlspecialchars($necesidad['dependencia']) ?></td>
                         <td><?= htmlspecialchars($necesidad['programa_academico'] ?? '') ?></td>
                         <td><?= htmlspecialchars($necesidad['proyecto_nombre'] ?? '') ?></td>
-                        <td><?= number_format((float) $necesidad['valor'], 2) ?></td>
+                        <td><?= number_format((float) $necesidad['valor'], 2, ',', '.') ?></td>
                         <td><?= htmlspecialchars($necesidad['fuente_financiacion']) ?></td>
                         <td><?= htmlspecialchars($necesidad['responsable_nombre'] ?? '—') ?></td>
                         <td><?= htmlspecialchars($necesidad['creado_en']) ?></td>

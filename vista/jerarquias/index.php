@@ -164,7 +164,7 @@
                     echo '<div class="organigrama-cabecera">';
                     echo '<span class="organigrama-nombre">' . htmlspecialchars($nodo['nombre']) . '</span>';
                     if ($nodo['techo'] !== null) {
-                        echo '<span class="organigrama-techo">$ ' . number_format((float) $nodo['techo'], 2) . '</span>';
+                        echo '<span class="organigrama-techo">$ ' . number_format((float) $nodo['techo'], 2, ',', '.') . '</span>';
                     }
                     if ($nodo['estado'] !== 'activo') {
                         echo '<span class="organigrama-inactivo">Inactivo</span>';

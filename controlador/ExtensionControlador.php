@@ -296,7 +296,7 @@ class ExtensionControlador
         if ($egresosActuales + $nuevoValor > $ingresosDisponibles) {
             $disponible = max(0, $ingresosDisponibles - $egresosActuales);
 
-            return ["Este egreso supera los ingresos disponibles de este ítem de autogestión. Disponible: " . number_format($disponible, 2) . '.', ''];
+            return ["Este egreso supera los ingresos disponibles de este ítem de autogestión. Disponible: " . number_format($disponible, 2, ',', '.') . '.', ''];
         }
 
         $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], (int) $datos['autogestion_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, 0.0, $dependenciasPermitidas);
@@ -340,7 +340,7 @@ class ExtensionControlador
         if ($egresosActuales + $nuevoValor > $ingresosDisponibles) {
             $disponible = max(0, $ingresosDisponibles - $egresosActuales);
 
-            return ["Este egreso supera los ingresos disponibles de este ítem de autogestión. Disponible: " . number_format($disponible, 2) . '.', ''];
+            return ["Este egreso supera los ingresos disponibles de este ítem de autogestión. Disponible: " . number_format($disponible, 2, ',', '.') . '.', ''];
         }
 
         $valorExcluidoCategoria = $existente['categoria'] === $datos['categoria'] ? (float) $existente['valor_total'] : 0.0;
@@ -386,7 +386,7 @@ class ExtensionControlador
         if ($totalCategoriaActual + $nuevoValor > $limiteCategoria) {
             $disponibleCategoria = max(0, $limiteCategoria - $totalCategoriaActual);
 
-            return "Este egreso supera el porcentaje disponible para {$categoria}. Disponible: " . number_format($disponibleCategoria, 2) . '.';
+            return "Este egreso supera el porcentaje disponible para {$categoria}. Disponible: " . number_format($disponibleCategoria, 2, ',', '.') . '.';
         }
 
         return '';

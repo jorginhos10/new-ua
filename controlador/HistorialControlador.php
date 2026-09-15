@@ -173,7 +173,7 @@ class HistorialControlador
             foreach ($avaladores as $avalador) {
                 $asunto = 'Techo presupuestal restaurado — ' . $item['dependencia']['nombre'];
                 $cuerpo = 'Se restauró el techo presupuestal de "' . $item['dependencia']['nombre']
-                    . '" en el año ' . $anio['anio'] . ' a: $' . number_format($item['techo'], 2) . '.';
+                    . '" en el año ' . $anio['anio'] . ' a: $' . number_format($item['techo'], 2, ',', '.') . '.';
 
                 $this->modeloMensaje->crear($remitenteId, (int) $avalador['id'], $asunto, $cuerpo);
                 $notificados++;

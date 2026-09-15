@@ -78,7 +78,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <div class="barra-progreso">
                             <div class="barra-progreso-relleno" style="width: <?= number_format($costo['porcentaje'], 2, '.', '') ?>%;"></div>
                         </div>
-                        <span class="texto-atenuado resumen-costos-cifras">$ <?= number_format($costo['total_gastado'], 2) ?> / $ <?= number_format($costo['presupuesto'], 2) ?></span>
+                        <span class="texto-atenuado resumen-costos-cifras">$ <?= number_format($costo['total_gastado'], 2, ',', '.') ?> / $ <?= number_format($costo['presupuesto'], 2, ',', '.') ?></span>
                         <span class="texto-atenuado resumen-costos-cifras"><?= (int) $costo['dependencias_con_dato'] ?>/<?= (int) $costo['dependencias_total'] ?> dependencias</span>
 
                         <?php if (!empty($costo['detalle_dependencias'])): ?>
@@ -93,7 +93,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                 <div class="barra-progreso barra-progreso--mini">
                                     <div class="barra-progreso-relleno" style="width: <?= number_format($fila['porcentaje'], 2, '.', '') ?>%;"></div>
                                 </div>
-                                <span class="texto-atenuado resumen-costos-cifras">$ <?= number_format($fila['gastado'], 2) ?> / $ <?= number_format($fila['techo'], 2) ?></span>
+                                <span class="texto-atenuado resumen-costos-cifras">$ <?= number_format($fila['gastado'], 2, ',', '.') ?> / $ <?= number_format($fila['techo'], 2, ',', '.') ?></span>
                             </li>
                             <?php endforeach; ?>
                         </ul>
@@ -120,7 +120,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <div class="barra-progreso">
                             <div class="barra-progreso-relleno" style="width: <?= number_format($ingreso['porcentaje'], 2, '.', '') ?>%;"></div>
                         </div>
-                        <span class="texto-atenuado resumen-costos-cifras">$ <?= number_format($ingreso['total_ingresos'], 2) ?> / $ <?= number_format($ingreso['presupuesto'], 2) ?></span>
+                        <span class="texto-atenuado resumen-costos-cifras">$ <?= number_format($ingreso['total_ingresos'], 2, ',', '.') ?> / $ <?= number_format($ingreso['presupuesto'], 2, ',', '.') ?></span>
                         <span class="texto-atenuado resumen-costos-cifras"><?= (int) $ingreso['dependencias_con_dato'] ?>/<?= (int) $ingreso['dependencias_total'] ?> dependencias</span>
                     </div>
                     <?php endforeach; ?>
@@ -144,7 +144,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <div class="barra-progreso">
                             <div class="barra-progreso-relleno" style="width: <?= number_format($ingreso['porcentaje'], 2, '.', '') ?>%;"></div>
                         </div>
-                        <span class="texto-atenuado resumen-costos-cifras">$ <?= number_format($ingreso['total_ingresos'], 2) ?> / $ <?= number_format($ingreso['presupuesto'], 2) ?></span>
+                        <span class="texto-atenuado resumen-costos-cifras">$ <?= number_format($ingreso['total_ingresos'], 2, ',', '.') ?> / $ <?= number_format($ingreso['presupuesto'], 2, ',', '.') ?></span>
                         <span class="texto-atenuado resumen-costos-cifras"><?= (int) $ingreso['dependencias_con_dato'] ?>/<?= (int) $ingreso['dependencias_total'] ?> dependencias</span>
                     </div>
                     <?php endforeach; ?>
@@ -209,7 +209,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <tr>
                         <td><?= htmlspecialchars($solicitud['tipo']) ?></td>
                         <td><?= htmlspecialchars($solicitud['origen']) ?></td>
-                        <td><?= number_format($solicitud['valor'], 2) ?></td>
+                        <td><?= number_format($solicitud['valor'], 2, ',', '.') ?></td>
                         <td><?= htmlspecialchars($solicitud['fecha']) ?></td>
                     </tr>
                     <?php endforeach; ?>

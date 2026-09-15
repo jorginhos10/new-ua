@@ -47,7 +47,7 @@
                     <?php endforeach; ?>
                 </svg>
                 <div class="grafica-anillo-centro">
-                    <span class="grafica-anillo-total"><?= number_format($totalTechos, 2) ?></span>
+                    <span class="grafica-anillo-total"><?= number_format($totalTechos, 2, ',', '.') ?></span>
                     <span class="texto-atenuado">Total techos</span>
                 </div>
             </div>
@@ -57,7 +57,7 @@
                 <li>
                     <span class="leyenda-color" style="background: <?= htmlspecialchars($segmento['color']) ?>;"></span>
                     <span class="leyenda-nombre"><?= htmlspecialchars($segmento['nombre']) ?></span>
-                    <span class="leyenda-valor"><?= number_format($segmento['techo'], 2) ?> (<?= number_format($segmento['porcentaje'], 1) ?>%)</span>
+                    <span class="leyenda-valor"><?= number_format($segmento['techo'], 2, ',', '.') ?> (<?= number_format($segmento['porcentaje'], 1) ?>%)</span>
                 </li>
                 <?php endforeach; ?>
             </ul>

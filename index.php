@@ -26,6 +26,7 @@ require_once __DIR__ . '/controlador/DependenciaControlador.php';
 require_once __DIR__ . '/controlador/FacultadControlador.php';
 require_once __DIR__ . '/controlador/RelojArenaControlador.php';
 require_once __DIR__ . '/controlador/MensajeGlobalControlador.php';
+require_once __DIR__ . '/controlador/RepositorioControlador.php';
 require_once __DIR__ . '/controlador/AutogestionControlador.php';
 require_once __DIR__ . '/controlador/ExtensionControlador.php';
 require_once __DIR__ . '/controlador/PostgradoControlador.php';
@@ -145,6 +146,10 @@ switch ($ruta) {
 
     case 'mensaje-global':
         (new MensajeGlobalControlador())->index();
+        break;
+
+    case 'repositorios':
+        (new RepositorioControlador())->index();
         break;
 
     case 'autogestion':

@@ -152,7 +152,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td><?= htmlspecialchars($solicitud['facultad']) ?></td>
                         <td><span class="badge-rol badge-<?= htmlspecialchars($solicitud['estado']) ?>" <?= !empty($solicitud['enviada_a']) ? 'title="Enviada a: ' . htmlspecialchars($solicitud['enviada_a']) . '"' : '' ?>><?= $solicitud['estado'] === 'enviada' ? 'Enviada' : 'Borrador' ?></span></td>
                         <td><?= $totalPracticantes ?></td>
-                        <td>$ <?= number_format($totalValor, 2) ?></td>
+                        <td>$ <?= number_format($totalValor, 2, ',', '.') ?></td>
                         <td class="celda-acciones">
                             <div class="acciones-fila">
                                 <a
@@ -422,9 +422,9 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td><?= htmlspecialchars($solicitudOps['rubro_codigo'] . ' - ' . $solicitudOps['rubro_descripcion']) ?></td>
                         <td><?= htmlspecialchars($perfilesOps[$solicitudOps['perfil']] ?? $solicitudOps['perfil']) ?></td>
                         <td><span class="badge-rol badge-<?= htmlspecialchars($solicitudOps['estado']) ?>" <?= !empty($solicitudOps['enviada_a']) ? 'title="Enviada a: ' . htmlspecialchars($solicitudOps['enviada_a']) . '"' : '' ?>><?= $solicitudOps['estado'] === 'enviada' ? 'Enviada' : 'Borrador' ?></span></td>
-                        <td>$ <?= number_format((float) $solicitudOps['valor'], 2) ?></td>
+                        <td>$ <?= number_format((float) $solicitudOps['valor'], 2, ',', '.') ?></td>
                         <td><?= (int) $solicitudOps['cantidad'] ?></td>
-                        <td>$ <?= number_format($totalOps, 2) ?></td>
+                        <td>$ <?= number_format($totalOps, 2, ',', '.') ?></td>
                         <td class="celda-acciones">
                             <div class="acciones-fila">
                                 <a
@@ -562,9 +562,9 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td><?= htmlspecialchars($solicitudPeticion['concepto']) ?></td>
                         <td><span class="badge-rol badge-<?= htmlspecialchars($solicitudPeticion['estado']) ?>" <?= !empty($solicitudPeticion['enviada_a']) ? 'title="Enviada a: ' . htmlspecialchars($solicitudPeticion['enviada_a']) . '"' : '' ?>><?= $solicitudPeticion['estado'] === 'enviada' ? 'Enviada' : 'Borrador' ?></span></td>
                         <td><?= (int) $solicitudPeticion['semestre1'] ?></td>
-                        <td>$ <?= number_format((float) $solicitudPeticion['valor_s1'], 2) ?></td>
+                        <td>$ <?= number_format((float) $solicitudPeticion['valor_s1'], 2, ',', '.') ?></td>
                         <td><?= (int) $solicitudPeticion['semestre2'] ?></td>
-                        <td>$ <?= number_format((float) $solicitudPeticion['valor_s2'], 2) ?></td>
+                        <td>$ <?= number_format((float) $solicitudPeticion['valor_s2'], 2, ',', '.') ?></td>
                         <td class="celda-acciones">
                             <div class="acciones-fila">
                                 <a

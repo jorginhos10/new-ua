@@ -58,13 +58,13 @@ $titulosPorTipo = [
                         <tr>
                             <td>Riesgo <?= $romano ?></td>
                             <td><?= $estudiantes ?></td>
-                            <td>$ <?= number_format($valor, 2) ?></td>
+                            <td>$ <?= number_format($valor, 2, ',', '.') ?></td>
                         </tr>
                         <?php endforeach; ?>
                         <tr>
                             <td><strong>Total</strong></td>
                             <td><strong><?= $totalEstudiantes ?></strong></td>
-                            <td><strong>$ <?= number_format($totalValor, 2) ?></strong></td>
+                            <td><strong>$ <?= number_format($totalValor, 2, ',', '.') ?></strong></td>
                         </tr>
                     </tbody>
                 </table>
@@ -129,11 +129,11 @@ $titulosPorTipo = [
                 <dt>Perfil</dt>
                 <dd><?= htmlspecialchars($perfilesOps[$registro['perfil']] ?? $registro['perfil']) ?></dd>
                 <dt>Valor unitario</dt>
-                <dd>$ <?= number_format((float) $registro['valor'], 2) ?></dd>
+                <dd>$ <?= number_format((float) $registro['valor'], 2, ',', '.') ?></dd>
                 <dt>Cantidad</dt>
                 <dd><?= (int) $registro['cantidad'] ?></dd>
                 <dt>Total</dt>
-                <dd><strong>$ <?= number_format((float) $registro['valor'] * (int) $registro['cantidad'], 2) ?></strong></dd>
+                <dd><strong>$ <?= number_format((float) $registro['valor'] * (int) $registro['cantidad'], 2, ',', '.') ?></strong></dd>
             </dl>
         </section>
 
@@ -174,9 +174,9 @@ $titulosPorTipo = [
                         </tr>
                         <tr>
                             <td>Valor</td>
-                            <td>$ <?= number_format((float) $registro['valor_s1'], 2) ?></td>
-                            <td>$ <?= number_format((float) $registro['valor_s2'], 2) ?></td>
-                            <td><strong>$ <?= number_format((float) $registro['valor_s1'] + (float) $registro['valor_s2'], 2) ?></strong></td>
+                            <td>$ <?= number_format((float) $registro['valor_s1'], 2, ',', '.') ?></td>
+                            <td>$ <?= number_format((float) $registro['valor_s2'], 2, ',', '.') ?></td>
+                            <td><strong>$ <?= number_format((float) $registro['valor_s1'] + (float) $registro['valor_s2'], 2, ',', '.') ?></strong></td>
                         </tr>
                     </tbody>
                 </table>

@@ -169,6 +169,15 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </div>
                     <p class="texto-atenuado">Gestiona el árbol de centros de costo y los techos presupuestales por nivel.</p>
                 </a>
+                <?php if ($esSuperAdmin): ?>
+                <a href="index.php?ruta=repositorios" class="tarjeta-modulo">
+                    <div class="tarjeta-modulo-cabecera">
+                        <h2>Repositorios</h2>
+                        <?= $flechaModulo ?>
+                    </div>
+                    <p class="texto-atenuado">Crea y administra snapshots (copias completas de los datos) para uso futuro en herramientas de visualización.</p>
+                </a>
+                <?php endif; ?>
             </div>
         </section>
 

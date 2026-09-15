@@ -309,8 +309,8 @@ class GastoControlador
                 $gasto['rubro_id'] !== null ? $gasto['rubro_codigo'] . ' - ' . $gasto['rubro_descripcion'] : ($gasto['rubro_texto'] ?? '—'),
                 $gasto['insumo'],
                 (string) (int) $gasto['cantidad'],
-                number_format((float) $gasto['costo_unitario'], 2, '.', ''),
-                number_format((float) $gasto['valor_total'], 2, '.', ''),
+                number_format((float) $gasto['costo_unitario'], 2, ',', '.'),
+                number_format((float) $gasto['valor_total'], 2, ',', '.'),
                 implode(', ', $mesesGasto),
             ];
         };
@@ -471,7 +471,7 @@ class GastoControlador
 
                     if ($totalesAcumulados[$claveAcumulado] + $nuevoValor > $resuelto['techo']) {
                         $disponible = max(0, $resuelto['techo'] - $totalesAcumulados[$claveAcumulado]);
-                        $errores[] = "Fila $numeroFilaExcel: supera el techo presupuestal de \"" . $resuelto['dependencia']['nombre'] . "\". Disponible: " . number_format($disponible, 2) . '.';
+                        $errores[] = "Fila $numeroFilaExcel: supera el techo presupuestal de \"" . $resuelto['dependencia']['nombre'] . "\". Disponible: " . number_format($disponible, 2, ',', '.') . '.';
                         continue;
                     }
 
@@ -810,7 +810,7 @@ class GastoControlador
         if ($totalActual + $nuevoValor > $resuelto['techo']) {
             $disponible = max(0, $resuelto['techo'] - $totalActual);
 
-            return 'Este gasto supera el techo presupuestal de "' . $resuelto['dependencia']['nombre'] . '". Disponible: ' . number_format($disponible, 2) . '.';
+            return 'Este gasto supera el techo presupuestal de "' . $resuelto['dependencia']['nombre'] . '". Disponible: ' . number_format($disponible, 2, ',', '.') . '.';
         }
 
         return '';

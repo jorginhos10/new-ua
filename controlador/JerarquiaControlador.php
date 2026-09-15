@@ -141,7 +141,7 @@ class JerarquiaControlador
 
             if ($disponible !== null && $techo > $disponible) {
                 return [
-                    'El techo supera lo disponible en "' . $padre['nombre'] . '". Disponible: ' . number_format($disponible, 2) . '.',
+                    'El techo supera lo disponible en "' . $padre['nombre'] . '". Disponible: ' . number_format($disponible, 2, ',', '.') . '.',
                     '',
                 ];
             }

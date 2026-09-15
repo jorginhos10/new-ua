@@ -1,0 +1,15 @@
+CREATE TABLE snapshots (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    creado_por INT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (creado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+);
+
+CREATE TABLE snapshots_datos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    snapshot_id INT NOT NULL,
+    tabla VARCHAR(100) NOT NULL,
+    datos LONGTEXT NOT NULL,
+    FOREIGN KEY (snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
+);

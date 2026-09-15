@@ -115,10 +115,10 @@ if ($tipoFiltro !== '') {
                         <td><?= htmlspecialchars($fila['rubro']) ?></td>
                         <td><?= htmlspecialchars($fila['insumo']) ?></td>
                         <td><?= $fila['cantidad'] !== null ? htmlspecialchars((string) $fila['cantidad']) : '—' ?></td>
-                        <td><?= $fila['costo_unitario'] !== null ? number_format($fila['costo_unitario'], 2) : '—' ?></td>
-                        <td><?= $fila['valor_total'] !== null ? '$ ' . number_format($fila['valor_total'], 2) : '—' ?></td>
+                        <td><?= $fila['costo_unitario'] !== null ? number_format($fila['costo_unitario'], 2, ',', '.') : '—' ?></td>
+                        <td><?= $fila['valor_total'] !== null ? '$ ' . number_format($fila['valor_total'], 2, ',', '.') : '—' ?></td>
                         <td><?= !empty($mesesFila) ? htmlspecialchars(implode(', ', $mesesFila)) : '—' ?></td>
-                        <td><?= $fila['techo'] !== null ? '$ ' . number_format($fila['techo'], 2) : '—' ?></td>
+                        <td><?= $fila['techo'] !== null ? '$ ' . number_format($fila['techo'], 2, ',', '.') : '—' ?></td>
                     </tr>
                     <?php endforeach; ?>
                     <?php if (empty($filas)): ?>

@@ -232,7 +232,7 @@ class PerfilProyectosControlador
                 $necesidad['articulacion_plan'] ?? '',
                 $necesidad['espacio_intervenir'] ?? '',
                 $necesidad['requisitos_normativos'] ?? '',
-                number_format((float) $necesidad['valor'], 2, '.', ''),
+                number_format((float) $necesidad['valor'], 2, ',', '.'),
                 $necesidad['fuente_financiacion'],
                 $necesidad['responsable_nombre'] ?? '',
                 $necesidad['observaciones'] ?? '',
