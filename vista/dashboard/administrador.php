@@ -111,9 +111,9 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <div class="progreso-presupuesto-info">
                             <span class="progreso-presupuesto-porcentaje">
                                 <?php if ($ingreso['presupuesto'] > 0): ?>
-                                    <?= number_format($ingreso['porcentaje'], 1) ?>% del presupuesto <?= htmlspecialchars((string) $ingreso['anio']) ?> en ingresos (Extensión + Sin excedentes)
+                                    <?= number_format($ingreso['porcentaje'], 1) ?>% del tope <?= htmlspecialchars((string) $ingreso['anio']) ?> en ingresos (Extensión + Sin excedentes)
                                 <?php else: ?>
-                                    <?= htmlspecialchars((string) $ingreso['anio']) ?>: sin presupuesto asignado
+                                    <?= htmlspecialchars((string) $ingreso['anio']) ?>: sin tope asignado en Autogestión
                                 <?php endif; ?>
                             </span>
                         </div>

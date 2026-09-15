@@ -75,7 +75,22 @@
                         </div>
                     </td>
                     <td><?= htmlspecialchars($item['nombre']) ?></td>
-                    <td><?= $item['tope'] !== null ? number_format((float) $item['tope'], 2) : '—' ?></td>
+                    <td>
+                        <form method="POST" action="index.php?ruta=autogestion&tab=<?= htmlspecialchars($moduloActivo) ?>" class="form-tope-autogestion">
+                            <input type="hidden" name="accion" value="actualizar_tope">
+                            <input type="hidden" name="modulo" value="<?= htmlspecialchars($moduloActivo) ?>">
+                            <input type="hidden" name="id" value="<?= (int) $item['id'] ?>">
+                            <input
+                                type="number"
+                                name="tope"
+                                min="0"
+                                step="0.01"
+                                placeholder="Sin tope"
+                                value="<?= $item['tope'] !== null ? htmlspecialchars((string) $item['tope']) : '' ?>"
+                                onchange="this.form.requestSubmit()"
+                            >
+                        </form>
+                    </td>
                     <td>
                         <form method="POST" action="index.php?ruta=autogestion&tab=<?= htmlspecialchars($moduloActivo) ?>" class="form-toggle">
                             <input type="hidden" name="accion" value="cambiar_estado">
@@ -112,11 +127,6 @@
                     <div class="campo campo-ancho">
                         <label for="editar-autogestion-item-nombre">Nombre *</label>
                         <input type="text" id="editar-autogestion-item-nombre" name="nombre" required>
-                    </div>
-
-                    <div class="campo campo-ancho">
-                        <label for="editar-autogestion-item-tope">Tope</label>
-                        <input type="number" id="editar-autogestion-item-tope" name="tope" min="0" step="0.01" placeholder="Sin tope">
                     </div>
 
                     <button type="submit" class="boton-enviar">Guardar cambios</button>

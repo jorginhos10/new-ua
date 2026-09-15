@@ -13,6 +13,7 @@ require_once __DIR__ . '/../modelo/RelojArenaConfiguracion.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
 require_once __DIR__ . '/../modelo/MensajeGlobal.php';
+require_once __DIR__ . '/../modelo/AutogestionItem.php';
 
 class DashboardControlador
 {
@@ -41,7 +42,8 @@ class DashboardControlador
 
             if ($esSuperAdmin) {
                 $resumenCostos = $this->obtenerResumenCostos();
-                $resumenAutogestion = $this->obtenerResumenIngresos([new IngresoExtension(), new IngresoSinExcedentes()]);
+                $sumaTopeAutogestion = (new AutogestionItem())->obtenerSumaTope(['extension', 'sin-excedentes']);
+                $resumenAutogestion = $this->obtenerResumenIngresos([new IngresoExtension(), new IngresoSinExcedentes()], $sumaTopeAutogestion);
                 $resumenPostgrado = $this->obtenerResumenIngresos([new IngresoPostgrado()]);
                 $mensajeGlobal = '';
             } else {
@@ -160,7 +162,15 @@ class DashboardControlador
         return $detalle;
     }
 
-    private function obtenerResumenIngresos(array $modelosIngreso): array
+    /**
+     * @param float|null $topeOverride Si no es null, reemplaza el presupuesto general del año como
+     *        denominador del porcentaje — usado por la tarjeta de Autogestión del Dashboard, que
+     *        mide contra la suma de los topes configurados en Autogestión (Extensión + Sin
+     *        excedentes) en vez del presupuesto institucional completo. Si nadie ha configurado
+     *        ningún tope todavía, la suma es 0 y la tarjeta lo indica en vez de mostrar un
+     *        porcentaje contra el presupuesto general.
+     */
+    private function obtenerResumenIngresos(array $modelosIngreso, ?float $topeOverride = null): array
     {
         $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
         $totalDependencias = (new Dependencia())->contarMonetizablesActivas();
@@ -177,7 +187,7 @@ class DashboardControlador
                 $dependenciasConDato = array_merge($dependenciasConDato, $modeloIngreso->obtenerDependenciasPorAnio($anioId));
             }
 
-            $presupuestoAnio = (float) $anioFila['presupuesto'];
+            $presupuestoAnio = $topeOverride ?? (float) $anioFila['presupuesto'];
             $porcentaje = $presupuestoAnio > 0 ? min(100, ($totalIngresos / $presupuestoAnio) * 100) : 0.0;
 
             $resumen[] = [

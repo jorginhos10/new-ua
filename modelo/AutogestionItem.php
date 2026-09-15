@@ -61,11 +61,18 @@ class AutogestionItem
         return $consulta->execute(['nombre' => $nombre, 'modulo' => $modulo, 'tope' => $tope]);
     }
 
-    public function actualizar(int $id, string $nombre, ?float $tope = null): bool
+    public function actualizar(int $id, string $nombre): bool
     {
-        $consulta = $this->db->prepare('UPDATE autogestion_items SET nombre = :nombre, tope = :tope WHERE id = :id');
+        $consulta = $this->db->prepare('UPDATE autogestion_items SET nombre = :nombre WHERE id = :id');
 
-        return $consulta->execute(['id' => $id, 'nombre' => $nombre, 'tope' => $tope]);
+        return $consulta->execute(['id' => $id, 'nombre' => $nombre]);
+    }
+
+    public function actualizarTope(int $id, ?float $tope): bool
+    {
+        $consulta = $this->db->prepare('UPDATE autogestion_items SET tope = :tope WHERE id = :id');
+
+        return $consulta->execute(['id' => $id, 'tope' => $tope]);
     }
 
     public function cambiarEstado(int $id): bool
@@ -75,5 +82,24 @@ class AutogestionItem
         );
 
         return $consulta->execute(['id' => $id]);
+    }
+
+    /**
+     * Suma de los topes activos de los módulos indicados — usada en el Dashboard para la tarjeta
+     * de Autogestión (Extensión + Sin excedentes), en vez del presupuesto general del año.
+     */
+    public function obtenerSumaTope(array $modulos): float
+    {
+        if (empty($modulos)) {
+            return 0.0;
+        }
+
+        $marcadores = implode(',', array_fill(0, count($modulos), '?'));
+        $consulta = $this->db->prepare(
+            "SELECT COALESCE(SUM(tope), 0) FROM autogestion_items WHERE estado = 'activo' AND modulo IN ($marcadores)"
+        );
+        $consulta->execute(array_values($modulos));
+
+        return (float) $consulta->fetchColumn();
     }
 }

@@ -53,6 +53,8 @@ class AutogestionControlador
                 [$error, $exito] = $this->guardarPorcentaje($moduloActivo);
             } elseif ($accion === 'actualizar') {
                 [$error, $exito] = $this->actualizar($moduloActivo);
+            } elseif ($accion === 'actualizar_tope') {
+                [$error, $exito] = $this->actualizarTope();
             } else {
                 [$error, $exito] = $this->guardar($moduloActivo);
             }
@@ -119,15 +121,31 @@ class AutogestionControlador
             return ['Ese ítem ya existe.', ''];
         }
 
+        $this->modeloAutogestion->actualizar($id, $nombre);
+
+        return ['', 'Ítem de autogestión actualizado correctamente.'];
+    }
+
+    /**
+     * Guarda el tope directamente desde el input de la tabla (sin pasar por el modal de edición).
+     */
+    private function actualizarTope(): array
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+
+        if ($id <= 0 || $this->modeloAutogestion->obtenerPorId($id) === null) {
+            return ['El ítem no existe.', ''];
+        }
+
         [$errorTope, $tope] = $this->leerTope();
 
         if ($errorTope !== '') {
             return [$errorTope, ''];
         }
 
-        $this->modeloAutogestion->actualizar($id, $nombre, $tope);
+        $this->modeloAutogestion->actualizarTope($id, $tope);
 
-        return ['', 'Ítem de autogestión actualizado correctamente.'];
+        return ['', 'Tope actualizado correctamente.'];
     }
 
     /**
