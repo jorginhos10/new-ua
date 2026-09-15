@@ -12,7 +12,7 @@ require __DIR__ . '/../parciales/encabezado.php';
         <div class="cabecera-modulo">
             <div>
                 <h1>Autogestión y perfil de proyectos</h1>
-                <p class="texto-atenuado">Lo ya aceptado en Extensión, Postgrado, Unisalud, Sin excedentes y Perfil de proyectos dentro de tu propia dependencia y todas las que reportan a ella (hijas, nietas y demás niveles) — sin el nivel de consolidación institucional que tiene el administrador.</p>
+                <p class="texto-atenuado">Lo ya aceptado en Extensión, Postgrado, Unisalud, Convenios y Perfil de proyectos dentro de tu propia dependencia y todas las que reportan a ella (hijas, nietas y demás niveles) — sin el nivel de consolidación institucional que tiene el administrador.</p>
             </div>
             <div class="grupo-acciones-encabezado">
                 <a href="index.php?ruta=consolidado-autogestion&exportar=xlsx<?= $anioSeleccionadoId > 0 ? '&anio_id=' . (int) $anioSeleccionadoId : '' ?>" class="boton-accion boton-accion-enviar">Exportar Excel</a>

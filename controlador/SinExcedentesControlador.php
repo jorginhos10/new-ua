@@ -406,8 +406,8 @@ class SinExcedentesControlador
             $this->modeloMensaje->crear(
                 $remitenteId,
                 (int) $destinatario['id'],
-                'Sin excedentes enviado',
-                'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) de Sin excedentes para tu revisión.'
+                'Convenios enviado',
+                'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) de Convenios para tu revisión.'
             );
         }
 

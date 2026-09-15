@@ -86,7 +86,7 @@ class AutogestionItem
 
     /**
      * Suma de los topes activos de los módulos indicados — usada en el Dashboard para la tarjeta
-     * de Autogestión (Extensión + Sin excedentes), en vez del presupuesto general del año.
+     * de Autogestión (Extensión + Convenios), en vez del presupuesto general del año.
      */
     public function obtenerSumaTope(array $modulos): float
     {

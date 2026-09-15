@@ -12,7 +12,7 @@ class AutogestionControlador
         'extension' => 'Extensión',
         'postgrado' => 'Postgrado',
         'unisalud' => 'Unidad de Salud',
-        'sin-excedentes' => 'Sin excedentes',
+        'sin-excedentes' => 'Convenios',
     ];
 
     public function __construct()

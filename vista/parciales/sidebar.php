@@ -54,7 +54,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <a href="index.php?ruta=unisalud" class="<?= $rutaActual === 'unisalud' ? 'activo' : '' ?>">Unidad de Salud</a>
             <?php endif; ?>
             <?php if ($puedeVerMenu('sin-excedentes')): ?>
-            <a href="index.php?ruta=sin-excedentes" class="<?= $rutaActual === 'sin-excedentes' ? 'activo' : '' ?>">Sin excedentes</a>
+            <a href="index.php?ruta=sin-excedentes" class="<?= $rutaActual === 'sin-excedentes' ? 'activo' : '' ?>">Convenios</a>
             <?php endif; ?>
             <?php endif; ?>
 

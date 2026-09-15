@@ -1,5 +1,5 @@
 <?php
-$tituloPagina = 'Sin excedentes';
+$tituloPagina = 'Convenios';
 $nombresMeses = [
     1 => 'Ene', 2 => 'Feb', 3 => 'Mar', 4 => 'Abr',
     5 => 'May', 6 => 'Jun', 7 => 'Jul', 8 => 'Ago',
@@ -19,7 +19,7 @@ require __DIR__ . '/../parciales/encabezado.php';
 
     <div class="tarjeta">
         <?php
-        $barraTitulo = 'Sin excedentes';
+        $barraTitulo = 'Convenios';
         $barraBotonesSecundarios = [
             [
                 'id' => 'boton-seleccionar-sin-excedentes',
@@ -70,7 +70,7 @@ require __DIR__ . '/../parciales/encabezado.php';
         $barraRutaVolver = $modoEdicion
             ? ($volverEdicion !== '' ? $volverEdicion : 'index.php?ruta=sin-excedentes&tab=' . $tab . '&anio_id=' . $anioSeleccionadoId)
             : null;
-        $barraTextoVolver = ($modoEdicion && $volverEdicion !== '') ? 'Volver a Peticiones' : 'Volver a Sin excedentes';
+        $barraTextoVolver = ($modoEdicion && $volverEdicion !== '') ? 'Volver a Peticiones' : 'Volver a Convenios';
         require __DIR__ . '/../parciales/barra-modulo.php';
         ?>
 

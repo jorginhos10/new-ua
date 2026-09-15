@@ -9,7 +9,7 @@ return [
         'extension' => 'Extensión',
         'postgrado' => 'Postgrado',
         'unisalud' => 'Unidad de Salud',
-        'sin-excedentes' => 'Sin excedentes',
+        'sin-excedentes' => 'Convenios',
     ],
     'Egresos' => [
         'gastos' => 'Gastos',

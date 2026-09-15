@@ -15,7 +15,7 @@ require_once __DIR__ . '/../modelo/Dependencia.php';
 /**
  * Landing individual de solo lectura para un gasto/ingreso enviado como petición. Existe porque
  * el destinatario (avalador) no tiene por qué tener acceso a la vista del módulo de origen
- * (Extensión, Postgrado, Unisalud, Sin excedentes) — esa vista está pensada para quien gestiona
+ * (Extensión, Postgrado, Unisalud, Convenios) — esa vista está pensada para quien gestiona
  * la dependencia emisora, no para quien la recibe.
  */
 class GastoDetalleControlador
@@ -25,11 +25,11 @@ class GastoDetalleControlador
         'gasto_extension' => ['modelo' => 'GastoExtension', 'titulo' => 'Egreso — Extensión', 'esGasto' => true],
         'gasto_postgrado' => ['modelo' => 'GastoPostgrado', 'titulo' => 'Egreso — Postgrado', 'esGasto' => true],
         'gasto_unisalud' => ['modelo' => 'GastoUnisalud', 'titulo' => 'Egreso — Unidad de Salud', 'esGasto' => true],
-        'gasto_sin_excedentes' => ['modelo' => 'GastoSinExcedentes', 'titulo' => 'Egreso — Sin excedentes', 'esGasto' => true],
+        'gasto_sin_excedentes' => ['modelo' => 'GastoSinExcedentes', 'titulo' => 'Egreso — Convenios', 'esGasto' => true],
         'ingreso_extension' => ['modelo' => 'IngresoExtension', 'titulo' => 'Ingreso — Extensión', 'esGasto' => false],
         'ingreso_postgrado' => ['modelo' => 'IngresoPostgrado', 'titulo' => 'Ingreso — Postgrado', 'esGasto' => false],
         'ingreso_unisalud' => ['modelo' => 'IngresoUnisalud', 'titulo' => 'Ingreso — Unidad de Salud', 'esGasto' => false],
-        'ingreso_sin_excedentes' => ['modelo' => 'IngresoSinExcedentes', 'titulo' => 'Ingreso — Sin excedentes', 'esGasto' => false],
+        'ingreso_sin_excedentes' => ['modelo' => 'IngresoSinExcedentes', 'titulo' => 'Ingreso — Convenios', 'esGasto' => false],
     ];
 
     public function index(): void
