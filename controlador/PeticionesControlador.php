@@ -2752,7 +2752,7 @@ class PeticionesControlador
             }
         }
 
-        return [
+        $item = [
             'origen' => $redirigida['origen'],
             'origen_id' => (int) $redirigida['origen_id'],
             'tipo' => $redirigida['tipo'],
@@ -2767,6 +2767,17 @@ class PeticionesControlador
             'semaforo' => null,
             'puede_actuar' => true,
         ];
+
+        // 'detalle' es la dependencia DESTINO (a quién se redireccionó); igual que en filaGasto(),
+        // para que Pendientes de Gastos agrupe por dependencia de ORIGEN (y no fusione en un solo
+        // grupo ítems de varios programas distintos redireccionados juntos desde Consolidado por
+        // tipo — ver agruparPendientesPorDependencia()) se recupera la dependencia real del gasto.
+        if ($redirigida['origen'] === 'gasto_principal') {
+            $gastoOriginal = $this->modeloGasto->obtenerPorId((int) $redirigida['origen_id']);
+            $item['dependencia_origen'] = $gastoOriginal['dependencia'] ?? $dependenciaDestino;
+        }
+
+        return $item;
     }
 
     private function fila(string $origen, int $origenId, string $tipo, string $detalle, ?string $cantidad, ?float $valor, string $familia, string $ruta, string $rutaVer, ?array $semaforo = null): array
