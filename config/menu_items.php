@@ -22,5 +22,6 @@ return [
     ],
     'Administración' => [
         'configuraciones' => 'Configuraciones',
+        'usuarios' => 'Usuarios',
     ],
 ];

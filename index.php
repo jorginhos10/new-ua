@@ -100,7 +100,14 @@ if (
     if ($usuarioActualRouter !== null) {
         $permitidoRouter = (new MenuPermiso())->calcularPermitidoParaUsuario($usuarioActualRouter);
 
-        if ($permitidoRouter !== null && !in_array($rutaAMenuKey[$ruta], $permitidoRouter, true)) {
+        // "usuarios" es una excepción dentro de Configuraciones: se puede conceder aparte (permiso
+        // 'usuarios' propio), sin necesidad de darle el resto de Configuraciones — quien ya tenía
+        // 'configuraciones' sigue entrando igual, por compatibilidad con lo ya configurado.
+        $tieneAccesoRuta = $permitidoRouter === null
+            || in_array($rutaAMenuKey[$ruta], $permitidoRouter, true)
+            || ($ruta === 'usuarios' && in_array('usuarios', $permitidoRouter, true));
+
+        if (!$tieneAccesoRuta) {
             header('Location: index.php?ruta=dashboard');
             exit;
         }

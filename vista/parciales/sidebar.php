@@ -79,9 +79,14 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <a href="index.php?ruta=perfil-proyectos" class="<?= $rutaActual === 'perfil-proyectos' ? 'activo' : '' ?>">Perfil de proyectos</a>
             <?php endif; ?>
 
-            <?php if ($puedeVerMenu('configuraciones')): ?>
+            <?php if ($puedeVerMenu('configuraciones') || $puedeVerMenu('usuarios')): ?>
             <p class="grupo-menu">Administración</p>
+            <?php if ($puedeVerMenu('configuraciones')): ?>
             <a href="index.php?ruta=configuraciones" class="<?= in_array($rutaActual, ['configuraciones', 'usuarios', 'roles', 'estamentos', 'lineas', 'motores', 'proyectos', 'rubros', 'anios-presupuestales', 'sedes', 'dependencias', 'facultades', 'jerarquias', 'variables-macroeconomicas', 'reloj-arena'], true) ? 'activo' : '' ?>">Configuraciones</a>
+            <?php endif; ?>
+            <?php if ($puedeVerMenu('usuarios')): ?>
+            <a href="index.php?ruta=usuarios" class="<?= $rutaActual === 'usuarios' ? 'activo' : '' ?>">Usuarios</a>
+            <?php endif; ?>
             <?php endif; ?>
 
             <p class="grupo-menu">Documentación</p>
