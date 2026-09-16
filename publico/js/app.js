@@ -2874,6 +2874,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 cuerpoVerPendientes.appendChild(fila);
             });
 
+            var thDetallePendientes = cuerpoVerPendientes.closest('table').querySelector('th[data-orden-defecto]');
+            if (thDetallePendientes) {
+                window.ordenarPorEncabezado(thDetallePendientes);
+            }
+
             modalVerPendientes.classList.add('abierto');
         });
     }
@@ -3190,6 +3195,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 filaTotal.appendChild(document.createElement('td'));
 
                 cuerpoVerConsolidado.appendChild(filaTotal);
+            }
+
+            var thDetalleConsolidado = cuerpoVerConsolidado.closest('table').querySelector('th[data-orden-defecto]');
+            if (thDetalleConsolidado) {
+                window.ordenarPorEncabezado(thDetalleConsolidado);
             }
 
             modalVerConsolidado.classList.add('abierto');
@@ -3574,6 +3584,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 cuerpoVerArchivado.appendChild(fila);
             });
 
+            var thDetalleArchivado = cuerpoVerArchivado.closest('table').querySelector('th[data-orden-defecto]');
+            if (thDetalleArchivado) {
+                window.ordenarPorEncabezado(thDetalleArchivado);
+            }
+
             modalVerArchivado.classList.add('abierto');
         });
 
@@ -3832,6 +3847,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 cuerpoVerEnviado.appendChild(fila);
             });
+
+            var thDetalleEnviado = cuerpoVerEnviado.closest('table').querySelector('th[data-orden-defecto]');
+            if (thDetalleEnviado) {
+                window.ordenarPorEncabezado(thDetalleEnviado);
+            }
 
             modalVerEnviado.classList.add('abierto');
         });
@@ -5074,62 +5094,68 @@ document.addEventListener('DOMContentLoaded', function () {
  * (columnas de cantidad/valor); si no, se compara el texto visible (columnas de texto). Por defecto
  * el primer clic ordena de mayor a menor y un segundo clic sobre el mismo encabezado invierte a
  * menor a mayor; un encabezado con data-orden-inicial="asc" invierte ese orden (primero menor a
- * mayor, luego mayor a menor) — usado en las tablas de "Ver detalle" de Peticiones.
+ * mayor, luego mayor a menor) — usado en las tablas de "Ver detalle" de Peticiones. Expuesta como
+ * window.ordenarPorEncabezado para poder aplicar también un orden por defecto al construir una
+ * tabla dinámicamente (ver los popups "Ver" de Peticiones), simulando el mismo primer clic.
  */
+window.ordenarPorEncabezado = function (encabezado) {
+    var fila = encabezado.parentElement;
+    var tabla = encabezado.closest('table');
+    var cuerpo = tabla ? tabla.querySelector('tbody') : null;
+
+    if (!fila || !cuerpo) {
+        return;
+    }
+
+    var encabezados = Array.prototype.slice.call(fila.children);
+    var indice = encabezados.indexOf(encabezado);
+    var direccionInicial = encabezado.dataset.ordenInicial === 'asc' ? 'asc' : 'desc';
+    var otraDireccion = direccionInicial === 'asc' ? 'desc' : 'asc';
+    var nuevaDireccion = encabezado.classList.contains('orden-' + direccionInicial) ? otraDireccion : direccionInicial;
+
+    encabezados.forEach(function (th) {
+        th.classList.remove('orden-asc', 'orden-desc');
+    });
+    encabezado.classList.add(nuevaDireccion === 'asc' ? 'orden-asc' : 'orden-desc');
+
+    // Las filas marcadas con data-sin-ordenar (ej. la fila de "Total" en el detalle de
+    // Consolidado) no participan del ordenamiento y siempre quedan al final.
+    var filas = Array.prototype.slice.call(cuerpo.querySelectorAll(':scope > tr:not([data-sin-ordenar])'));
+    var filasFijas = Array.prototype.slice.call(cuerpo.querySelectorAll(':scope > tr[data-sin-ordenar]'));
+
+    filas.sort(function (filaA, filaB) {
+        var celdaA = filaA.children[indice];
+        var celdaB = filaB.children[indice];
+
+        if (!celdaA || !celdaB) {
+            return 0;
+        }
+
+        var esNumero = celdaA.dataset.orden !== undefined;
+        var valorA = esNumero ? parseFloat(celdaA.dataset.orden) : celdaA.textContent.trim().toLowerCase();
+        var valorB = esNumero ? parseFloat(celdaB.dataset.orden) : celdaB.textContent.trim().toLowerCase();
+
+        if (valorA < valorB) {
+            return nuevaDireccion === 'asc' ? -1 : 1;
+        }
+        if (valorA > valorB) {
+            return nuevaDireccion === 'asc' ? 1 : -1;
+        }
+        return 0;
+    });
+
+    filas.forEach(function (fila) {
+        cuerpo.appendChild(fila);
+    });
+    filasFijas.forEach(function (fila) {
+        cuerpo.appendChild(fila);
+    });
+};
+
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('th.th-ordenable').forEach(function (encabezado) {
         encabezado.addEventListener('click', function () {
-            var fila = encabezado.parentElement;
-            var tabla = encabezado.closest('table');
-            var cuerpo = tabla ? tabla.querySelector('tbody') : null;
-
-            if (!fila || !cuerpo) {
-                return;
-            }
-
-            var encabezados = Array.prototype.slice.call(fila.children);
-            var indice = encabezados.indexOf(encabezado);
-            var direccionInicial = encabezado.dataset.ordenInicial === 'asc' ? 'asc' : 'desc';
-            var otraDireccion = direccionInicial === 'asc' ? 'desc' : 'asc';
-            var nuevaDireccion = encabezado.classList.contains('orden-' + direccionInicial) ? otraDireccion : direccionInicial;
-
-            encabezados.forEach(function (th) {
-                th.classList.remove('orden-asc', 'orden-desc');
-            });
-            encabezado.classList.add(nuevaDireccion === 'asc' ? 'orden-asc' : 'orden-desc');
-
-            // Las filas marcadas con data-sin-ordenar (ej. la fila de "Total" en el detalle de
-            // Consolidado) no participan del ordenamiento y siempre quedan al final.
-            var filas = Array.prototype.slice.call(cuerpo.querySelectorAll(':scope > tr:not([data-sin-ordenar])'));
-            var filasFijas = Array.prototype.slice.call(cuerpo.querySelectorAll(':scope > tr[data-sin-ordenar]'));
-
-            filas.sort(function (filaA, filaB) {
-                var celdaA = filaA.children[indice];
-                var celdaB = filaB.children[indice];
-
-                if (!celdaA || !celdaB) {
-                    return 0;
-                }
-
-                var esNumero = celdaA.dataset.orden !== undefined;
-                var valorA = esNumero ? parseFloat(celdaA.dataset.orden) : celdaA.textContent.trim().toLowerCase();
-                var valorB = esNumero ? parseFloat(celdaB.dataset.orden) : celdaB.textContent.trim().toLowerCase();
-
-                if (valorA < valorB) {
-                    return nuevaDireccion === 'asc' ? -1 : 1;
-                }
-                if (valorA > valorB) {
-                    return nuevaDireccion === 'asc' ? 1 : -1;
-                }
-                return 0;
-            });
-
-            filas.forEach(function (fila) {
-                cuerpo.appendChild(fila);
-            });
-            filasFijas.forEach(function (fila) {
-                cuerpo.appendChild(fila);
-            });
+            window.ordenarPorEncabezado(encabezado);
         });
     });
 });

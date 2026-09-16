@@ -469,7 +469,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     <thead>
                         <tr>
                             <th class="th-ordenable" data-orden-inicial="asc">Tipo</th>
-                            <th class="th-ordenable" data-orden-inicial="asc">Detalle</th>
+                            <th class="th-ordenable" data-orden-inicial="asc" data-orden-defecto>Detalle</th>
                             <th class="th-ordenable" data-orden-inicial="asc">Cantidad</th>
                             <th class="th-ordenable" data-orden-inicial="asc">Valor</th>
                             <th></th>
@@ -656,7 +656,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     <thead>
                         <tr>
                             <th class="th-ordenable" data-orden-inicial="asc">Tipo</th>
-                            <th class="th-ordenable" data-orden-inicial="asc">Detalle</th>
+                            <th class="th-ordenable" data-orden-inicial="asc" data-orden-defecto>Detalle</th>
                             <th class="th-ordenable" data-orden-inicial="asc">Cantidad</th>
                             <th class="th-ordenable" data-orden-inicial="asc">Valor</th>
                             <th></th>
@@ -680,7 +680,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     <thead>
                         <tr>
                             <th class="th-ordenable" data-orden-inicial="asc">Tipo</th>
-                            <th class="th-ordenable" data-orden-inicial="asc">Detalle</th>
+                            <th class="th-ordenable" data-orden-inicial="asc" data-orden-defecto>Detalle</th>
                             <th class="th-ordenable" data-orden-inicial="asc">Cantidad</th>
                             <th class="th-ordenable" data-orden-inicial="asc">Valor</th>
                             <th></th>
@@ -704,7 +704,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                     <thead>
                         <tr>
                             <th class="th-ordenable" data-orden-inicial="asc">Tipo</th>
-                            <th class="th-ordenable" data-orden-inicial="asc">Detalle</th>
+                            <th class="th-ordenable" data-orden-inicial="asc" data-orden-defecto>Detalle</th>
                             <th class="th-ordenable" data-orden-inicial="asc">Cantidad</th>
                             <th class="th-ordenable" data-orden-inicial="asc">Valor</th>
                             <th></th>
