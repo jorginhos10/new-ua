@@ -2846,7 +2846,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 fila.appendChild(celdaTipo);
 
                 var celdaDetalle = document.createElement('td');
-                celdaDetalle.textContent = item.detalle || '—';
+                celdaDetalle.textContent = item.dependencia_origen || item.detalle || '—';
                 fila.appendChild(celdaDetalle);
 
                 var celdaCantidad = document.createElement('td');
@@ -3119,7 +3119,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 fila.appendChild(celdaTipo);
 
                 var celdaDetalle = document.createElement('td');
-                celdaDetalle.textContent = item.detalle || '—';
+                celdaDetalle.textContent = item.dependencia || item.detalle || '—';
                 fila.appendChild(celdaDetalle);
 
                 var celdaCantidad = document.createElement('td');
