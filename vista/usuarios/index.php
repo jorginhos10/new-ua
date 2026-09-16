@@ -5,11 +5,14 @@
             <h1>Usuarios</h1>
             <?php if ($tab === 'administradores'): ?>
             <button type="button" id="boton-abrir-modal-administrador" class="boton-agregar">+ Agregar administrador</button>
+            <?php elseif ($tab === 'consejo-superior'): ?>
+            <button type="button" id="boton-abrir-modal-administrador" class="boton-agregar">+ Agregar miembro</button>
             <?php endif; ?>
         </div>
 
         <div class="pestanas">
             <a href="index.php?ruta=usuarios&tab=administradores" class="pestana<?= $tab === 'administradores' ? ' activa' : '' ?>">Administradores</a>
+            <a href="index.php?ruta=usuarios&tab=consejo-superior" class="pestana<?= $tab === 'consejo-superior' ? ' activa' : '' ?>">Consejo Superior</a>
             <a href="index.php?ruta=usuarios&tab=invitados" class="pestana<?= $tab === 'invitados' ? ' activa' : '' ?>">Invitados</a>
         </div>
 
@@ -98,6 +101,58 @@
                 </table>
                 </div>
             </section>
+        <?php elseif ($tab === 'consejo-superior'): ?>
+            <section class="panel-pestana">
+                <h2>Consejo Superior</h2>
+                <div class="tabla-scroll">
+                <table class="tabla-usuarios">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Correo</th>
+                            <th>Creado</th>
+                            <th>Último acceso</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($consejoSuperior as $miembro): ?>
+                        <tr>
+                            <td><?= htmlspecialchars($miembro['nombre']) ?></td>
+                            <td><?= htmlspecialchars($miembro['correo']) ?></td>
+                            <td><?= htmlspecialchars($miembro['creado_en']) ?></td>
+                            <td><?= $miembro['ultimo_acceso'] !== null ? htmlspecialchars($miembro['ultimo_acceso']) : '<span class="texto-atenuado">Nunca</span>' ?></td>
+                            <td class="celda-acciones">
+                                <div class="acciones-fila">
+                                    <button
+                                        type="button"
+                                        class="boton-accion boton-accion-editar boton-editar-usuario"
+                                        data-id="<?= (int) $miembro['id'] ?>"
+                                        data-nombre="<?= htmlspecialchars($miembro['nombre']) ?>"
+                                        data-correo="<?= htmlspecialchars($miembro['correo']) ?>"
+                                        data-rol-id="0"
+                                        data-dependencia-id="0"
+                                        data-estamento-id="0"
+                                    >Editar</button>
+                                    <form method="POST" action="index.php?ruta=usuarios&tab=consejo-superior">
+                                        <input type="hidden" name="accion" value="eliminar">
+                                        <input type="hidden" name="tab" value="consejo-superior">
+                                        <input type="hidden" name="id" value="<?= (int) $miembro['id'] ?>">
+                                        <button type="submit" class="boton-accion boton-accion-eliminar">Eliminar</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                        <?php if (empty($consejoSuperior)): ?>
+                        <tr>
+                            <td colspan="5">No hay miembros del Consejo Superior registrados.</td>
+                        </tr>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+                </div>
+            </section>
         <?php else: ?>
             <section class="panel-pestana">
                 <h2>Invitados registrados</h2>
@@ -133,15 +188,16 @@
     <script type="application/json" id="datos-roles-por-tipo"><?= json_encode($rolesPorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
     <script type="application/json" id="datos-menu-por-tipo-usuarios"><?= json_encode($menuPorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
 
-    <?php if ($tab === 'administradores'): ?>
+    <?php if ($tab === 'administradores' || $tab === 'consejo-superior'): ?>
     <div id="modal-administrador" class="modal-fondo<?= !empty($error) ? ' abierto' : '' ?>">
         <div class="modal-caja">
             <div class="modal-cabecera">
-                <h2>Agregar administrador</h2>
+                <h2><?= $tab === 'consejo-superior' ? 'Agregar miembro del Consejo Superior' : 'Agregar administrador' ?></h2>
                 <button type="button" id="boton-cerrar-modal-administrador" class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
 
-            <form method="POST" action="index.php?ruta=usuarios&tab=administradores" class="form-necesidad">
+            <form method="POST" action="index.php?ruta=usuarios&tab=<?= $tab ?>" class="form-necesidad">
+                <input type="hidden" name="rol_cuenta" value="<?= $tab === 'consejo-superior' ? 'consejo_superior' : 'administrador' ?>">
                 <div class="campo">
                     <label for="admin-nombre">Nombre completo *</label>
                     <input type="text" id="admin-nombre" name="nombre" placeholder="Nombre completo" required>
@@ -157,6 +213,7 @@
                     <input type="password" id="admin-password" name="password" placeholder="Contraseña" required>
                 </div>
 
+                <?php if ($tab === 'administradores'): ?>
                 <div class="campo">
                     <label for="admin-tipo">Tipo</label>
                     <select id="admin-tipo" data-select-dependencia="admin-dependencia">
@@ -199,6 +256,7 @@
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <?php endif; ?>
 
                 <button type="submit" class="boton-enviar">Agregar</button>
             </form>
@@ -212,7 +270,7 @@
                 <button type="button" id="boton-cerrar-modal-editar-usuario" class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
 
-            <form method="POST" action="index.php?ruta=usuarios&tab=administradores" class="form-necesidad">
+            <form method="POST" action="index.php?ruta=usuarios&tab=<?= $tab ?>" class="form-necesidad">
                 <input type="hidden" name="accion" value="actualizar">
                 <input type="hidden" name="id" id="editar-usuario-id" value="">
 
@@ -231,6 +289,7 @@
                     <input type="password" id="editar-usuario-password" name="password" placeholder="Dejar en blanco para no cambiarla">
                 </div>
 
+                <?php if ($tab === 'administradores'): ?>
                 <div class="campo">
                     <label for="editar-usuario-tipo">Tipo</label>
                     <select id="editar-usuario-tipo" data-select-dependencia="editar-usuario-dependencia">
@@ -273,12 +332,14 @@
                         <?php endforeach; ?>
                     </select>
                 </div>
+                <?php endif; ?>
 
                 <button type="submit" class="boton-enviar">Guardar cambios</button>
             </form>
         </div>
     </div>
 
+    <?php if ($tab === 'administradores'): ?>
     <div id="modal-permisos-usuario" class="modal-fondo">
         <div class="modal-caja">
             <div class="modal-cabecera">
@@ -342,6 +403,7 @@
             </form>
         </div>
     </div>
+    <?php endif; ?>
     <?php endif; ?>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

@@ -55,10 +55,12 @@ class UsuarioControlador
             }
         }
 
-        $tab = ($_GET['tab'] ?? 'administradores') === 'invitados' ? 'invitados' : 'administradores';
+        $tabSolicitado = $_GET['tab'] ?? 'administradores';
+        $tab = in_array($tabSolicitado, ['invitados', 'consejo-superior'], true) ? $tabSolicitado : 'administradores';
 
         $administradores = $this->modeloUsuario->obtenerPorRol('administrador');
         $invitados = $this->modeloUsuario->obtenerPorRol('invitado');
+        $consejoSuperior = $this->modeloUsuario->obtenerPorRol('consejo_superior');
         $roles = $this->modeloRol->obtenerTodos();
         $dependencias = $this->modeloDependencia->obtenerActivas();
         $estamentos = $this->modeloEstamento->obtenerTodos();
@@ -167,6 +169,7 @@ class UsuarioControlador
         $rolId = (int) ($_POST['rol_id'] ?? 0);
         $dependenciaId = (int) ($_POST['dependencia_id'] ?? 0);
         $estamentoId = (int) ($_POST['estamento_id'] ?? 0);
+        $rolCuenta = ($_POST['rol_cuenta'] ?? '') === 'consejo_superior' ? 'consejo_superior' : 'administrador';
 
         if ($nombre === '' || $correo === '' || $password === '') {
             return ['Todos los campos son obligatorios.', ''];
@@ -184,14 +187,14 @@ class UsuarioControlador
             $nombre,
             $correo,
             $password,
-            'administrador',
+            $rolCuenta,
             null,
             $rolId > 0 ? $rolId : null,
             $dependenciaId > 0 ? $dependenciaId : null,
             $estamentoId > 0 ? $estamentoId : null
         );
 
-        return ['', 'Administrador agregado correctamente.'];
+        return ['', $rolCuenta === 'consejo_superior' ? 'Miembro del Consejo Superior agregado correctamente.' : 'Administrador agregado correctamente.'];
     }
 
     private function eliminar(): void
@@ -202,7 +205,10 @@ class UsuarioControlador
             $this->modeloUsuario->eliminar($id);
         }
 
-        header('Location: index.php?ruta=usuarios&tab=' . (($_POST['tab'] ?? '') === 'invitados' ? 'invitados' : 'administradores'));
+        $tabDestino = $_POST['tab'] ?? '';
+        $tabDestino = in_array($tabDestino, ['invitados', 'consejo-superior'], true) ? $tabDestino : 'administradores';
+
+        header('Location: index.php?ruta=usuarios&tab=' . $tabDestino);
         exit;
     }
 
