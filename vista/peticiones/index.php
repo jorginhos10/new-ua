@@ -468,10 +468,10 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <table class="tabla-usuarios tabla-consolidado-detalle">
                     <thead>
                         <tr>
-                            <th>Tipo</th>
-                            <th>Detalle</th>
-                            <th>Cantidad</th>
-                            <th>Valor</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Tipo</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Detalle</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Cantidad</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Valor</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -655,10 +655,10 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <table class="tabla-usuarios tabla-consolidado-detalle">
                     <thead>
                         <tr>
-                            <th>Tipo</th>
-                            <th>Detalle</th>
-                            <th>Cantidad</th>
-                            <th>Valor</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Tipo</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Detalle</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Cantidad</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Valor</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -679,10 +679,10 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <table class="tabla-usuarios tabla-consolidado-detalle">
                     <thead>
                         <tr>
-                            <th>Tipo</th>
-                            <th>Detalle</th>
-                            <th>Cantidad</th>
-                            <th>Valor</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Tipo</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Detalle</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Cantidad</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Valor</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -703,10 +703,10 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <table class="tabla-usuarios tabla-consolidado-detalle">
                     <thead>
                         <tr>
-                            <th>Tipo</th>
-                            <th>Detalle</th>
-                            <th>Cantidad</th>
-                            <th>Valor</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Tipo</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Detalle</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Cantidad</th>
+                            <th class="th-ordenable" data-orden-inicial="asc">Valor</th>
                             <th></th>
                         </tr>
                     </thead>

@@ -2851,12 +2851,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 var celdaCantidad = document.createElement('td');
                 celdaCantidad.textContent = item.cantidad !== null && item.cantidad !== undefined && item.cantidad !== '' ? item.cantidad : '—';
+                celdaCantidad.dataset.orden = item.cantidad !== null && item.cantidad !== undefined && item.cantidad !== '' ? parseFloat(item.cantidad) || 0 : 0;
                 fila.appendChild(celdaCantidad);
 
                 var celdaValor = document.createElement('td');
                 celdaValor.textContent = item.valor !== null && item.valor !== undefined && item.valor !== ''
                     ? '$ ' + Number(item.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : '—';
+                celdaValor.dataset.orden = item.valor !== null && item.valor !== undefined && item.valor !== '' ? Number(item.valor) : 0;
                 fila.appendChild(celdaValor);
 
                 var celdaAccion = document.createElement('td');
@@ -3124,12 +3126,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 var celdaCantidad = document.createElement('td');
                 celdaCantidad.textContent = item.cantidad !== null && item.cantidad !== undefined && item.cantidad !== '' ? item.cantidad : '—';
+                celdaCantidad.dataset.orden = item.cantidad !== null && item.cantidad !== undefined && item.cantidad !== '' ? parseFloat(item.cantidad) || 0 : 0;
                 fila.appendChild(celdaCantidad);
 
                 var celdaValor = document.createElement('td');
                 celdaValor.textContent = item.valor !== null && item.valor !== undefined && item.valor !== ''
                     ? '$ ' + Number(item.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : '—';
+                celdaValor.dataset.orden = item.valor !== null && item.valor !== undefined && item.valor !== '' ? Number(item.valor) : 0;
                 fila.appendChild(celdaValor);
 
                 var celdaAccion = document.createElement('td');
@@ -3167,6 +3171,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 var filaTotal = document.createElement('tr');
                 filaTotal.className = 'fila-total-consolidado';
+                filaTotal.setAttribute('data-sin-ordenar', '');
 
                 filaTotal.appendChild(document.createElement('td'));
 
@@ -3546,12 +3551,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 var celdaCantidad = document.createElement('td');
                 celdaCantidad.textContent = casilla.dataset.cantidad || '—';
+                celdaCantidad.dataset.orden = casilla.dataset.cantidad ? parseFloat(casilla.dataset.cantidad) || 0 : 0;
                 fila.appendChild(celdaCantidad);
 
                 var celdaValor = document.createElement('td');
                 celdaValor.textContent = casilla.dataset.valor
                     ? '$ ' + Number(casilla.dataset.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : '—';
+                celdaValor.dataset.orden = casilla.dataset.valor ? Number(casilla.dataset.valor) : 0;
                 fila.appendChild(celdaValor);
 
                 var celdaAccion = document.createElement('td');
@@ -3803,12 +3810,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 var celdaCantidad = document.createElement('td');
                 celdaCantidad.textContent = casilla.dataset.cantidad || '—';
+                celdaCantidad.dataset.orden = casilla.dataset.cantidad ? parseFloat(casilla.dataset.cantidad) || 0 : 0;
                 fila.appendChild(celdaCantidad);
 
                 var celdaValor = document.createElement('td');
                 celdaValor.textContent = casilla.dataset.valor
                     ? '$ ' + Number(casilla.dataset.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                     : '—';
+                celdaValor.dataset.orden = casilla.dataset.valor ? Number(casilla.dataset.valor) : 0;
                 fila.appendChild(celdaValor);
 
                 var celdaAccion = document.createElement('td');
@@ -5062,8 +5071,10 @@ document.addEventListener('DOMContentLoaded', function () {
 /**
  * Ordenamiento de tablas al hacer clic en el encabezado: cualquier <th class="th-ordenable"> ordena
  * las filas de su <tbody> por esa columna. Si la celda trae data-orden, se compara como número
- * (columnas de cantidad/valor); si no, se compara el texto visible (columnas de texto). El primer
- * clic ordena de mayor a menor; un segundo clic sobre el mismo encabezado invierte a menor a mayor.
+ * (columnas de cantidad/valor); si no, se compara el texto visible (columnas de texto). Por defecto
+ * el primer clic ordena de mayor a menor y un segundo clic sobre el mismo encabezado invierte a
+ * menor a mayor; un encabezado con data-orden-inicial="asc" invierte ese orden (primero menor a
+ * mayor, luego mayor a menor) — usado en las tablas de "Ver detalle" de Peticiones.
  */
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('th.th-ordenable').forEach(function (encabezado) {
@@ -5078,14 +5089,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
             var encabezados = Array.prototype.slice.call(fila.children);
             var indice = encabezados.indexOf(encabezado);
-            var nuevaDireccion = encabezado.classList.contains('orden-desc') ? 'asc' : 'desc';
+            var direccionInicial = encabezado.dataset.ordenInicial === 'asc' ? 'asc' : 'desc';
+            var otraDireccion = direccionInicial === 'asc' ? 'desc' : 'asc';
+            var nuevaDireccion = encabezado.classList.contains('orden-' + direccionInicial) ? otraDireccion : direccionInicial;
 
             encabezados.forEach(function (th) {
                 th.classList.remove('orden-asc', 'orden-desc');
             });
             encabezado.classList.add(nuevaDireccion === 'asc' ? 'orden-asc' : 'orden-desc');
 
-            var filas = Array.prototype.slice.call(cuerpo.querySelectorAll(':scope > tr'));
+            // Las filas marcadas con data-sin-ordenar (ej. la fila de "Total" en el detalle de
+            // Consolidado) no participan del ordenamiento y siempre quedan al final.
+            var filas = Array.prototype.slice.call(cuerpo.querySelectorAll(':scope > tr:not([data-sin-ordenar])'));
+            var filasFijas = Array.prototype.slice.call(cuerpo.querySelectorAll(':scope > tr[data-sin-ordenar]'));
 
             filas.sort(function (filaA, filaB) {
                 var celdaA = filaA.children[indice];
@@ -5109,6 +5125,9 @@ document.addEventListener('DOMContentLoaded', function () {
             });
 
             filas.forEach(function (fila) {
+                cuerpo.appendChild(fila);
+            });
+            filasFijas.forEach(function (fila) {
                 cuerpo.appendChild(fila);
             });
         });
