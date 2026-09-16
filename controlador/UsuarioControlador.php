@@ -74,21 +74,20 @@ class UsuarioControlador
         }
         unset($admin);
 
-        $usuarioActualIndex = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
-        $esSuperAdminActual = $usuarioActualIndex !== null && (int) ($usuarioActualIndex['es_super_admin'] ?? 0) === 1;
-
         require __DIR__ . '/../vista/usuarios/index.php';
     }
 
     /**
-     * Permite a un superadmin entrar a la cuenta de otro usuario administrativo (Gestor, Avalador,
-     * etc.) para ver la aplicación tal como la ve él, sin conocer ni cambiar su contraseña. Guarda
-     * el id del superadmin en 'impersonador_id' para poder volver con dejarDeImpersonar(); no anida
-     * impersonaciones (si ya se está impersonando, no se sobrescribe el id original).
+     * Permite entrar a la cuenta de otro usuario administrativo (Gestor, Avalador, etc.) para ver
+     * la aplicación tal como la ve él, sin conocer ni cambiar su contraseña. Guarda el id de quien
+     * impersona en 'impersonador_id' para poder volver con dejarDeImpersonar(); no anida
+     * impersonaciones (si ya se está impersonando, no se sobrescribe el id original). Disponible
+     * para el superadmin real y para cualquier administrador al que se le haya dado acceso a
+     * Usuarios (ver requerirAccesoUsuarios()) — nunca hacia una cuenta superadmin ni hacia sí mismo.
      */
     public function impersonar(): void
     {
-        $this->requerirSuperAdmin();
+        $this->requerirAccesoUsuarios();
 
         $idObjetivo = (int) ($_GET['id'] ?? 0);
         $usuarioObjetivo = $idObjetivo > 0 ? $this->modeloUsuario->obtenerPorIdConNombres($idObjetivo) : null;
@@ -156,6 +155,37 @@ class UsuarioControlador
         $esSuperAdmin = $usuarioActual !== null && (int) ($usuarioActual['es_super_admin'] ?? 0) === 1;
 
         if (!$esSuperAdmin) {
+            header('Location: index.php?ruta=dashboard');
+            exit;
+        }
+    }
+
+    /**
+     * Igual que el guardián de rutas de index.php para 'usuarios': permite al superadmin real y a
+     * cualquier administrador al que se le haya dado el permiso 'usuarios' o 'configuraciones'
+     * (quien ya podía entrar a Usuarios desde la tarjeta de Configuraciones sigue pudiendo).
+     */
+    private function requerirAccesoUsuarios(): void
+    {
+        if (empty($_SESSION['usuario_id']) || ($_SESSION['usuario_rol'] ?? '') !== 'administrador') {
+            header('Location: index.php?ruta=dashboard');
+            exit;
+        }
+
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+
+        if ($usuarioActual === null) {
+            header('Location: index.php?ruta=login');
+            exit;
+        }
+
+        if ((int) ($usuarioActual['es_super_admin'] ?? 0) === 1) {
+            return;
+        }
+
+        $permitido = $this->modeloMenuPermiso->calcularPermitidoParaUsuario($usuarioActual);
+
+        if ($permitido !== null && !in_array('usuarios', $permitido, true) && !in_array('configuraciones', $permitido, true)) {
             header('Location: index.php?ruta=dashboard');
             exit;
         }

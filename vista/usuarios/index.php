@@ -52,7 +52,7 @@
                             <td><?= $admin['ultimo_acceso'] !== null ? htmlspecialchars($admin['ultimo_acceso']) : '<span class="texto-atenuado">Nunca</span>' ?></td>
                             <td class="celda-acciones">
                                 <div class="acciones-fila">
-                                    <?php if ($esSuperAdminActual && (int) ($admin['es_super_admin'] ?? 0) !== 1 && (int) $admin['id'] !== (int) $_SESSION['usuario_id']): ?>
+                                    <?php if ((int) ($admin['es_super_admin'] ?? 0) !== 1 && (int) $admin['id'] !== (int) $_SESSION['usuario_id']): ?>
                                     <a
                                         href="index.php?ruta=impersonar&id=<?= (int) $admin['id'] ?>"
                                         target="_blank"
