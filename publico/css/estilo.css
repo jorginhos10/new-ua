@@ -2576,6 +2576,131 @@ a.barra-progreso:hover {
     color: var(--color-primario);
 }
 
+/* Igual que .th-ordenable, pero con su propio manejador JS (ordena un arreglo en memoria y
+   repagina, en vez de reordenar filas ya presentes en el DOM) — usada en Consulta, donde la
+   tabla pagina del lado del cliente y el mecanismo genérico de window.ordenarPorEncabezado
+   chocaría con ese repintado. */
+.th-ordenable-consulta {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.th-ordenable-consulta:hover {
+    color: var(--color-texto);
+}
+
+.th-ordenable-consulta::after {
+    content: '⇅';
+    display: inline-block;
+    margin-left: 0.35rem;
+    color: var(--color-texto-tenue);
+    font-size: 0.75rem;
+}
+
+.th-ordenable-consulta.orden-asc::after {
+    content: '↑';
+    color: var(--color-primario);
+}
+
+.th-ordenable-consulta.orden-desc::after {
+    content: '↓';
+    color: var(--color-primario);
+}
+
+/* Landing de Consulta (Consejo Superior) */
+
+.barra-filtros {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 1rem;
+    padding-bottom: 1.25rem;
+    margin-bottom: 1.1rem;
+    border-bottom: 1px solid var(--color-borde);
+}
+
+.barra-filtros .campo {
+    min-width: 160px;
+}
+
+.campo-busqueda-filtros {
+    flex: 1;
+    min-width: 220px;
+}
+
+.acciones-filtros-consulta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.barra-rapida-consulta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.buscador-rapido-consulta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--color-gris-fondo);
+    border-radius: var(--radio-chico);
+    padding: 0.5rem 0.8rem;
+    flex: 1;
+    min-width: 240px;
+    max-width: 380px;
+}
+
+.buscador-rapido-consulta svg {
+    color: var(--color-texto-tenue);
+    flex-shrink: 0;
+}
+
+.buscador-rapido-consulta input {
+    border: none;
+    background: none;
+    font-family: inherit;
+    font-size: 0.85rem;
+    color: var(--color-texto);
+    width: 100%;
+    outline: none;
+}
+
+.contador-registros {
+    font-size: 0.82rem;
+    color: var(--color-texto-tenue);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.paginacion-consulta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-top: 1.1rem;
+}
+
+.selector-tamano-consulta {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.selector-tamano-consulta .campo {
+    min-width: 0;
+}
+
+.selector-tamano-consulta select {
+    padding: 0.4rem 1.7rem 0.4rem 0.6rem;
+}
+
 .acciones-fila {
     display: inline-flex;
     gap: 0.4rem;
