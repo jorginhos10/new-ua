@@ -71,6 +71,27 @@ require __DIR__ . '/../parciales/encabezado.php';
                 'disabled' => $modoEdicion || !$puedeEnviarTodo,
                 'titulo_disabled' => 'Disponible cuando el total de egresos sea igual al total de ingresos de este ítem',
             ],
+            [
+                'id' => 'boton-exportar-plantilla-extension',
+                'icono' => 'exportar',
+                'etiqueta' => 'Exportar plantilla (.xlsx)',
+                'tipo' => 'a',
+                'href' => 'index.php?ruta=extension-exportar-plantilla',
+            ],
+            [
+                'id' => 'boton-exportar-extension',
+                'icono' => 'exportar',
+                'etiqueta' => 'Exportar ingresos y gastos (.xlsx)',
+                'tipo' => 'a',
+                'href' => 'index.php?ruta=extension-exportar' . ($anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : ''),
+            ],
+            [
+                'id' => 'boton-importar-extension',
+                'icono' => 'importar',
+                'etiqueta' => 'Importar ingresos y gastos (.xlsx): primero crea los ingresos de la hoja "Ingresos" y luego los egresos de la hoja "Gastos", en una sola importación',
+                'disabled' => $modoEdicion,
+                'titulo_disabled' => 'No disponible mientras editas',
+            ],
         ];
         if ($modoEdicion) {
             $barraBotonesSecundarios[] = [
@@ -98,16 +119,11 @@ require __DIR__ . '/../parciales/encabezado.php';
             <?php endif; ?>
         </div>
 
-        <div class="acciones-importar-exportar">
-            <a href="index.php?ruta=extension-exportar-plantilla" class="boton-secundario">Exportar plantilla (.xlsx)</a>
-            <a href="index.php?ruta=extension-exportar<?= $anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : '' ?>" class="boton-secundario">Exportar ingresos y gastos (.xlsx)</a>
-            <form method="POST" action="index.php?ruta=extension&tab=<?= htmlspecialchars($tab) ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" enctype="multipart/form-data" class="form-importar">
-                <input type="hidden" name="accion" value="importar">
-                <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
-                <input type="file" name="archivo" accept=".xlsx" required>
-                <button type="submit" class="boton-secundario">Importar</button>
-            </form>
-        </div>
+        <form method="POST" action="index.php?ruta=extension&tab=<?= htmlspecialchars($tab) ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" enctype="multipart/form-data" id="form-importar-extension" style="display: none;">
+            <input type="hidden" name="accion" value="importar">
+            <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
+            <input type="file" name="archivo" accept=".xlsx" id="input-importar-extension">
+        </form>
 
         <?php if (!empty($error)): ?>
             <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>

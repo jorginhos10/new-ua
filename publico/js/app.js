@@ -670,6 +670,28 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
+['extension', 'postgrado', 'unisalud', 'sin-excedentes'].forEach(function (moduloAutogestion) {
+    document.addEventListener('DOMContentLoaded', function () {
+        var botonImportar = document.getElementById('boton-importar-' + moduloAutogestion);
+        var inputArchivo = document.getElementById('input-importar-' + moduloAutogestion);
+        var formularioImportar = document.getElementById('form-importar-' + moduloAutogestion);
+
+        if (!botonImportar || !inputArchivo || !formularioImportar) {
+            return;
+        }
+
+        botonImportar.addEventListener('click', function () {
+            inputArchivo.click();
+        });
+
+        inputArchivo.addEventListener('change', function () {
+            if (inputArchivo.files.length > 0) {
+                formularioImportar.submit();
+            }
+        });
+    });
+});
+
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.form-eliminar-gasto').forEach(function (formulario) {
         formulario.addEventListener('submit', function (evento) {
