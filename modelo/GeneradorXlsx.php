@@ -467,9 +467,13 @@ class GeneradorXlsx
         $rangoValorTotalIngresos = 'Ingresos!$' . $letraValorTotalIngresos . '$' . $filaEjemplo . ':$' . $letraValorTotalIngresos . '$' . $ultimaFilaDatos;
 
         // --- Bloque de validación (idéntico en ambas hojas): título + encabezado + una fila por
-        // categoría. Estilo 3 = % bloqueado (numFmt de porcentaje); estilo 4 = moneda bloqueada
-        // (numFmt de moneda) — ninguno de los dos lleva <protection locked="0"/>, así que con la
-        // hoja protegida quedan de solo lectura. ---
+        // categoría. El estilo 0 (por defecto, el que usa cualquier celda SIN estilo explícito en
+        // toda la hoja) queda desbloqueado — así la zona de captura de datos permanece editable sin
+        // necesidad de marcar cada celda una por una. Por eso las celdas de este bloque necesitan
+        // SIEMPRE un estilo explícito que sí quede bloqueado: 4 = etiqueta bloqueada (sin formato
+        // especial), 2 = % bloqueado (numFmt de porcentaje), 3 = moneda bloqueada (numFmt de
+        // moneda). Ninguno de los tres lleva <protection locked="0"/>, así que con la hoja
+        // protegida quedan de solo lectura. ---
         $bloqueValidacionXml = '<row r="1">' . $celdaTexto('A1', 'Validación de cumplimiento de porcentajes (bloqueada; % configurado en Configuraciones > Autogestión)', 1) . '</row>';
         $bloqueValidacionXml .= '<row r="2">'
             . $celdaTexto('A2', 'Categoría', 1)
@@ -484,11 +488,11 @@ class GeneradorXlsx
             $filaListas = 2 + $indice;
 
             $bloqueValidacionXml .= '<row r="' . $numeroFila . '">'
-                . $celdaTexto('A' . $numeroFila, $fila['etiqueta'], 0)
-                . $celdaFormula('B' . $numeroFila, 'IFERROR(VALUE(Listas!$' . $letraPorcentajes . '$' . $filaListas . '),"N/A")', 3)
-                . $celdaFormula('C' . $numeroFila, 'SUM(' . $rangoValorTotalIngresos . ')', 4)
-                . $celdaFormula('D' . $numeroFila, 'IFERROR(B' . $numeroFila . '/100*C' . $numeroFila . ',"N/A")', 4)
-                . $celdaFormula('E' . $numeroFila, 'SUMIF(' . $rangoCategoriaGastos . ',A' . $numeroFila . ',' . $rangoValorTotalGastos . ')', 4)
+                . $celdaTexto('A' . $numeroFila, $fila['etiqueta'], 4)
+                . $celdaFormula('B' . $numeroFila, 'IFERROR(VALUE(Listas!$' . $letraPorcentajes . '$' . $filaListas . '),"N/A")', 2)
+                . $celdaFormula('C' . $numeroFila, 'SUM(' . $rangoValorTotalIngresos . ')', 3)
+                . $celdaFormula('D' . $numeroFila, 'IFERROR(B' . $numeroFila . '/100*C' . $numeroFila . ',"N/A")', 3)
+                . $celdaFormula('E' . $numeroFila, 'SUMIF(' . $rangoCategoriaGastos . ',A' . $numeroFila . ',' . $rangoValorTotalGastos . ')', 3)
                 . '</row>';
         }
 
@@ -500,12 +504,11 @@ class GeneradorXlsx
             . '</conditionalFormatting>';
 
         // --- Construye una hoja de datos (Ingresos o Gastos): bloque de validación + tabla real.
-        // La hoja queda protegida (sheetProtection) para que el bloque de arriba no sea editable;
-        // <cols> desbloquea por defecto TODA la zona de la tabla (estilo 2), así que la captura de
-        // datos sigue funcionando con normalidad — solo el bloque de validación queda de solo lectura. ---
+        // La hoja queda protegida (sheetProtection); como el estilo por defecto (0) ya es
+        // desbloqueado, la captura de datos (incluida la Tabla de Excel) sigue funcionando con
+        // normalidad y solo el bloque de arriba, con sus estilos explícitos, queda de solo lectura. ---
         $construirHoja = function (array $config, int $idTabla, string $nombreTabla) use ($celdaTexto, $celdaFormula, $bloqueValidacionXml, $conditionalFormattingXml, $filaEncabezado, $filaEjemplo, $ultimaFilaDatos, $listasComunes): array {
             $columnas = count($config['encabezados']);
-            $colsXml = '<cols><col min="1" max="' . $columnas . '" style="2"/></cols>';
 
             $filasXml = $bloqueValidacionXml;
 
@@ -522,7 +525,7 @@ class GeneradorXlsx
                 $filaXml = '<row r="' . $fila . '">';
                 for ($col = 0; $col < $columnas; $col++) {
                     if ($col === $config['columnaValorTotal']) {
-                        $filaXml .= $celdaFormula(self::columnaLetra($col) . $fila, $letraCantidad . $fila . '*' . $letraValorUnitario . $fila, 4);
+                        $filaXml .= $celdaFormula(self::columnaLetra($col) . $fila, $letraCantidad . $fila . '*' . $letraValorUnitario . $fila, 3);
                         continue;
                     }
 
@@ -558,7 +561,6 @@ class GeneradorXlsx
 
             $sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
-                . $colsXml
                 . '<sheetData>' . $filasXml . '</sheetData>'
                 . '<sheetProtection sheet="1" selectLockedCells="0" selectUnlockedCells="0"/>'
                 . $conditionalFormattingXml
@@ -663,11 +665,11 @@ class GeneradorXlsx
             . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
             . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
             . '<cellXfs count="5">'
-            . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
-            . '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
             . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyProtection="1"><protection locked="0"/></xf>'
+            . '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
             . '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
             . '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
+            . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
             . '</cellXfs>'
             . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
             . '<dxfs count="2">'
