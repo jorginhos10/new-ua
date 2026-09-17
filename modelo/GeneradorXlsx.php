@@ -408,10 +408,12 @@ class GeneradorXlsx
      * módulos de Autogestión: cada hoja es una tabla real de Excel con desplegables (la de Gastos
      * incluye la columna Categoría: Excedentes/Gastos/Inversiones) y una columna "Valor total"
      * calculada por fórmula (Cantidad × Valor/Costo unitario) en cada fila. Además, en las
-     * primeras filas de AMBAS hojas se incrusta un bloque de validación con SUMAR.SI que compara,
-     * por categoría, el valor ejecutado en Gastos contra el % configurado para ese módulo sobre el
-     * total de Ingresos — así se revisa el cumplimiento de los porcentajes antes de importar.
-     * Reutiliza el mismo mecanismo de metadatos/firma de plataforma que descargar().
+     * primeras filas de AMBAS hojas se incrusta un bloque de validación: el % configurado se lee,
+     * bloqueado (no editable, hoja protegida), desde la hoja oculta "Listas"; a partir de él se
+     * calcula el "Valor esperado" (% × total de Ingresos, en formato moneda) y el "Valor ejecutado"
+     * (SUMAR.SI sobre la categoría en Gastos); este último se colorea automáticamente (verde/rojo,
+     * formato condicional) según si respeta o supera el valor esperado. Reutiliza el mismo
+     * mecanismo de metadatos/firma de plataforma que descargar().
      *
      * @param array{encabezados: string[], columnasConLista: array<int,string>, filaEjemplo: string[], columnaCantidad: int, columnaValorUnitario: int, columnaValorTotal: int} $hojaIngresos
      * @param array{encabezados: string[], columnasConLista: array<int,string>, filaEjemplo: string[], columnaCantidad: int, columnaValorUnitario: int, columnaValorTotal: int, columnaCategoria: int} $hojaGastos
@@ -434,17 +436,20 @@ class GeneradorXlsx
             return '<c r="' . $referencia . '"' . $atributoEstilo . ' t="inlineStr"><is><t xml:space="preserve">' . $texto . '</t></is></c>';
         };
 
-        $celdaNumero = static function (string $referencia, float $valor): string {
-            return '<c r="' . $referencia . '"><v>' . $valor . '</v></c>';
+        $celdaFormula = static function (string $referencia, string $formula, ?int $estilo = null): string {
+            $atributoEstilo = $estilo !== null ? ' s="' . $estilo . '"' : '';
+
+            return '<c r="' . $referencia . '"' . $atributoEstilo . '><f>' . htmlspecialchars($formula, ENT_QUOTES | ENT_XML1, 'UTF-8') . '</f></c>';
         };
 
-        $celdaFormula = static function (string $referencia, string $formula): string {
-            return '<c r="' . $referencia . '"><f>' . htmlspecialchars($formula, ENT_QUOTES | ENT_XML1, 'UTF-8') . '</f></c>';
-        };
-
-        $celdaFormulaTexto = static function (string $referencia, string $formula): string {
-            return '<c r="' . $referencia . '" t="str"><f>' . htmlspecialchars($formula, ENT_QUOTES | ENT_XML1, 'UTF-8') . '</f></c>';
-        };
+        // El % configurado no se escribe como valor editable en la hoja visible: se guarda en la
+        // hoja oculta "Listas" (igual que las demás listas de la plantilla) y el bloque de
+        // validación solo lo LEE por fórmula — junto con la protección de hoja más abajo, esto es
+        // lo que evita que se pueda editar directamente.
+        $listasComunes['Porcentajes'] = array_map(
+            static fn (array $fila): string => $fila['porcentaje'] !== null ? (string) $fila['porcentaje'] : '',
+            array_values($validacionPorcentajes)
+        );
 
         $numeroCategorias = count($validacionPorcentajes);
         // 1 fila título + 1 fila encabezado del bloque + n categorías + 1 fila en blanco, luego el
@@ -456,40 +461,51 @@ class GeneradorXlsx
         $letraCategoriaGastos = self::columnaLetra($hojaGastos['columnaCategoria']);
         $letraValorTotalGastos = self::columnaLetra($hojaGastos['columnaValorTotal']);
         $letraValorTotalIngresos = self::columnaLetra($hojaIngresos['columnaValorTotal']);
+        $letraPorcentajes = self::columnaLetraLista('Porcentajes', $listasComunes);
         $rangoCategoriaGastos = 'Gastos!$' . $letraCategoriaGastos . '$' . $filaEjemplo . ':$' . $letraCategoriaGastos . '$' . $ultimaFilaDatos;
         $rangoValorTotalGastos = 'Gastos!$' . $letraValorTotalGastos . '$' . $filaEjemplo . ':$' . $letraValorTotalGastos . '$' . $ultimaFilaDatos;
         $rangoValorTotalIngresos = 'Ingresos!$' . $letraValorTotalIngresos . '$' . $filaEjemplo . ':$' . $letraValorTotalIngresos . '$' . $ultimaFilaDatos;
 
-        // --- Bloque de validación (idéntico en ambas hojas): título + encabezado + una fila por categoría ---
-        $bloqueValidacionXml = '<row r="1">' . $celdaTexto('A1', 'Validación de cumplimiento de porcentajes (SUMAR.SI sobre el total de Ingresos de esta plantilla)', 1) . '</row>';
+        // --- Bloque de validación (idéntico en ambas hojas): título + encabezado + una fila por
+        // categoría. Estilo 3 = % bloqueado (numFmt de porcentaje); estilo 4 = moneda bloqueada
+        // (numFmt de moneda) — ninguno de los dos lleva <protection locked="0"/>, así que con la
+        // hoja protegida quedan de solo lectura. ---
+        $bloqueValidacionXml = '<row r="1">' . $celdaTexto('A1', 'Validación de cumplimiento de porcentajes (bloqueada; % configurado en Configuraciones > Autogestión)', 1) . '</row>';
         $bloqueValidacionXml .= '<row r="2">'
             . $celdaTexto('A2', 'Categoría', 1)
             . $celdaTexto('B2', '% Configurado', 1)
-            . $celdaTexto('C2', 'Valor ejecutado', 1)
-            . $celdaTexto('D2', 'Total ingresos', 1)
-            . $celdaTexto('E2', '% Ejecutado', 1)
-            . $celdaTexto('F2', 'Cumple', 1)
+            . $celdaTexto('C2', 'Total ingresos', 1)
+            . $celdaTexto('D2', 'Valor esperado', 1)
+            . $celdaTexto('E2', 'Valor ejecutado', 1)
             . '</row>';
 
         foreach (array_values($validacionPorcentajes) as $indice => $fila) {
             $numeroFila = 3 + $indice;
-            $porcentaje = $fila['porcentaje'];
+            $filaListas = 2 + $indice;
 
             $bloqueValidacionXml .= '<row r="' . $numeroFila . '">'
-                . $celdaTexto('A' . $numeroFila, $fila['etiqueta'])
-                . ($porcentaje !== null ? $celdaNumero('B' . $numeroFila, $porcentaje) : $celdaTexto('B' . $numeroFila, 'N/A'))
-                . $celdaFormula('C' . $numeroFila, 'SUMIF(' . $rangoCategoriaGastos . ',A' . $numeroFila . ',' . $rangoValorTotalGastos . ')')
-                . $celdaFormula('D' . $numeroFila, 'SUM(' . $rangoValorTotalIngresos . ')')
-                . $celdaFormula('E' . $numeroFila, 'IF(D' . $numeroFila . '=0,0,C' . $numeroFila . '/D' . $numeroFila . '*100)')
-                . ($porcentaje !== null
-                    ? $celdaFormulaTexto('F' . $numeroFila, 'IF(E' . $numeroFila . '<=B' . $numeroFila . ',"Cumple","Excede")')
-                    : $celdaTexto('F' . $numeroFila, 'N/A'))
+                . $celdaTexto('A' . $numeroFila, $fila['etiqueta'], 0)
+                . $celdaFormula('B' . $numeroFila, 'IFERROR(VALUE(Listas!$' . $letraPorcentajes . '$' . $filaListas . '),"N/A")', 3)
+                . $celdaFormula('C' . $numeroFila, 'SUM(' . $rangoValorTotalIngresos . ')', 4)
+                . $celdaFormula('D' . $numeroFila, 'IFERROR(B' . $numeroFila . '/100*C' . $numeroFila . ',"N/A")', 4)
+                . $celdaFormula('E' . $numeroFila, 'SUMIF(' . $rangoCategoriaGastos . ',A' . $numeroFila . ',' . $rangoValorTotalGastos . ')', 4)
                 . '</row>';
         }
 
-        // --- Construye una hoja de datos (Ingresos o Gastos): bloque de validación + tabla real ---
-        $construirHoja = function (array $config, int $idTabla, string $nombreTabla) use ($celdaTexto, $celdaFormula, $bloqueValidacionXml, $filaEncabezado, $filaEjemplo, $ultimaFilaDatos, $listasComunes): array {
+        // "Valor ejecutado" (E) se colorea en verde si respeta el "Valor esperado" (D) de su misma
+        // fila, o en rojo si lo supera — así se valida por color, no por una columna de texto.
+        $conditionalFormattingXml = '<conditionalFormatting sqref="E3:E' . (2 + $numeroCategorias) . '">'
+            . '<cfRule type="cellIs" dxfId="1" priority="1" operator="greaterThan"><formula>D3</formula></cfRule>'
+            . '<cfRule type="cellIs" dxfId="0" priority="2" operator="lessThanOrEqual"><formula>D3</formula></cfRule>'
+            . '</conditionalFormatting>';
+
+        // --- Construye una hoja de datos (Ingresos o Gastos): bloque de validación + tabla real.
+        // La hoja queda protegida (sheetProtection) para que el bloque de arriba no sea editable;
+        // <cols> desbloquea por defecto TODA la zona de la tabla (estilo 2), así que la captura de
+        // datos sigue funcionando con normalidad — solo el bloque de validación queda de solo lectura. ---
+        $construirHoja = function (array $config, int $idTabla, string $nombreTabla) use ($celdaTexto, $celdaFormula, $bloqueValidacionXml, $conditionalFormattingXml, $filaEncabezado, $filaEjemplo, $ultimaFilaDatos, $listasComunes): array {
             $columnas = count($config['encabezados']);
+            $colsXml = '<cols><col min="1" max="' . $columnas . '" style="2"/></cols>';
 
             $filasXml = $bloqueValidacionXml;
 
@@ -506,7 +522,7 @@ class GeneradorXlsx
                 $filaXml = '<row r="' . $fila . '">';
                 for ($col = 0; $col < $columnas; $col++) {
                     if ($col === $config['columnaValorTotal']) {
-                        $filaXml .= $celdaFormula(self::columnaLetra($col) . $fila, $letraCantidad . $fila . '*' . $letraValorUnitario . $fila);
+                        $filaXml .= $celdaFormula(self::columnaLetra($col) . $fila, $letraCantidad . $fila . '*' . $letraValorUnitario . $fila, 4);
                         continue;
                     }
 
@@ -542,7 +558,10 @@ class GeneradorXlsx
 
             $sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                . $colsXml
                 . '<sheetData>' . $filasXml . '</sheetData>'
+                . '<sheetProtection sheet="1" selectLockedCells="0" selectUnlockedCells="0"/>'
+                . $conditionalFormattingXml
                 . ($validaciones !== '' ? '<dataValidations count="' . $cantidadListas . '">' . $validaciones . '</dataValidations>' : '')
                 . '<tableParts count="1"><tablePart r:id="rId1"/></tableParts>'
                 . '</worksheet>';
@@ -628,6 +647,10 @@ class GeneradorXlsx
 
         $stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . '<numFmts count="2">'
+            . '<numFmt numFmtId="164" formatCode="&quot;$&quot; #,##0.00"/>'
+            . '<numFmt numFmtId="165" formatCode="0.00&quot;%&quot;"/>'
+            . '</numFmts>'
             . '<fonts count="2">'
             . '<font><sz val="11"/><name val="Calibri"/></font>'
             . '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>'
@@ -639,11 +662,18 @@ class GeneradorXlsx
             . '</fills>'
             . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
             . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-            . '<cellXfs count="2">'
+            . '<cellXfs count="5">'
             . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
             . '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyProtection="1"><protection locked="0"/></xf>'
+            . '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
+            . '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
             . '</cellXfs>'
             . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+            . '<dxfs count="2">'
+            . '<dxf><font><color rgb="FF006100"/></font><fill><patternFill><bgColor rgb="FFC6EFCE"/></patternFill></fill></dxf>'
+            . '<dxf><font><color rgb="FF9C0006"/></font><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf>'
+            . '</dxfs>'
             . '</styleSheet>';
 
         $propiedad = static function (int $pid, string $nombre, string $valor): string {

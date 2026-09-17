@@ -426,8 +426,17 @@ class SinExcedentesControlador
 
     /**
      * Importa ingresos y egresos en borrador desde un archivo .xlsx (plantilla generada por
-     * exportarPlantilla()): la hoja "Ingresos" (filas agrupadas por año+dependencia en un solo
-     * ingreso con varios conceptos) y la hoja "Gastos" (una fila = un egreso). Todo o nada.
+     * exportarPlantilla()): la hoja "Ingresos" se lee y se agrupa PRIMERO (por año+dependencia, en
+     * una sola cabecera con varios conceptos), porque el total de cada grupo es el que se usa
+     * después para validar el balance de la hoja "Gastos" (ver más abajo). Todo o nada: si
+     * cualquier fila de cualquiera de las dos hojas falla una validación, no se importa nada.
+     *
+     * El presupuesto disponible y el % por categoría NO se validan fila por fila: se acumula
+     * primero el total de TODAS las filas de Gastos válidas por cada año+dependencia y recién al
+     * final se compara ese total contra lo disponible — así, si el archivo no cabe, el error dice
+     * que el valor total que se intentó importar excede lo permitido, en vez de señalar "la última
+     * fila", que sería engañoso: como la importación es todo o nada, ninguna fila anterior se llegó
+     * a importar tampoco.
      *
      * @return array{0: string, 1: string, 2: string[]} [error general, éxito, lista de errores por fila]
      */
@@ -451,15 +460,14 @@ class SinExcedentesControlador
 
         $filaEncabezadoPlantilla = 4 + count(self::CATEGORIAS_VALIDACION_PLANTILLA);
 
+        // Sheet 1 = Ingresos, sheet 2 = Gastos: se leen en ese orden a propósito, porque los
+        // totales de Ingresos son los que se necesitan para validar el balance de Gastos.
         try {
             $filasIngresos = array_slice(LectorXlsx::leerHoja($rutaArchivo, 1), $filaEncabezadoPlantilla);
             $filasGastos = array_slice(LectorXlsx::leerHoja($rutaArchivo, 2), $filaEncabezadoPlantilla);
         } catch (Throwable $excepcion) {
             return ['No se pudo leer el archivo: ' . $excepcion->getMessage(), '', []];
         }
-
-        $filasIngresos = array_values(array_filter($filasIngresos, static fn (array $fila): bool => trim(implode('', $fila)) !== ''));
-        $filasGastos = array_values(array_filter($filasGastos, static fn (array $fila): bool => trim(implode('', $fila)) !== ''));
 
         if (empty($filasIngresos) && empty($filasGastos)) {
             return ['El archivo no contiene filas para importar.', '', []];
@@ -492,7 +500,10 @@ class SinExcedentesControlador
 
         $errores = [];
 
-        // --- Ingresos: se agrupan por año + dependencia en una sola cabecera con varios conceptos ---
+        // --- 1) Ingresos primero: se agrupan por año + dependencia en una sola cabecera con varios
+        // conceptos. Una fila con más de 4 de sus campos obligatorios en blanco se ignora en
+        // silencio (fila sin usar; puede traer, por ejemplo, un "0" residual en la columna
+        // calculada "Valor total" tras abrir la plantilla en Excel) en vez de reportarse como error. ---
         $gruposIngreso = [];
 
         foreach ($filasIngresos as $indice => $fila) {
@@ -504,7 +515,16 @@ class SinExcedentesControlador
             $cantidadTexto = trim($fila[3] ?? '');
             $valorTexto = trim($fila[4] ?? '');
 
-            if ($anioTexto === '' || $dependenciaTexto === '' || $conceptoTexto === '' || $cantidadTexto === '' || $valorTexto === '') {
+            $vacios = count(array_filter(
+                [$anioTexto, $dependenciaTexto, $conceptoTexto, $cantidadTexto, $valorTexto],
+                static fn (string $valor): bool => $valor === ''
+            ));
+
+            if ($vacios > 4) {
+                continue;
+            }
+
+            if ($vacios > 0) {
                 $errores[] = "Ingresos, fila $numeroFilaExcel: todos los campos obligatorios (*) deben estar diligenciados.";
                 continue;
             }
@@ -550,8 +570,6 @@ class SinExcedentesControlador
             ];
         }
 
-        // --- Gastos: una fila = un egreso; se validan de forma acumulada contra los ingresos
-        // disponibles (existentes + los que se están importando en esta misma hoja de Ingresos) ---
         $totalIngresosPorGrupo = [];
         foreach ($gruposIngreso as $clave => $grupo) {
             $totalIngresosPorGrupo[$clave] = array_sum(array_map(
@@ -560,11 +578,10 @@ class SinExcedentesControlador
             ));
         }
 
-        $filasGastoValidas = [];
-        $totalesEgresoAcumulados = [];
-        $totalesCategoriaAcumulados = [];
-        $porcentajesModulo = $this->modeloPorcentaje->obtenerPorModulo('sin-excedentes');
-        $mapaCategoriaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
+        // --- 2) Gastos: se valida cada fila de forma individual (catálogos, numéricos, campos
+        // obligatorios) y se guarda como candidata; el presupuesto y el % por categoría se validan
+        // aparte, después, sobre el total acumulado de todas las candidatas (ver más abajo). ---
+        $filasGastoCandidatas = [];
 
         foreach ($filasGastos as $indice => $fila) {
             $numeroFilaExcel = $indice + $filaEncabezadoPlantilla + 1;
@@ -582,10 +599,16 @@ class SinExcedentesControlador
             $costoTexto = trim($fila[10] ?? '');
             $mesesTexto = trim($fila[12] ?? '');
 
-            if ($anioTexto === '' || $sedeTexto === '' || $dependenciaTexto === '' || $proyectoTexto === ''
-                || $categoriaTexto === '' || $actividad === '' || $rubroTexto === '' || $insumo === '' || $cantidadTexto === ''
-                || $costoTexto === '' || $mesesTexto === ''
-            ) {
+            $vacios = count(array_filter(
+                [$anioTexto, $sedeTexto, $dependenciaTexto, $proyectoTexto, $categoriaTexto, $actividad, $rubroTexto, $insumo, $cantidadTexto, $costoTexto, $mesesTexto],
+                static fn (string $valor): bool => $valor === ''
+            ));
+
+            if ($vacios > 4) {
+                continue;
+            }
+
+            if ($vacios > 0) {
                 $errores[] = "Gastos, fila $numeroFilaExcel: todos los campos obligatorios (*) deben estar diligenciados.";
                 continue;
             }
@@ -648,67 +671,92 @@ class SinExcedentesControlador
             sort($meses);
             $proyecto = $mapaProyectos[$proyectoTexto];
             $anioId = $mapaAnios[$anioTexto];
-            $claveGrupo = $anioId . ':' . $dependenciaTexto;
-            $nuevoValor = (int) $cantidadTexto * (float) $costoTexto;
 
-            if (!array_key_exists($claveGrupo, $totalesEgresoAcumulados)) {
-                $totalesEgresoAcumulados[$claveGrupo] = $this->modeloGasto->obtenerTotalPorAnioYDependencias($anioId, [$dependenciaTexto]);
-            }
-
-            $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($anioId, [$dependenciaTexto])
-                + ($totalIngresosPorGrupo[$claveGrupo] ?? 0.0);
-
-            if ($totalesEgresoAcumulados[$claveGrupo] + $nuevoValor > $ingresosDisponibles) {
-                $disponible = max(0, $ingresosDisponibles - $totalesEgresoAcumulados[$claveGrupo]);
-                $errores[] = "Gastos, fila $numeroFilaExcel: supera los ingresos disponibles de \"$dependenciaTexto\". Disponible: " . number_format($disponible, 2, ',', '.') . '.';
-                continue;
-            }
-
-            $clavePorcentaje = $mapaCategoriaPorcentaje[$categoriaTexto] ?? null;
-            if ($clavePorcentaje !== null && $porcentajesModulo[$clavePorcentaje] !== null) {
-                $claveCategoria = $claveGrupo . ':' . $categoriaTexto;
-
-                if (!array_key_exists($claveCategoria, $totalesCategoriaAcumulados)) {
-                    $totalesCategoriaAcumulados[$claveCategoria] = $this->modeloGasto->obtenerTotalPorAnioYCategoriaYDependencias($anioId, $categoriaTexto, [$dependenciaTexto]);
-                }
-
-                $limiteCategoria = round($ingresosDisponibles * (float) $porcentajesModulo[$clavePorcentaje] / 100, 2);
-
-                if ($totalesCategoriaAcumulados[$claveCategoria] + $nuevoValor > $limiteCategoria) {
-                    $disponibleCategoria = max(0, $limiteCategoria - $totalesCategoriaAcumulados[$claveCategoria]);
-                    $errores[] = "Gastos, fila $numeroFilaExcel: supera el porcentaje disponible para $categoriaTexto. Disponible: " . number_format($disponibleCategoria, 2, ',', '.') . '.';
-                    continue;
-                }
-
-                $totalesCategoriaAcumulados[$claveCategoria] += $nuevoValor;
-            }
-
-            $totalesEgresoAcumulados[$claveGrupo] += $nuevoValor;
-
-            $filasGastoValidas[] = [
-                'anio_presupuestal_id' => $anioId,
-                'sede_id' => $mapaSedes[$sedeTexto],
+            $filasGastoCandidatas[] = [
+                'claveGrupo' => $anioId . ':' . $dependenciaTexto,
                 'categoria' => $categoriaTexto,
-                'dependencia' => $dependenciaTexto,
-                'proyecto_id' => (int) $proyecto['id'],
-                'motor_id' => (int) $proyecto['motor_id'],
-                'linea_id' => (int) $proyecto['linea_id'],
-                'objeto_proyecto_paa' => $contratoTexto,
-                'actividad' => $actividad,
-                'rubro_id' => $mapaRubros[$rubroTexto],
-                'insumo' => $insumo,
-                'cantidad' => (int) $cantidadTexto,
-                'costo_unitario' => (float) $costoTexto,
-                'meses' => implode(',', $meses),
-                'usuario_id' => (int) ($_SESSION['usuario_id'] ?? 0),
+                'nuevoValor' => (int) $cantidadTexto * (float) $costoTexto,
+                'datos' => [
+                    'anio_presupuestal_id' => $anioId,
+                    'sede_id' => $mapaSedes[$sedeTexto],
+                    'categoria' => $categoriaTexto,
+                    'dependencia' => $dependenciaTexto,
+                    'proyecto_id' => (int) $proyecto['id'],
+                    'motor_id' => (int) $proyecto['motor_id'],
+                    'linea_id' => (int) $proyecto['linea_id'],
+                    'objeto_proyecto_paa' => $contratoTexto,
+                    'actividad' => $actividad,
+                    'rubro_id' => $mapaRubros[$rubroTexto],
+                    'insumo' => $insumo,
+                    'cantidad' => (int) $cantidadTexto,
+                    'costo_unitario' => (float) $costoTexto,
+                    'meses' => implode(',', $meses),
+                    'usuario_id' => (int) ($_SESSION['usuario_id'] ?? 0),
+                ],
             ];
         }
 
-        if (!empty($errores)) {
-            return ['No se importó ningún registro porque se encontraron errores:', '', $errores];
+        // --- 3) Presupuesto y % por categoría: sobre el TOTAL de lo que se intenta importar por
+        // cada año+dependencia, no fila por fila. ---
+        $totalesPorGrupo = [];
+        foreach ($filasGastoCandidatas as $candidata) {
+            $clave = $candidata['claveGrupo'];
+
+            if (!isset($totalesPorGrupo[$clave])) {
+                $totalesPorGrupo[$clave] = [
+                    'anio_presupuestal_id' => $candidata['datos']['anio_presupuestal_id'],
+                    'dependencia' => $candidata['datos']['dependencia'],
+                    'total' => 0.0,
+                    'categorias' => [],
+                ];
+            }
+
+            $totalesPorGrupo[$clave]['total'] += $candidata['nuevoValor'];
+            $totalesPorGrupo[$clave]['categorias'][$candidata['categoria']]
+                = ($totalesPorGrupo[$clave]['categorias'][$candidata['categoria']] ?? 0.0) + $candidata['nuevoValor'];
         }
 
-        if (empty($gruposIngreso) && empty($filasGastoValidas)) {
+        $porcentajesModulo = $this->modeloPorcentaje->obtenerPorModulo('sin-excedentes');
+        $mapaCategoriaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
+
+        foreach ($totalesPorGrupo as $clave => $grupo) {
+            $anioId = $grupo['anio_presupuestal_id'];
+            $dependenciaTexto = $grupo['dependencia'];
+
+            $totalExistente = $this->modeloGasto->obtenerTotalPorAnioYDependencias($anioId, [$dependenciaTexto]);
+            $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($anioId, [$dependenciaTexto])
+                + ($totalIngresosPorGrupo[$clave] ?? 0.0);
+
+            if ($totalExistente + $grupo['total'] > $ingresosDisponibles) {
+                $disponible = max(0, $ingresosDisponibles - $totalExistente);
+                $errores[] = "Gastos, \"$dependenciaTexto\": el valor total de gastos que intentas importar ("
+                    . number_format($grupo['total'], 2, ',', '.') . ') excede el disponible (' . number_format($disponible, 2, ',', '.') . ').';
+                continue;
+            }
+
+            foreach ($grupo['categorias'] as $categoria => $totalCategoria) {
+                $clavePorcentaje = $mapaCategoriaPorcentaje[$categoria] ?? null;
+
+                if ($clavePorcentaje === null || $porcentajesModulo[$clavePorcentaje] === null) {
+                    continue;
+                }
+
+                $totalExistenteCategoria = $this->modeloGasto->obtenerTotalPorAnioYCategoriaYDependencias($anioId, $categoria, [$dependenciaTexto]);
+                $limiteCategoria = round($ingresosDisponibles * (float) $porcentajesModulo[$clavePorcentaje] / 100, 2);
+
+                if ($totalExistenteCategoria + $totalCategoria > $limiteCategoria) {
+                    $disponibleCategoria = max(0, $limiteCategoria - $totalExistenteCategoria);
+                    $errores[] = "Gastos, \"$dependenciaTexto\", categoría $categoria: el valor total que intentas importar ("
+                        . number_format($totalCategoria, 2, ',', '.') . ') excede el % disponible (' . number_format($disponibleCategoria, 2, ',', '.') . ').';
+                }
+            }
+        }
+
+        if (!empty($errores)) {
+            return ['No se importó ningún registro porque el valor total a importar excede lo permitido o se encontraron otros errores:', '', $errores];
+        }
+
+        if (empty($gruposIngreso) && empty($filasGastoCandidatas)) {
             return ['No hay filas válidas para importar.', '', []];
         }
 
@@ -725,8 +773,8 @@ class SinExcedentesControlador
                 $gruposAfectados[$grupo['anio_presupuestal_id'] . ':' . $grupo['dependencia']] = $grupo;
             }
 
-            foreach ($filasGastoValidas as $datos) {
-                $this->modeloGasto->crear($datos);
+            foreach ($filasGastoCandidatas as $candidata) {
+                $this->modeloGasto->crear($candidata['datos']);
             }
 
             $db->commit();
@@ -739,7 +787,7 @@ class SinExcedentesControlador
             $this->generarEgresosAutomaticos(null, $grupo['anio_presupuestal_id'], $grupo['dependencia']);
         }
 
-        $mensaje = count($gruposIngreso) . ' ingreso(s) y ' . count($filasGastoValidas) . ' gasto(s) importado(s) correctamente como borrador.';
+        $mensaje = count($gruposIngreso) . ' ingreso(s) y ' . count($filasGastoCandidatas) . ' gasto(s) importado(s) correctamente como borrador.';
 
         return ['', $mensaje, []];
     }
