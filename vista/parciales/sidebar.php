@@ -93,7 +93,9 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <a href="publico/documentos/ficha-tecnica.docx">Ficha técnica</a>
             <a href="publico/documentos/esencia-del-software.docx">¿Para qué sirve?</a>
     <?php elseif ($rolActual === 'consejo_superior'): ?>
-            <?php // Sin menú por ahora: al Consejo Superior se le dará acceso a funciones propias más adelante. ?>
+            <p class="grupo-menu">Consulta</p>
+            <a href="#">item 1</a>
+            <a href="#">item 2</a>
     <?php else: ?>
             <p class="grupo-menu">Resumen</p>
             <a href="index.php">Inicio</a>

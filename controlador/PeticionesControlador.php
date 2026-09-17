@@ -2524,6 +2524,53 @@ class PeticionesControlador
             ];
         }
 
+        // Los ítems que llegaron por redirección (desde Consolidado por tipo, Archivados o
+        // Enviadas — ver redireccionarConsolidado()) no tienen su destinatario actual en la propia
+        // tabla gastos (esa sigue con los datos del envío original): el destino vigente vive en
+        // peticiones_archivadas. Sin este bloque, un grupo formado solo por ítems redirigidos
+        // aparecía vacío aquí aunque el listado principal de Pendientes sí los mostrara (ver
+        // filaRedireccionada()).
+        foreach ($this->modeloArchivada->obtenerRedireccionadas() as $redirigida) {
+            if ($redirigida['origen'] !== 'gasto_principal') {
+                continue;
+            }
+
+            $fila = $this->modeloGasto->obtenerPorId((int) $redirigida['origen_id']);
+
+            if ($fila === null || ($fila['tipo_automatico'] ?? null) !== null || $fila['dependencia'] !== $dependencia) {
+                continue;
+            }
+
+            $dependenciaDestino = $redirigida['redireccionado_a_dependencia'] ?? ($fila['dependencia_destino'] ?? $fila['dependencia']);
+            $rolDestinatarioId = !empty($redirigida['rol_destinatario_id']) ? (int) $redirigida['rol_destinatario_id'] : null;
+
+            if ($rolDestinatarioId !== null) {
+                $usuarioDestinatarioId = !empty($redirigida['usuario_destinatario_id']) ? (int) $redirigida['usuario_destinatario_id'] : null;
+
+                if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId, $usuarioDestinatarioId)) {
+                    continue;
+                }
+            } else {
+                // Redirecciones hechas antes de guardar rol_destinatario_id: visibles por
+                // dependencia, sin filtrar rol (mismo criterio histórico de filaRedireccionada()).
+                $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+                $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
+                $dependenciaUsuario = $dependenciaUsuarioId !== null ? $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId) : null;
+
+                if ($dependenciaUsuario === null || $dependenciaUsuario['nombre'] !== $dependenciaDestino) {
+                    continue;
+                }
+            }
+
+            $items[] = [
+                'actividad' => $fila['actividad'],
+                'insumo' => $fila['insumo'],
+                'cantidad' => (int) $fila['cantidad'],
+                'valor_total' => (float) $fila['valor_total'],
+                'ruta_ver' => 'index.php?ruta=gasto-detalle&origen=gasto_principal&id=' . (int) $fila['id'],
+            ];
+        }
+
         $tituloPagina = 'Pendientes — ' . $dependencia;
 
         require __DIR__ . '/../vista/peticiones/pendientes-grupo.php';
