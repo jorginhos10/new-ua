@@ -403,6 +403,348 @@ class GeneradorXlsx
         unlink($archivoTemporal);
     }
 
+    /**
+     * Genera y descarga una plantilla .xlsx de dos hojas de datos ("Ingresos" y "Gastos") para los
+     * módulos de Autogestión: cada hoja es una tabla real de Excel con desplegables (la de Gastos
+     * incluye la columna Categoría: Excedentes/Gastos/Inversiones) y una columna "Valor total"
+     * calculada por fórmula (Cantidad × Valor/Costo unitario) en cada fila. Además, en las
+     * primeras filas de AMBAS hojas se incrusta un bloque de validación con SUMAR.SI que compara,
+     * por categoría, el valor ejecutado en Gastos contra el % configurado para ese módulo sobre el
+     * total de Ingresos — así se revisa el cumplimiento de los porcentajes antes de importar.
+     * Reutiliza el mismo mecanismo de metadatos/firma de plataforma que descargar().
+     *
+     * @param array{encabezados: string[], columnasConLista: array<int,string>, filaEjemplo: string[], columnaCantidad: int, columnaValorUnitario: int, columnaValorTotal: int} $hojaIngresos
+     * @param array{encabezados: string[], columnasConLista: array<int,string>, filaEjemplo: string[], columnaCantidad: int, columnaValorUnitario: int, columnaValorTotal: int, columnaCategoria: int} $hojaGastos
+     * @param array<int, array{etiqueta: string, porcentaje: ?float}> $validacionPorcentajes Filas del bloque de validación, en el orden en que deben aparecer (ej. Excedentes, Gastos, Inversiones).
+     * @param array<string, string[]> $listasComunes Nombre de lista => valores, para la hoja "Listas" (Años, Sedes, Dependencias, etc.), compartida por ambas hojas.
+     * @param array{plantilla: string, usuario_id: int, usuario_nombre: string} $metadatos
+     */
+    public static function descargarPlantillaAutogestion(
+        string $nombreArchivo,
+        array $hojaIngresos,
+        array $hojaGastos,
+        array $validacionPorcentajes,
+        array $listasComunes,
+        array $metadatos
+    ): void {
+        $celdaTexto = static function (string $referencia, string $valor, ?int $estilo = null): string {
+            $texto = htmlspecialchars($valor, ENT_QUOTES | ENT_XML1, 'UTF-8');
+            $atributoEstilo = $estilo !== null ? ' s="' . $estilo . '"' : '';
+
+            return '<c r="' . $referencia . '"' . $atributoEstilo . ' t="inlineStr"><is><t xml:space="preserve">' . $texto . '</t></is></c>';
+        };
+
+        $celdaNumero = static function (string $referencia, float $valor): string {
+            return '<c r="' . $referencia . '"><v>' . $valor . '</v></c>';
+        };
+
+        $celdaFormula = static function (string $referencia, string $formula): string {
+            return '<c r="' . $referencia . '"><f>' . htmlspecialchars($formula, ENT_QUOTES | ENT_XML1, 'UTF-8') . '</f></c>';
+        };
+
+        $celdaFormulaTexto = static function (string $referencia, string $formula): string {
+            return '<c r="' . $referencia . '" t="str"><f>' . htmlspecialchars($formula, ENT_QUOTES | ENT_XML1, 'UTF-8') . '</f></c>';
+        };
+
+        $numeroCategorias = count($validacionPorcentajes);
+        // 1 fila título + 1 fila encabezado del bloque + n categorías + 1 fila en blanco, luego el
+        // encabezado real de la tabla.
+        $filaEncabezado = 4 + $numeroCategorias;
+        $filaEjemplo = $filaEncabezado + 1;
+        $ultimaFilaDatos = $filaEncabezado + 199;
+
+        $letraCategoriaGastos = self::columnaLetra($hojaGastos['columnaCategoria']);
+        $letraValorTotalGastos = self::columnaLetra($hojaGastos['columnaValorTotal']);
+        $letraValorTotalIngresos = self::columnaLetra($hojaIngresos['columnaValorTotal']);
+        $rangoCategoriaGastos = 'Gastos!$' . $letraCategoriaGastos . '$' . $filaEjemplo . ':$' . $letraCategoriaGastos . '$' . $ultimaFilaDatos;
+        $rangoValorTotalGastos = 'Gastos!$' . $letraValorTotalGastos . '$' . $filaEjemplo . ':$' . $letraValorTotalGastos . '$' . $ultimaFilaDatos;
+        $rangoValorTotalIngresos = 'Ingresos!$' . $letraValorTotalIngresos . '$' . $filaEjemplo . ':$' . $letraValorTotalIngresos . '$' . $ultimaFilaDatos;
+
+        // --- Bloque de validación (idéntico en ambas hojas): título + encabezado + una fila por categoría ---
+        $bloqueValidacionXml = '<row r="1">' . $celdaTexto('A1', 'Validación de cumplimiento de porcentajes (SUMAR.SI sobre el total de Ingresos de esta plantilla)', 1) . '</row>';
+        $bloqueValidacionXml .= '<row r="2">'
+            . $celdaTexto('A2', 'Categoría', 1)
+            . $celdaTexto('B2', '% Configurado', 1)
+            . $celdaTexto('C2', 'Valor ejecutado', 1)
+            . $celdaTexto('D2', 'Total ingresos', 1)
+            . $celdaTexto('E2', '% Ejecutado', 1)
+            . $celdaTexto('F2', 'Cumple', 1)
+            . '</row>';
+
+        foreach (array_values($validacionPorcentajes) as $indice => $fila) {
+            $numeroFila = 3 + $indice;
+            $porcentaje = $fila['porcentaje'];
+
+            $bloqueValidacionXml .= '<row r="' . $numeroFila . '">'
+                . $celdaTexto('A' . $numeroFila, $fila['etiqueta'])
+                . ($porcentaje !== null ? $celdaNumero('B' . $numeroFila, $porcentaje) : $celdaTexto('B' . $numeroFila, 'N/A'))
+                . $celdaFormula('C' . $numeroFila, 'SUMIF(' . $rangoCategoriaGastos . ',A' . $numeroFila . ',' . $rangoValorTotalGastos . ')')
+                . $celdaFormula('D' . $numeroFila, 'SUM(' . $rangoValorTotalIngresos . ')')
+                . $celdaFormula('E' . $numeroFila, 'IF(D' . $numeroFila . '=0,0,C' . $numeroFila . '/D' . $numeroFila . '*100)')
+                . ($porcentaje !== null
+                    ? $celdaFormulaTexto('F' . $numeroFila, 'IF(E' . $numeroFila . '<=B' . $numeroFila . ',"Cumple","Excede")')
+                    : $celdaTexto('F' . $numeroFila, 'N/A'))
+                . '</row>';
+        }
+
+        // --- Construye una hoja de datos (Ingresos o Gastos): bloque de validación + tabla real ---
+        $construirHoja = function (array $config, int $idTabla, string $nombreTabla) use ($celdaTexto, $celdaFormula, $bloqueValidacionXml, $filaEncabezado, $filaEjemplo, $ultimaFilaDatos, $listasComunes): array {
+            $columnas = count($config['encabezados']);
+
+            $filasXml = $bloqueValidacionXml;
+
+            $filasXml .= '<row r="' . $filaEncabezado . '">';
+            for ($col = 0; $col < $columnas; $col++) {
+                $filasXml .= $celdaTexto(self::columnaLetra($col) . $filaEncabezado, $config['encabezados'][$col], 1);
+            }
+            $filasXml .= '</row>';
+
+            $letraCantidad = self::columnaLetra($config['columnaCantidad']);
+            $letraValorUnitario = self::columnaLetra($config['columnaValorUnitario']);
+
+            for ($fila = $filaEjemplo; $fila <= $ultimaFilaDatos; $fila++) {
+                $filaXml = '<row r="' . $fila . '">';
+                for ($col = 0; $col < $columnas; $col++) {
+                    if ($col === $config['columnaValorTotal']) {
+                        $filaXml .= $celdaFormula(self::columnaLetra($col) . $fila, $letraCantidad . $fila . '*' . $letraValorUnitario . $fila);
+                        continue;
+                    }
+
+                    if ($fila === $filaEjemplo && (string) ($config['filaEjemplo'][$col] ?? '') !== '') {
+                        $filaXml .= $celdaTexto(self::columnaLetra($col) . $fila, (string) $config['filaEjemplo'][$col]);
+                    }
+                }
+                $filasXml .= $filaXml . '</row>';
+            }
+
+            $validaciones = '';
+            $cantidadListas = 0;
+            foreach ($config['columnasConLista'] as $indiceColumna => $nombreLista) {
+                $valores = $listasComunes[$nombreLista] ?? [];
+                $cantidadValores = count($valores);
+
+                if ($cantidadValores === 0) {
+                    continue;
+                }
+
+                $cantidadListas++;
+                $letra = self::columnaLetraLista($nombreLista, $listasComunes);
+                $rango = 'Listas!$' . $letra . '$2:$' . $letra . '$' . ($cantidadValores + 1);
+                $colLetra = self::columnaLetra($indiceColumna);
+
+                $validaciones .= '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Valor no válido" error="Selecciona un valor de la lista." sqref="' . $colLetra . $filaEjemplo . ':' . $colLetra . $ultimaFilaDatos . '">'
+                    . '<formula1>' . htmlspecialchars($rango, ENT_QUOTES | ENT_XML1, 'UTF-8') . '</formula1>'
+                    . '</dataValidation>';
+            }
+
+            $ultimaColumnaLetra = self::columnaLetra($columnas - 1);
+            $rangoTabla = 'A' . $filaEncabezado . ':' . $ultimaColumnaLetra . $ultimaFilaDatos;
+
+            $sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+                . '<sheetData>' . $filasXml . '</sheetData>'
+                . ($validaciones !== '' ? '<dataValidations count="' . $cantidadListas . '">' . $validaciones . '</dataValidations>' : '')
+                . '<tableParts count="1"><tablePart r:id="rId1"/></tableParts>'
+                . '</worksheet>';
+
+            $relsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+                . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table' . $idTabla . '.xml"/>'
+                . '</Relationships>';
+
+            $tableXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                . '<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="' . $idTabla . '" name="' . $nombreTabla . '" displayName="' . $nombreTabla . '" ref="' . $rangoTabla . '" totalsRowShown="0">'
+                . '<autoFilter ref="' . $rangoTabla . '"/>'
+                . '<tableColumns count="' . $columnas . '">'
+                . implode('', array_map(static function (int $indice) use ($config): string {
+                    $nombre = htmlspecialchars($config['encabezados'][$indice], ENT_QUOTES | ENT_XML1, 'UTF-8');
+                    return '<tableColumn id="' . ($indice + 1) . '" name="' . $nombre . '"/>';
+                }, range(0, $columnas - 1)))
+                . '</tableColumns>'
+                . '<tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>'
+                . '</table>';
+
+            return ['sheet' => $sheetXml, 'rels' => $relsXml, 'table' => $tableXml];
+        };
+
+        $hojaIngresosXml = $construirHoja($hojaIngresos, 1, 'TablaIngresos');
+        $hojaGastosXml = $construirHoja($hojaGastos, 2, 'TablaGastos');
+
+        // --- Hoja "Listas" (oculta), compartida por ambas hojas de datos ---
+        $nombresListas = array_keys($listasComunes);
+        $filasListasXml = '<row r="1">';
+        foreach ($nombresListas as $indice => $nombreLista) {
+            $filasListasXml .= $celdaTexto(self::columnaLetra($indice) . '1', $nombreLista);
+        }
+        $filasListasXml .= '</row>';
+
+        $maxFilasListas = 0;
+        foreach ($listasComunes as $valores) {
+            $maxFilasListas = max($maxFilasListas, count($valores));
+        }
+
+        for ($fila = 0; $fila < $maxFilasListas; $fila++) {
+            $numeroFila = $fila + 2;
+            $filaXml = '<row r="' . $numeroFila . '">';
+            foreach ($nombresListas as $indice => $nombreLista) {
+                $valor = $listasComunes[$nombreLista][$fila] ?? null;
+                if ($valor !== null) {
+                    $filaXml .= $celdaTexto(self::columnaLetra($indice) . $numeroFila, (string) $valor);
+                }
+            }
+            $filaXml .= '</row>';
+            $filasListasXml .= $filaXml;
+        }
+
+        $sheet3Xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . '<sheetData>' . $filasListasXml . '</sheetData>'
+            . '</worksheet>';
+
+        // --- Hoja "Metadatos" (oculta) ---
+        $filasMetadatos = [
+            ['Campo', 'Valor'],
+            ['SPPI_Origen', self::FIRMA_PLATAFORMA],
+            ['SPPI_Plantilla', $metadatos['plantilla']],
+            ['SPPI_UsuarioId', (string) $metadatos['usuario_id']],
+            ['SPPI_UsuarioNombre', $metadatos['usuario_nombre']],
+            ['SPPI_GeneradoEn', date('c')],
+        ];
+
+        $filasMetadatosXml = '';
+        foreach ($filasMetadatos as $indiceFila => $filaMetadato) {
+            $numeroFila = $indiceFila + 1;
+            $estiloFila = $indiceFila === 0 ? 1 : null;
+            $filasMetadatosXml .= '<row r="' . $numeroFila . '">'
+                . $celdaTexto('A' . $numeroFila, $filaMetadato[0], $estiloFila)
+                . $celdaTexto('B' . $numeroFila, $filaMetadato[1], $estiloFila)
+                . '</row>';
+        }
+
+        $sheet4Xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . '<sheetData>' . $filasMetadatosXml . '</sheetData>'
+            . '</worksheet>';
+
+        $stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . '<fonts count="2">'
+            . '<font><sz val="11"/><name val="Calibri"/></font>'
+            . '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>'
+            . '</fonts>'
+            . '<fills count="3">'
+            . '<fill><patternFill patternType="none"/></fill>'
+            . '<fill><patternFill patternType="gray125"/></fill>'
+            . '<fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/><bgColor indexed="64"/></patternFill></fill>'
+            . '</fills>'
+            . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+            . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+            . '<cellXfs count="2">'
+            . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+            . '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            . '</cellXfs>'
+            . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+            . '</styleSheet>';
+
+        $propiedad = static function (int $pid, string $nombre, string $valor): string {
+            $texto = htmlspecialchars($valor, ENT_QUOTES | ENT_XML1, 'UTF-8');
+            return '<property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="' . $pid . '" name="' . htmlspecialchars($nombre, ENT_QUOTES | ENT_XML1, 'UTF-8') . '"><vt:lpwstr>' . $texto . '</vt:lpwstr></property>';
+        };
+
+        $customXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">'
+            . $propiedad(2, 'SPPI_Origen', self::FIRMA_PLATAFORMA)
+            . $propiedad(3, 'SPPI_Plantilla', $metadatos['plantilla'])
+            . $propiedad(4, 'SPPI_UsuarioId', (string) $metadatos['usuario_id'])
+            . $propiedad(5, 'SPPI_UsuarioNombre', $metadatos['usuario_nombre'])
+            . $propiedad(6, 'SPPI_GeneradoEn', date('c'))
+            . '</Properties>';
+
+        $coreXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+            . '<dc:creator>' . htmlspecialchars($metadatos['usuario_nombre'], ENT_QUOTES | ENT_XML1, 'UTF-8') . '</dc:creator>'
+            . '<cp:lastModifiedBy>' . htmlspecialchars($metadatos['usuario_nombre'], ENT_QUOTES | ENT_XML1, 'UTF-8') . '</cp:lastModifiedBy>'
+            . '<dcterms:created xsi:type="dcterms:W3CDTF">' . date('c') . '</dcterms:created>'
+            . '</cp:coreProperties>';
+
+        $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+            . '<Default Extension="xml" ContentType="application/xml"/>'
+            . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            . '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            . '<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            . '<Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            . '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+            . '<Override PartName="/xl/tables/table1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>'
+            . '<Override PartName="/xl/tables/table2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>'
+            . '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'
+            . '<Override PartName="/docProps/custom.xml" ContentType="application/vnd.openxmlformats-officedocument.custom-properties+xml"/>'
+            . '</Types>';
+
+        $rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+            . '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'
+            . '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties" Target="docProps/custom.xml"/>'
+            . '</Relationships>';
+
+        $workbook = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+            . '<sheets>'
+            . '<sheet name="Ingresos" sheetId="1" r:id="rId1"/>'
+            . '<sheet name="Gastos" sheetId="2" r:id="rId2"/>'
+            . '<sheet name="Listas" sheetId="3" r:id="rId3" state="hidden"/>'
+            . '<sheet name="Metadatos" sheetId="4" r:id="rId5" state="hidden"/>'
+            . '</sheets>'
+            . '<calcPr calcId="0" fullCalcOnLoad="1"/>'
+            . '</workbook>';
+
+        $workbookRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+            . '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>'
+            . '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>'
+            . '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+            . '<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/>'
+            . '</Relationships>';
+
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $nombreArchivo . '"');
+        header('Cache-Control: max-age=0');
+
+        $archivoTemporal = tempnam(sys_get_temp_dir(), 'xlsx');
+        $zip = new ZipArchive();
+        $zip->open($archivoTemporal, ZipArchive::OVERWRITE);
+        $zip->addEmptyDir('_rels');
+        $zip->addEmptyDir('docProps');
+        $zip->addEmptyDir('xl');
+        $zip->addEmptyDir('xl/_rels');
+        $zip->addEmptyDir('xl/worksheets');
+        $zip->addEmptyDir('xl/worksheets/_rels');
+        $zip->addEmptyDir('xl/tables');
+        $zip->addFromString('[Content_Types].xml', $contentTypes);
+        $zip->addFromString('_rels/.rels', $rootRels);
+        $zip->addFromString('docProps/core.xml', $coreXml);
+        $zip->addFromString('docProps/custom.xml', $customXml);
+        $zip->addFromString('xl/workbook.xml', $workbook);
+        $zip->addFromString('xl/_rels/workbook.xml.rels', $workbookRels);
+        $zip->addFromString('xl/styles.xml', $stylesXml);
+        $zip->addFromString('xl/worksheets/sheet1.xml', $hojaIngresosXml['sheet']);
+        $zip->addFromString('xl/worksheets/sheet2.xml', $hojaGastosXml['sheet']);
+        $zip->addFromString('xl/worksheets/sheet3.xml', $sheet3Xml);
+        $zip->addFromString('xl/worksheets/sheet4.xml', $sheet4Xml);
+        $zip->addFromString('xl/worksheets/_rels/sheet1.xml.rels', $hojaIngresosXml['rels']);
+        $zip->addFromString('xl/worksheets/_rels/sheet2.xml.rels', $hojaGastosXml['rels']);
+        $zip->addFromString('xl/tables/table1.xml', $hojaIngresosXml['table']);
+        $zip->addFromString('xl/tables/table2.xml', $hojaGastosXml['table']);
+        $zip->close();
+
+        readfile($archivoTemporal);
+        unlink($archivoTemporal);
+    }
+
     private static function columnaLetraLista(string $nombreLista, array $listas): string
     {
         $indice = array_search($nombreLista, array_keys($listas), true);

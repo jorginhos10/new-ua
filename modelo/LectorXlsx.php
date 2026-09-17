@@ -60,6 +60,18 @@ class LectorXlsx
      */
     public static function leerPrimeraHoja(string $rutaArchivo): array
     {
+        return self::leerHoja($rutaArchivo, 1);
+    }
+
+    /**
+     * Igual que leerPrimeraHoja(), pero para cualquier hoja del libro por su número de orden
+     * (1 = la primera) — usada para leer plantillas de más de una hoja de datos (ej. "Ingresos" y
+     * "Gastos" en la plantilla de Autogestión).
+     *
+     * @return array<int, array<int, string>>
+     */
+    public static function leerHoja(string $rutaArchivo, int $numeroHoja): array
+    {
         $zip = new ZipArchive();
 
         if ($zip->open($rutaArchivo) !== true) {
@@ -68,7 +80,7 @@ class LectorXlsx
 
         $cadenasCompartidas = self::leerCadenasCompartidas($zip);
 
-        $hojaXml = $zip->getFromName('xl/worksheets/sheet1.xml');
+        $hojaXml = $zip->getFromName('xl/worksheets/sheet' . $numeroHoja . '.xml');
 
         if ($hojaXml === false) {
             $zip->close();

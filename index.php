@@ -54,9 +54,17 @@ $rutaAMenuKey = [
     'consolidado-autogestion' => 'peticiones',
     'peticiones-historial-item' => 'peticiones',
     'extension' => 'extension',
+    'extension-exportar-plantilla' => 'extension',
+    'extension-exportar' => 'extension',
     'postgrado' => 'postgrado',
+    'postgrado-exportar-plantilla' => 'postgrado',
+    'postgrado-exportar' => 'postgrado',
     'unisalud' => 'unisalud',
+    'unisalud-exportar-plantilla' => 'unisalud',
+    'unisalud-exportar' => 'unisalud',
     'sin-excedentes' => 'sin-excedentes',
+    'sin-excedentes-exportar-plantilla' => 'sin-excedentes',
+    'sin-excedentes-exportar' => 'sin-excedentes',
     'gastos' => 'gastos',
     'gastos-exportar-plantilla' => 'gastos',
     'solicitudes' => 'solicitudes',
@@ -232,16 +240,48 @@ switch ($ruta) {
         (new ExtensionControlador())->index();
         break;
 
+    case 'extension-exportar-plantilla':
+        (new ExtensionControlador())->exportarPlantilla();
+        break;
+
+    case 'extension-exportar':
+        (new ExtensionControlador())->exportar();
+        break;
+
     case 'postgrado':
         (new PostgradoControlador())->index();
+        break;
+
+    case 'postgrado-exportar-plantilla':
+        (new PostgradoControlador())->exportarPlantilla();
+        break;
+
+    case 'postgrado-exportar':
+        (new PostgradoControlador())->exportar();
         break;
 
     case 'unisalud':
         (new UnisaludControlador())->index();
         break;
 
+    case 'unisalud-exportar-plantilla':
+        (new UnisaludControlador())->exportarPlantilla();
+        break;
+
+    case 'unisalud-exportar':
+        (new UnisaludControlador())->exportar();
+        break;
+
     case 'sin-excedentes':
         (new SinExcedentesControlador())->index();
+        break;
+
+    case 'sin-excedentes-exportar-plantilla':
+        (new SinExcedentesControlador())->exportarPlantilla();
+        break;
+
+    case 'sin-excedentes-exportar':
+        (new SinExcedentesControlador())->exportar();
         break;
 
     case 'formulario-invitado':

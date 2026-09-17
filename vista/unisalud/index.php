@@ -82,8 +82,29 @@ require __DIR__ . '/../parciales/encabezado.php';
             <?php endif; ?>
         </div>
 
+        <div class="acciones-importar-exportar">
+            <a href="index.php?ruta=unisalud-exportar-plantilla" class="boton-secundario">Exportar plantilla (.xlsx)</a>
+            <a href="index.php?ruta=unisalud-exportar<?= $anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : '' ?>" class="boton-secundario">Exportar ingresos y gastos (.xlsx)</a>
+            <form method="POST" action="index.php?ruta=unisalud&tab=<?= htmlspecialchars($tab) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" enctype="multipart/form-data" class="form-importar">
+                <input type="hidden" name="accion" value="importar">
+                <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
+                <input type="file" name="archivo" accept=".xlsx" required>
+                <button type="submit" class="boton-secundario">Importar</button>
+            </form>
+        </div>
+
         <?php if (!empty($error)): ?>
             <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
+        <?php endif; ?>
+
+        <?php if (!empty($erroresImportacion)): ?>
+            <div class="mensaje-error">
+                <ul class="lista-errores-importacion">
+                    <?php foreach ($erroresImportacion as $errorFila): ?>
+                    <li><?= htmlspecialchars($errorFila) ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
         <?php endif; ?>
 
         <?php if (!empty($exito)): ?>

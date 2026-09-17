@@ -17,6 +17,8 @@ require_once __DIR__ . '/../modelo/Usuario.php';
 require_once __DIR__ . '/../modelo/Rol.php';
 require_once __DIR__ . '/../modelo/Mensaje.php';
 require_once __DIR__ . '/../modelo/PeticionArchivada.php';
+require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
+require_once __DIR__ . '/../modelo/LectorXlsx.php';
 
 class ExtensionControlador
 {
@@ -69,9 +71,19 @@ class ExtensionControlador
     ];
 
     private const CATEGORIAS_EGRESO = [
+        'Excedentes',
         'Gastos',
         'Inversiones',
     ];
+
+    /**
+     * Orden fijo de las categorías en el bloque de validación (SUMAR.SI) de la plantilla
+     * importable/exportable, y desplazamiento de filas que ocupa ese bloque antes del encabezado
+     * real de cada hoja (ver GeneradorXlsx::descargarPlantillaAutogestion()): 1 fila de título + 1
+     * de encabezado del bloque + una por categoría = 2 + count(...). Debe coincidir con el mismo
+     * cálculo usado allí para no desalinear la importación.
+     */
+    private const CATEGORIAS_VALIDACION_PLANTILLA = ['Excedentes', 'Gastos', 'Inversiones'];
 
     private const AUTOMATICO_SEDE_ID = 1;
     private const AUTOMATICO_LINEA_ID = 5;
@@ -136,10 +148,14 @@ class ExtensionControlador
                 [$error, $exito] = $this->eliminarSeleccionados($tab);
             } elseif ($accion === 'duplicar_seleccionados') {
                 [$error, $exito] = $this->duplicarSeleccionados($tab);
+            } elseif ($accion === 'importar') {
+                [$error, $exito, $erroresImportacion] = $this->importar();
             } else {
                 [$error, $exito] = $tab === 'ingresos' ? $this->guardarIngreso() : $this->guardarEgreso();
             }
         }
+
+        $erroresImportacion = $erroresImportacion ?? [];
 
         $lineas = $this->modeloLinea->obtenerTodas();
         $motores = $this->modeloMotor->obtenerTodos();
@@ -280,6 +296,552 @@ class ExtensionControlador
         require __DIR__ . '/../vista/extension/index.php';
     }
 
+    public function exportarPlantilla(): void
+    {
+        if (empty($_SESSION['usuario_id']) || $_SESSION['usuario_rol'] !== 'administrador') {
+            header('Location: index.php?ruta=login');
+            exit;
+        }
+
+        $catalogos = $this->construirCatalogos();
+
+        $listasComunes = [
+            'Años' => array_map(static fn (array $a): string => (string) $a['anio'], $catalogos['aniosActivos']),
+            'Sedes' => array_map(static fn (array $s): string => $s['codigo'] . ' - ' . $s['nombre'], $catalogos['sedes']),
+            'Dependencias' => $catalogos['dependenciasSugeridas'],
+            'Items' => array_map(static fn (array $i): string => $i['nombre'], $catalogos['autogestionItems']),
+            'Proyectos' => array_map(static fn (array $p): string => self::textoProyecto($p), $catalogos['proyectos']),
+            'Contratos' => array_map(static fn (array $c): string => $c['codigo'], $catalogos['contratosComunes']),
+            'Categorias' => self::CATEGORIAS_EGRESO,
+            'Rubros' => array_map(static fn (array $r): string => $r['codigo'] . ' - ' . $r['descripcion'], $catalogos['rubros']),
+        ];
+
+        $hojaIngresos = [
+            'encabezados' => ['Año presupuestal *', 'Dependencia *', 'Ítem de autogestión *', 'Concepto *', 'Cantidad *', 'Valor unitario *', 'Valor total'],
+            'columnasConLista' => [0 => 'Años', 1 => 'Dependencias', 2 => 'Items'],
+            'filaEjemplo' => [
+                $listasComunes['Años'][0] ?? '',
+                $listasComunes['Dependencias'][0] ?? '',
+                $listasComunes['Items'][0] ?? '',
+                'Ejemplo: matrícula curso de extensión',
+                '1',
+                '1000000',
+                '',
+            ],
+            'columnaCantidad' => 4,
+            'columnaValorUnitario' => 5,
+            'columnaValorTotal' => 6,
+        ];
+
+        $hojaGastos = [
+            'encabezados' => [
+                'Año presupuestal *', 'Sede *', 'Dependencia *', 'Ítem de autogestión *', 'Proyecto PDI *',
+                'Contratos comunes', 'Categoría *', 'Actividad *', 'Rubro *', 'Insumo *', 'Cantidad *',
+                'Costo unitario *', 'Valor total', 'Meses de ejecución * (ej: 1,3,5)',
+            ],
+            'columnasConLista' => [0 => 'Años', 1 => 'Sedes', 2 => 'Dependencias', 3 => 'Items', 4 => 'Proyectos', 5 => 'Contratos', 6 => 'Categorias', 8 => 'Rubros'],
+            'filaEjemplo' => [
+                $listasComunes['Años'][0] ?? '',
+                $listasComunes['Sedes'][0] ?? '',
+                $listasComunes['Dependencias'][0] ?? '',
+                $listasComunes['Items'][0] ?? '',
+                $listasComunes['Proyectos'][0] ?? '',
+                '',
+                $listasComunes['Categorias'][0] ?? '',
+                'Ejemplo: pago de docentes',
+                $listasComunes['Rubros'][0] ?? '',
+                'Ejemplo: honorarios docentes',
+                '1',
+                '1000000',
+                '',
+                '1,2,3',
+            ],
+            'columnaCantidad' => 10,
+            'columnaValorUnitario' => 11,
+            'columnaValorTotal' => 12,
+            'columnaCategoria' => 6,
+        ];
+
+        $porcentajesModulo = $this->modeloPorcentaje->obtenerPorModulo('extension');
+        $mapaCategoriaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
+        $validacionPorcentajes = array_map(static function (string $etiqueta) use ($porcentajesModulo, $mapaCategoriaPorcentaje): array {
+            $clave = $mapaCategoriaPorcentaje[$etiqueta];
+            $valor = $porcentajesModulo[$clave] ?? null;
+
+            return ['etiqueta' => $etiqueta, 'porcentaje' => $valor !== null ? (float) $valor : null];
+        }, self::CATEGORIAS_VALIDACION_PLANTILLA);
+
+        $metadatos = [
+            'plantilla' => 'autogestion-extension',
+            'usuario_id' => (int) $_SESSION['usuario_id'],
+            'usuario_nombre' => $catalogos['usuarioActual']['nombre'] ?? '',
+        ];
+
+        GeneradorXlsx::descargarPlantillaAutogestion('plantilla_extension.xlsx', $hojaIngresos, $hojaGastos, $validacionPorcentajes, $listasComunes, $metadatos);
+        exit;
+    }
+
+    /**
+     * Exporta a .xlsx los ingresos y egresos visibles para el usuario actual en el año
+     * presupuestal indicado, en dos hojas ("Ingresos" y "Gastos"), con el mismo alcance de
+     * dependencias/propietario que se ve en pantalla (ver index()).
+     */
+    public function exportar(): void
+    {
+        if (empty($_SESSION['usuario_id']) || $_SESSION['usuario_rol'] !== 'administrador') {
+            header('Location: index.php?ruta=login');
+            exit;
+        }
+
+        $aniosActivos = $this->modeloAnio->obtenerActivos();
+        $anioSeleccionadoId = isset($_GET['anio_id']) ? (int) $_GET['anio_id'] : (int) ($aniosActivos[0]['id'] ?? 0);
+
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+        [, $dependenciasPermitidas] = $this->obtenerDependenciasVisiblesUsuarioActual();
+        $autogestionItems = $this->modeloAutogestion->obtenerActivos('extension');
+
+        $mapaItems = [];
+        foreach ($autogestionItems as $item) {
+            $mapaItems[(int) $item['id']] = $item['nombre'];
+        }
+
+        $ingresos = [];
+        $gastos = [];
+
+        if ($anioSeleccionadoId > 0) {
+            foreach ($autogestionItems as $item) {
+                $itemId = (int) $item['id'];
+                $ingresos = array_merge($ingresos, $this->filtrarPorPropietarioODestinatario(
+                    $this->modeloIngreso->obtenerPorAnioYAutogestion($anioSeleccionadoId, $itemId),
+                    $usuarioActual,
+                    $dependenciasPermitidas
+                ));
+                $gastos = array_merge($gastos, $this->filtrarEgresosVisibles(
+                    $this->modeloGasto->obtenerPorAnioYAutogestion($anioSeleccionadoId, $itemId),
+                    $usuarioActual,
+                    $dependenciasPermitidas
+                ));
+            }
+        }
+
+        $filaIngreso = static function (array $ingreso) use ($mapaItems): array {
+            return [
+                $mapaItems[(int) $ingreso['autogestion_id']] ?? '',
+                $ingreso['dependencia'],
+                (string) ($ingreso['concepto_adicional'] ?? ''),
+                number_format((float) $ingreso['valor_adicional'], 2, ',', '.'),
+                number_format((float) $ingreso['valor_total'], 2, ',', '.'),
+                $ingreso['estado'],
+            ];
+        };
+
+        $filaGasto = static function (array $gasto) use ($mapaItems): array {
+            return [
+                $mapaItems[(int) $gasto['autogestion_id']] ?? '',
+                $gasto['dependencia'],
+                $gasto['categoria'],
+                $gasto['insumo'],
+                (string) (int) $gasto['cantidad'],
+                number_format((float) $gasto['costo_unitario'], 2, ',', '.'),
+                number_format((float) $gasto['valor_total'], 2, ',', '.'),
+                $gasto['estado'],
+            ];
+        };
+
+        $hojas = [
+            ['nombre' => 'Ingresos', 'encabezados' => ['Ítem de autogestión', 'Dependencia', 'Concepto adicional', 'Valor adicional', 'Valor total', 'Estado'], 'filas' => array_map($filaIngreso, $ingresos)],
+            ['nombre' => 'Gastos', 'encabezados' => ['Ítem de autogestión', 'Dependencia', 'Categoría', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Estado'], 'filas' => array_map($filaGasto, $gastos)],
+        ];
+
+        $anioTexto = (string) $anioSeleccionadoId;
+        foreach ($aniosActivos as $anioFila) {
+            if ((int) $anioFila['id'] === $anioSeleccionadoId) {
+                $anioTexto = (string) $anioFila['anio'];
+                break;
+            }
+        }
+
+        GeneradorXlsx::descargarHojas('extension_' . $anioTexto . '.xlsx', $hojas);
+        exit;
+    }
+
+    private static function textoProyecto(array $proyecto): string
+    {
+        return $proyecto['linea_codigo'] . ' · ' . $proyecto['motor_codigo'] . ' · ' . $proyecto['codigo'] . ' - ' . $proyecto['nombre'];
+    }
+
+    /**
+     * Catálogos y alcance de dependencias del usuario actual, reutilizados por exportarPlantilla()
+     * e importar().
+     */
+    private function construirCatalogos(): array
+    {
+        $proyectos = $this->modeloProyecto->obtenerTodos();
+        $rubros = $this->modeloRubro->obtenerActivosPorCategoria('autogestion');
+        $contratosComunes = $this->modeloContratoComun->obtenerActivos();
+        $aniosActivos = $this->modeloAnio->obtenerActivos();
+        $sedes = $this->modeloSede->obtenerTodas();
+        $autogestionItems = $this->modeloAutogestion->obtenerActivos('extension');
+
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+        [, $dependenciasSugeridas] = $this->obtenerDependenciasVisiblesUsuarioActual();
+
+        return [
+            'proyectos' => $proyectos,
+            'rubros' => $rubros,
+            'contratosComunes' => $contratosComunes,
+            'aniosActivos' => $aniosActivos,
+            'sedes' => $sedes,
+            'autogestionItems' => $autogestionItems,
+            'usuarioActual' => $usuarioActual,
+            'dependenciasSugeridas' => $dependenciasSugeridas,
+        ];
+    }
+
+    /**
+     * Importa ingresos y egresos en borrador desde un archivo .xlsx (plantilla generada por
+     * exportarPlantilla()): la hoja "Ingresos" (filas agrupadas por año+ítem+dependencia en un solo
+     * ingreso con varios conceptos) y la hoja "Gastos" (una fila = un egreso). Todo o nada: si
+     * cualquier fila de cualquiera de las dos hojas falla una validación (incluido el límite de
+     * ingresos disponibles y el % por categoría, verificados de forma acumulada entre las filas del
+     * propio archivo), no se importa nada.
+     *
+     * @return array{0: string, 1: string, 2: string[]} [error general, éxito, lista de errores por fila]
+     */
+    private function importar(): array
+    {
+        if (empty($_FILES['archivo']['tmp_name']) || $_FILES['archivo']['error'] !== UPLOAD_ERR_OK) {
+            return ['Selecciona un archivo .xlsx válido para importar.', '', []];
+        }
+
+        $rutaArchivo = $_FILES['archivo']['tmp_name'];
+
+        try {
+            $metadatos = LectorXlsx::leerMetadatos($rutaArchivo);
+        } catch (Throwable $excepcion) {
+            return ['No se pudo leer el archivo: ' . $excepcion->getMessage(), '', []];
+        }
+
+        if (($metadatos['SPPI_Origen'] ?? '') !== GeneradorXlsx::FIRMA_PLATAFORMA || ($metadatos['SPPI_Plantilla'] ?? '') !== 'autogestion-extension') {
+            return ['Este archivo no parece haber sido descargado desde la plataforma. Usa el botón "Exportar plantilla" para descargar una plantilla nueva y diligénciala sin quitarle sus metadatos.', '', []];
+        }
+
+        $filaEncabezadoPlantilla = 4 + count(self::CATEGORIAS_VALIDACION_PLANTILLA);
+
+        try {
+            $filasIngresos = array_slice(LectorXlsx::leerHoja($rutaArchivo, 1), $filaEncabezadoPlantilla);
+            $filasGastos = array_slice(LectorXlsx::leerHoja($rutaArchivo, 2), $filaEncabezadoPlantilla);
+        } catch (Throwable $excepcion) {
+            return ['No se pudo leer el archivo: ' . $excepcion->getMessage(), '', []];
+        }
+
+        $filasIngresos = array_values(array_filter($filasIngresos, static fn (array $fila): bool => trim(implode('', $fila)) !== ''));
+        $filasGastos = array_values(array_filter($filasGastos, static fn (array $fila): bool => trim(implode('', $fila)) !== ''));
+
+        if (empty($filasIngresos) && empty($filasGastos)) {
+            return ['El archivo no contiene filas para importar.', '', []];
+        }
+
+        $catalogos = $this->construirCatalogos();
+        $dependenciasPermitidas = $catalogos['dependenciasSugeridas'];
+
+        $mapaAnios = [];
+        foreach ($catalogos['aniosActivos'] as $anio) {
+            $mapaAnios[(string) $anio['anio']] = (int) $anio['id'];
+        }
+
+        $mapaSedes = [];
+        foreach ($catalogos['sedes'] as $sede) {
+            $mapaSedes[$sede['codigo'] . ' - ' . $sede['nombre']] = (int) $sede['id'];
+        }
+
+        $mapaItems = [];
+        foreach ($catalogos['autogestionItems'] as $item) {
+            $mapaItems[$item['nombre']] = (int) $item['id'];
+        }
+
+        $mapaProyectos = [];
+        foreach ($catalogos['proyectos'] as $proyecto) {
+            $mapaProyectos[self::textoProyecto($proyecto)] = $proyecto;
+        }
+
+        $mapaRubros = [];
+        foreach ($catalogos['rubros'] as $rubro) {
+            $mapaRubros[$rubro['codigo'] . ' - ' . $rubro['descripcion']] = (int) $rubro['id'];
+        }
+
+        $codigosContratos = array_column($catalogos['contratosComunes'], 'codigo');
+
+        $errores = [];
+
+        // --- Ingresos: se agrupan por año + ítem + dependencia en una sola cabecera con varios conceptos ---
+        $gruposIngreso = [];
+
+        foreach ($filasIngresos as $indice => $fila) {
+            $numeroFilaExcel = $indice + $filaEncabezadoPlantilla + 1;
+
+            $anioTexto = trim($fila[0] ?? '');
+            $dependenciaTexto = trim($fila[1] ?? '');
+            $itemTexto = trim($fila[2] ?? '');
+            $conceptoTexto = trim($fila[3] ?? '');
+            $cantidadTexto = trim($fila[4] ?? '');
+            $valorTexto = trim($fila[5] ?? '');
+
+            if ($anioTexto === '' || $dependenciaTexto === '' || $itemTexto === '' || $conceptoTexto === '' || $cantidadTexto === '' || $valorTexto === '') {
+                $errores[] = "Ingresos, fila $numeroFilaExcel: todos los campos obligatorios (*) deben estar diligenciados.";
+                continue;
+            }
+
+            if (!isset($mapaAnios[$anioTexto])) {
+                $errores[] = "Ingresos, fila $numeroFilaExcel: el año \"$anioTexto\" no es válido. Usa el desplegable de la columna.";
+                continue;
+            }
+
+            if (!in_array($dependenciaTexto, $dependenciasPermitidas, true)) {
+                $errores[] = "Ingresos, fila $numeroFilaExcel: la dependencia \"$dependenciaTexto\" no está disponible para tu usuario.";
+                continue;
+            }
+
+            if (!isset($mapaItems[$itemTexto])) {
+                $errores[] = "Ingresos, fila $numeroFilaExcel: el ítem de autogestión \"$itemTexto\" no es válido. Usa el desplegable de la columna.";
+                continue;
+            }
+
+            if (!is_numeric($cantidadTexto) || (int) $cantidadTexto <= 0) {
+                $errores[] = "Ingresos, fila $numeroFilaExcel: la cantidad debe ser un número entero mayor a 0.";
+                continue;
+            }
+
+            if (!is_numeric($valorTexto) || (float) $valorTexto < 0) {
+                $errores[] = "Ingresos, fila $numeroFilaExcel: el valor unitario debe ser un número válido.";
+                continue;
+            }
+
+            $anioId = $mapaAnios[$anioTexto];
+            $itemId = $mapaItems[$itemTexto];
+            $clave = $anioId . ':' . $itemId . ':' . $dependenciaTexto;
+
+            if (!isset($gruposIngreso[$clave])) {
+                $gruposIngreso[$clave] = [
+                    'anio_presupuestal_id' => $anioId,
+                    'autogestion_id' => $itemId,
+                    'dependencia' => $dependenciaTexto,
+                    'concepto_adicional' => '',
+                    'valor_adicional' => 0.0,
+                    'usuario_id' => (int) ($_SESSION['usuario_id'] ?? 0),
+                    'conceptos' => [],
+                ];
+            }
+
+            $gruposIngreso[$clave]['conceptos'][] = [
+                'concepto' => $conceptoTexto,
+                'cantidad' => (int) $cantidadTexto,
+                'valor' => (float) $valorTexto,
+            ];
+        }
+
+        // --- Gastos: una fila = un egreso; se validan de forma acumulada contra los ingresos
+        // disponibles (existentes + los que se están importando en esta misma hoja de Ingresos) ---
+        $totalIngresosPorGrupo = [];
+        foreach ($gruposIngreso as $clave => $grupo) {
+            $totalIngresosPorGrupo[$clave] = array_sum(array_map(
+                static fn (array $c): float => $c['cantidad'] * $c['valor'],
+                $grupo['conceptos']
+            ));
+        }
+
+        $filasGastoValidas = [];
+        $totalesEgresoAcumulados = [];
+        $totalesCategoriaAcumulados = [];
+        $porcentajesModulo = $this->modeloPorcentaje->obtenerPorModulo('extension');
+        $mapaCategoriaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
+
+        foreach ($filasGastos as $indice => $fila) {
+            $numeroFilaExcel = $indice + $filaEncabezadoPlantilla + 1;
+
+            $anioTexto = trim($fila[0] ?? '');
+            $sedeTexto = trim($fila[1] ?? '');
+            $dependenciaTexto = trim($fila[2] ?? '');
+            $itemTexto = trim($fila[3] ?? '');
+            $proyectoTexto = trim($fila[4] ?? '');
+            $contratoTexto = trim($fila[5] ?? '');
+            $categoriaTexto = trim($fila[6] ?? '');
+            $actividad = trim($fila[7] ?? '');
+            $rubroTexto = trim($fila[8] ?? '');
+            $insumo = trim($fila[9] ?? '');
+            $cantidadTexto = trim($fila[10] ?? '');
+            $costoTexto = trim($fila[11] ?? '');
+            $mesesTexto = trim($fila[13] ?? '');
+
+            if ($anioTexto === '' || $sedeTexto === '' || $dependenciaTexto === '' || $itemTexto === '' || $proyectoTexto === ''
+                || $categoriaTexto === '' || $actividad === '' || $rubroTexto === '' || $insumo === '' || $cantidadTexto === ''
+                || $costoTexto === '' || $mesesTexto === ''
+            ) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: todos los campos obligatorios (*) deben estar diligenciados.";
+                continue;
+            }
+
+            if (!isset($mapaAnios[$anioTexto])) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: el año \"$anioTexto\" no es válido. Usa el desplegable de la columna.";
+                continue;
+            }
+
+            if (!isset($mapaSedes[$sedeTexto])) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: la sede \"$sedeTexto\" no es válida. Usa el desplegable de la columna.";
+                continue;
+            }
+
+            if (!in_array($dependenciaTexto, $dependenciasPermitidas, true)) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: la dependencia \"$dependenciaTexto\" no está disponible para tu usuario.";
+                continue;
+            }
+
+            if (!isset($mapaItems[$itemTexto])) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: el ítem de autogestión \"$itemTexto\" no es válido. Usa el desplegable de la columna.";
+                continue;
+            }
+
+            if (!isset($mapaProyectos[$proyectoTexto])) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: el proyecto PDI \"$proyectoTexto\" no es válido. Usa el desplegable de la columna.";
+                continue;
+            }
+
+            if ($contratoTexto !== '' && !in_array($contratoTexto, $codigosContratos, true)) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: el contrato común \"$contratoTexto\" no es válido. Usa el desplegable de la columna.";
+                continue;
+            }
+
+            if (!in_array($categoriaTexto, self::CATEGORIAS_EGRESO, true)) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: la categoría \"$categoriaTexto\" no es válida. Usa el desplegable de la columna.";
+                continue;
+            }
+
+            if (!isset($mapaRubros[$rubroTexto])) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: el rubro \"$rubroTexto\" no es válido. Usa el desplegable de la columna.";
+                continue;
+            }
+
+            if (!is_numeric($cantidadTexto) || (int) $cantidadTexto <= 0) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: la cantidad debe ser un número entero mayor a 0.";
+                continue;
+            }
+
+            if (!is_numeric($costoTexto) || (float) $costoTexto < 0) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: el costo unitario debe ser un número válido.";
+                continue;
+            }
+
+            $meses = array_unique(array_filter(
+                array_map('intval', array_map('trim', explode(',', $mesesTexto))),
+                static fn (int $mes): bool => $mes >= 1 && $mes <= 12
+            ));
+
+            if (empty($meses)) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: los meses de ejecución deben ser números entre 1 y 12 separados por coma (ej: 1,2,3).";
+                continue;
+            }
+
+            sort($meses);
+            $proyecto = $mapaProyectos[$proyectoTexto];
+            $anioId = $mapaAnios[$anioTexto];
+            $itemId = $mapaItems[$itemTexto];
+            $claveGrupo = $anioId . ':' . $itemId . ':' . $dependenciaTexto;
+            $nuevoValor = (int) $cantidadTexto * (float) $costoTexto;
+
+            if (!array_key_exists($claveGrupo, $totalesEgresoAcumulados)) {
+                $totalesEgresoAcumulados[$claveGrupo] = $this->modeloGasto->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $itemId, [$dependenciaTexto]);
+            }
+
+            $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $itemId, [$dependenciaTexto])
+                + ($totalIngresosPorGrupo[$claveGrupo] ?? 0.0);
+
+            if ($totalesEgresoAcumulados[$claveGrupo] + $nuevoValor > $ingresosDisponibles) {
+                $disponible = max(0, $ingresosDisponibles - $totalesEgresoAcumulados[$claveGrupo]);
+                $errores[] = "Gastos, fila $numeroFilaExcel: supera los ingresos disponibles de \"$itemTexto\" en \"$dependenciaTexto\". Disponible: " . number_format($disponible, 2, ',', '.') . '.';
+                continue;
+            }
+
+            $clavePorcentaje = $mapaCategoriaPorcentaje[$categoriaTexto] ?? null;
+            if ($clavePorcentaje !== null && $porcentajesModulo[$clavePorcentaje] !== null) {
+                $claveCategoria = $claveGrupo . ':' . $categoriaTexto;
+
+                if (!array_key_exists($claveCategoria, $totalesCategoriaAcumulados)) {
+                    $totalesCategoriaAcumulados[$claveCategoria] = $this->modeloGasto->obtenerTotalPorAnioAutogestionYCategoriaYDependencias($anioId, $itemId, $categoriaTexto, [$dependenciaTexto]);
+                }
+
+                $limiteCategoria = round($ingresosDisponibles * (float) $porcentajesModulo[$clavePorcentaje] / 100, 2);
+
+                if ($totalesCategoriaAcumulados[$claveCategoria] + $nuevoValor > $limiteCategoria) {
+                    $disponibleCategoria = max(0, $limiteCategoria - $totalesCategoriaAcumulados[$claveCategoria]);
+                    $errores[] = "Gastos, fila $numeroFilaExcel: supera el porcentaje disponible para $categoriaTexto. Disponible: " . number_format($disponibleCategoria, 2, ',', '.') . '.';
+                    continue;
+                }
+
+                $totalesCategoriaAcumulados[$claveCategoria] += $nuevoValor;
+            }
+
+            $totalesEgresoAcumulados[$claveGrupo] += $nuevoValor;
+
+            $filasGastoValidas[] = [
+                'anio_presupuestal_id' => $anioId,
+                'sede_id' => $mapaSedes[$sedeTexto],
+                'categoria' => $categoriaTexto,
+                'dependencia' => $dependenciaTexto,
+                'proyecto_id' => (int) $proyecto['id'],
+                'motor_id' => (int) $proyecto['motor_id'],
+                'linea_id' => (int) $proyecto['linea_id'],
+                'objeto_proyecto_paa' => $contratoTexto,
+                'actividad' => $actividad,
+                'rubro_id' => $mapaRubros[$rubroTexto],
+                'autogestion_id' => $itemId,
+                'insumo' => $insumo,
+                'cantidad' => (int) $cantidadTexto,
+                'costo_unitario' => (float) $costoTexto,
+                'meses' => implode(',', $meses),
+                'usuario_id' => (int) ($_SESSION['usuario_id'] ?? 0),
+            ];
+        }
+
+        if (!empty($errores)) {
+            return ['No se importó ningún registro porque se encontraron errores:', '', $errores];
+        }
+
+        if (empty($gruposIngreso) && empty($filasGastoValidas)) {
+            return ['No hay filas válidas para importar.', '', []];
+        }
+
+        $db = Conexion::obtener();
+        $db->beginTransaction();
+
+        try {
+            $gruposAfectados = [];
+
+            foreach ($gruposIngreso as $grupo) {
+                $conceptos = $grupo['conceptos'];
+                unset($grupo['conceptos']);
+                $this->modeloIngreso->crear($grupo, $conceptos);
+                $gruposAfectados[$grupo['anio_presupuestal_id'] . ':' . $grupo['autogestion_id'] . ':' . $grupo['dependencia']] = $grupo;
+            }
+
+            foreach ($filasGastoValidas as $datos) {
+                $this->modeloGasto->crear($datos);
+            }
+
+            $db->commit();
+        } catch (PDOException $excepcion) {
+            $db->rollBack();
+            return ['No se pudo importar el archivo. Verifica los datos e inténtalo de nuevo.', '', []];
+        }
+
+        foreach ($gruposAfectados as $grupo) {
+            $this->generarEgresosAutomaticos(null, $grupo['anio_presupuestal_id'], $grupo['autogestion_id'], $grupo['dependencia']);
+        }
+
+        $mensaje = count($gruposIngreso) . ' ingreso(s) y ' . count($filasGastoValidas) . ' gasto(s) importado(s) correctamente como borrador.';
+
+        return ['', $mensaje, []];
+    }
+
     private function guardarEgreso(): array
     {
         [$datos, $error] = $this->validarDatosEgreso();
@@ -367,7 +929,7 @@ class ExtensionControlador
 
     private function validarLimiteCategoria(int $anioPresupuestalId, int $autogestionId, string $categoria, float $nuevoValor, float $totalIngresos, float $valorExcluido = 0.0, array $dependenciasPermitidas = []): string
     {
-        $mapaCategoriaPorcentaje = ['Gastos' => 'costos', 'Inversiones' => 'inversiones'];
+        $mapaCategoriaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
         $clavePorcentaje = $mapaCategoriaPorcentaje[$categoria] ?? null;
 
         if ($clavePorcentaje === null) {
