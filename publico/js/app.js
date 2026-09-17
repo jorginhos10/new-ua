@@ -3096,6 +3096,21 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             var seleccionados = obtenerSeleccionados();
+
+            // En la tabla "Consolidado por tipo" cada checkbox representa un tipo completo (puede
+            // traer cientos de ítems): en vez de amontonarlos en un popup, "Ver" lleva directo a la
+            // landing de Consolidado detallado, que ya tiene búsqueda, orden por columna y las
+            // acciones reales (editar, redireccionar, duplicar, exportar).
+            if (seleccionados.length > 0 && seleccionados[0].dataset.vistaAgrupada === '1') {
+                var tiposAgrupados = tiposDeSeleccion(seleccionados);
+                var destinoAgrupado = 'index.php?ruta=consolidado-detalle&anio_id=' + encodeURIComponent(seleccionados[0].dataset.anioId || '');
+                if (tiposAgrupados.length === 1) {
+                    destinoAgrupado += '&tipo=' + encodeURIComponent(tiposAgrupados[0]);
+                }
+                window.location.href = destinoAgrupado;
+                return;
+            }
+
             var items = itemsDeSeleccion(seleccionados);
             var tipos = tiposDeSeleccion(seleccionados);
 

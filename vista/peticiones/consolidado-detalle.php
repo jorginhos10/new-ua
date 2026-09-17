@@ -40,24 +40,32 @@ if ($tipoFiltro !== '') {
             <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
         <?php endif; ?>
 
+        <div class="barra-rapida-consulta">
+            <div class="buscador-rapido-consulta">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="consolidado-detalle-filtro-rapido" placeholder="Filtrar y buscar en la tabla…">
+            </div>
+            <span class="contador-registros" id="consolidado-detalle-contador"><?= count($filas) ?> registro<?= count($filas) === 1 ? '' : 's' ?></span>
+        </div>
+
         <div class="tabla-scroll">
-            <table class="tabla-usuarios">
+            <table class="tabla-usuarios" id="consolidado-detalle-tabla">
                 <thead>
                     <tr>
                         <th><input type="checkbox" id="checkbox-consolidado-todos" <?= empty($filas) ? 'disabled' : '' ?>></th>
-                        <th>Tipo</th>
-                        <th>Dependencia</th>
+                        <th class="th-ordenable">Tipo</th>
+                        <th class="th-ordenable">Dependencia</th>
                         <th>Sede</th>
                         <th>Línea estratégica</th>
                         <th>Motor de desarrollo</th>
                         <th>Proyecto PDI</th>
                         <th>Objeto/Proyecto (PAA)</th>
-                        <th>Actividad</th>
+                        <th class="th-ordenable">Actividad</th>
                         <th>Rubro</th>
                         <th>Insumo</th>
-                        <th>Cantidad</th>
+                        <th class="th-ordenable">Cantidad</th>
                         <th>Costo unitario</th>
-                        <th>Valor total</th>
+                        <th class="th-ordenable">Valor total</th>
                         <th>Meses</th>
                         <th>Techo presupuestal</th>
                     </tr>
@@ -114,9 +122,9 @@ if ($tipoFiltro !== '') {
                         <td><?= htmlspecialchars($fila['actividad']) ?></td>
                         <td><?= htmlspecialchars($fila['rubro']) ?></td>
                         <td><?= htmlspecialchars($fila['insumo']) ?></td>
-                        <td><?= $fila['cantidad'] !== null ? htmlspecialchars((string) $fila['cantidad']) : '—' ?></td>
+                        <td data-orden="<?= $fila['cantidad'] !== null ? (float) $fila['cantidad'] : 0 ?>"><?= $fila['cantidad'] !== null ? htmlspecialchars((string) $fila['cantidad']) : '—' ?></td>
                         <td><?= $fila['costo_unitario'] !== null ? number_format($fila['costo_unitario'], 2, ',', '.') : '—' ?></td>
-                        <td><?= $fila['valor_total'] !== null ? '$ ' . number_format($fila['valor_total'], 2, ',', '.') : '—' ?></td>
+                        <td data-orden="<?= $fila['valor_total'] !== null ? (float) $fila['valor_total'] : 0 ?>"><?= $fila['valor_total'] !== null ? '$ ' . number_format($fila['valor_total'], 2, ',', '.') : '—' ?></td>
                         <td><?= !empty($mesesFila) ? htmlspecialchars(implode(', ', $mesesFila)) : '—' ?></td>
                         <td><?= $fila['techo'] !== null ? '$ ' . number_format($fila['techo'], 2, ',', '.') : '—' ?></td>
                     </tr>
@@ -263,5 +271,34 @@ if ($tipoFiltro !== '') {
     </div>
 
     <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+
+    <script>
+    (function () {
+        var filtroRapido = document.getElementById('consolidado-detalle-filtro-rapido');
+        var contador = document.getElementById('consolidado-detalle-contador');
+        var tabla = document.getElementById('consolidado-detalle-tabla');
+
+        if (!filtroRapido || !contador || !tabla) {
+            return;
+        }
+
+        var filas = Array.prototype.slice.call(tabla.querySelectorAll('tbody > tr'));
+
+        filtroRapido.addEventListener('input', function () {
+            var texto = filtroRapido.value.trim().toLowerCase();
+            var visibles = 0;
+
+            filas.forEach(function (fila) {
+                var coincide = texto === '' || fila.textContent.toLowerCase().indexOf(texto) !== -1;
+                fila.style.display = coincide ? '' : 'none';
+                if (coincide) {
+                    visibles++;
+                }
+            });
+
+            contador.textContent = visibles + ' registro' + (visibles === 1 ? '' : 's');
+        });
+    })();
+    </script>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>
