@@ -14,6 +14,24 @@ if ($anioSeleccionadoId > 0) {
 if ($tipoFiltro !== '') {
     $parametrosExportar['tipo'] = $tipoFiltro;
 }
+
+$opcionesTipo = array_values(array_unique(array_filter(array_map(
+    static fn (array $fila): string => $fila['tipo'] ?? '',
+    $filas
+))));
+sort($opcionesTipo);
+
+$opcionesDependencia = array_values(array_unique(array_filter(array_map(
+    static fn (array $fila): string => $fila['dependencia'] ?? '',
+    $filas
+))));
+sort($opcionesDependencia);
+
+$opcionesSede = array_values(array_unique(array_filter(array_map(
+    static fn (array $fila): string => $fila['sede'] ?? '',
+    $filas
+))));
+sort($opcionesSede);
 ?>
 
     <div class="tarjeta">
@@ -38,6 +56,46 @@ if ($tipoFiltro !== '') {
 
         <?php if (!empty($exito)): ?>
             <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
+        <?php endif; ?>
+
+        <?php if (!empty($filas)): ?>
+        <div class="barra-filtros">
+            <?php if (count($opcionesTipo) > 1): ?>
+            <div class="campo">
+                <label for="consolidado-detalle-tipo">Tipo</label>
+                <select id="consolidado-detalle-tipo">
+                    <option value="">Todos</option>
+                    <?php foreach ($opcionesTipo as $opcionTipo): ?>
+                    <option value="<?= htmlspecialchars($opcionTipo) ?>"><?= htmlspecialchars($opcionTipo) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <?php endif; ?>
+
+            <div class="campo">
+                <label for="consolidado-detalle-dependencia">Dependencia</label>
+                <select id="consolidado-detalle-dependencia">
+                    <option value="">Todas</option>
+                    <?php foreach ($opcionesDependencia as $opcionDependencia): ?>
+                    <option value="<?= htmlspecialchars($opcionDependencia) ?>"><?= htmlspecialchars($opcionDependencia) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="campo">
+                <label for="consolidado-detalle-sede">Sede</label>
+                <select id="consolidado-detalle-sede">
+                    <option value="">Todas</option>
+                    <?php foreach ($opcionesSede as $opcionSede): ?>
+                    <option value="<?= htmlspecialchars($opcionSede) ?>"><?= htmlspecialchars($opcionSede) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="acciones-filtros-consulta">
+                <button type="button" class="boton-secundario" id="consolidado-detalle-limpiar-filtros">Limpiar filtros</button>
+            </div>
+        </div>
         <?php endif; ?>
 
         <div class="barra-rapida-consulta">
@@ -100,7 +158,11 @@ if ($tipoFiltro !== '') {
                         'techo' => $fila['techo'],
                     ];
                     ?>
-                    <tr>
+                    <tr
+                        data-fila-tipo="<?= htmlspecialchars($fila['tipo'] ?? '') ?>"
+                        data-fila-dependencia="<?= htmlspecialchars($fila['dependencia'] ?? '') ?>"
+                        data-fila-sede="<?= htmlspecialchars($fila['sede'] ?? '') ?>"
+                    >
                         <td>
                             <input
                                 type="checkbox"
@@ -277,6 +339,10 @@ if ($tipoFiltro !== '') {
         var filtroRapido = document.getElementById('consolidado-detalle-filtro-rapido');
         var contador = document.getElementById('consolidado-detalle-contador');
         var tabla = document.getElementById('consolidado-detalle-tabla');
+        var selectTipo = document.getElementById('consolidado-detalle-tipo');
+        var selectDependencia = document.getElementById('consolidado-detalle-dependencia');
+        var selectSede = document.getElementById('consolidado-detalle-sede');
+        var botonLimpiar = document.getElementById('consolidado-detalle-limpiar-filtros');
 
         if (!filtroRapido || !contador || !tabla) {
             return;
@@ -284,12 +350,29 @@ if ($tipoFiltro !== '') {
 
         var filas = Array.prototype.slice.call(tabla.querySelectorAll('tbody > tr'));
 
-        filtroRapido.addEventListener('input', function () {
+        function aplicarFiltros() {
             var texto = filtroRapido.value.trim().toLowerCase();
+            var tipo = selectTipo ? selectTipo.value : '';
+            var dependencia = selectDependencia ? selectDependencia.value : '';
+            var sede = selectSede ? selectSede.value : '';
             var visibles = 0;
 
             filas.forEach(function (fila) {
-                var coincide = texto === '' || fila.textContent.toLowerCase().indexOf(texto) !== -1;
+                var coincide = true;
+
+                if (tipo !== '' && fila.dataset.filaTipo !== tipo) {
+                    coincide = false;
+                }
+                if (coincide && dependencia !== '' && fila.dataset.filaDependencia !== dependencia) {
+                    coincide = false;
+                }
+                if (coincide && sede !== '' && fila.dataset.filaSede !== sede) {
+                    coincide = false;
+                }
+                if (coincide && texto !== '' && fila.textContent.toLowerCase().indexOf(texto) === -1) {
+                    coincide = false;
+                }
+
                 fila.style.display = coincide ? '' : 'none';
                 if (coincide) {
                     visibles++;
@@ -297,7 +380,21 @@ if ($tipoFiltro !== '') {
             });
 
             contador.textContent = visibles + ' registro' + (visibles === 1 ? '' : 's');
-        });
+        }
+
+        filtroRapido.addEventListener('input', aplicarFiltros);
+        if (selectTipo) { selectTipo.addEventListener('change', aplicarFiltros); }
+        if (selectDependencia) { selectDependencia.addEventListener('change', aplicarFiltros); }
+        if (selectSede) { selectSede.addEventListener('change', aplicarFiltros); }
+        if (botonLimpiar) {
+            botonLimpiar.addEventListener('click', function () {
+                filtroRapido.value = '';
+                if (selectTipo) { selectTipo.value = ''; }
+                if (selectDependencia) { selectDependencia.value = ''; }
+                if (selectSede) { selectSede.value = ''; }
+                aplicarFiltros();
+            });
+        }
     })();
     </script>
 
