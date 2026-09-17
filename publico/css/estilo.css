@@ -2644,6 +2644,43 @@ a.barra-progreso:hover {
     white-space: nowrap;
 }
 
+.tags-modulo {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin: 0.75rem 0 1.5rem;
+}
+
+.tag-modulo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 700;
+}
+
+.tag-modulo-gastos {
+    background: var(--color-primario-suave);
+    color: var(--color-primario-oscuro);
+}
+
+.tag-modulo-extension {
+    background: #fff2e0;
+    color: #c96500;
+}
+
+.tag-modulo-postgrado {
+    background: #f4e6fb;
+    color: #8944ab;
+}
+
+.tag-modulo-unisalud {
+    background: var(--color-exito-fondo);
+    color: var(--color-exito-texto);
+}
+
 .campo-busqueda-filtros {
     flex: 1;
     min-width: 220px;

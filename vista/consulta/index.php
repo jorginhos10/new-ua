@@ -5,6 +5,13 @@
             <h1>Consulta</h1>
         </div>
 
+        <div class="tags-modulo">
+            <span class="tag-modulo tag-modulo-gastos">Gastos · 075</span>
+            <span class="tag-modulo tag-modulo-extension">Extensión · 110</span>
+            <span class="tag-modulo tag-modulo-postgrado">Postgrado · 110</span>
+            <span class="tag-modulo tag-modulo-unisalud">Unidad de Salud · 110</span>
+        </div>
+
         <div class="pestanas">
             <a href="index.php?ruta=consulta&tipo=gastos" class="pestana<?= $tipo === 'gastos' ? ' activa' : '' ?>">Gastos</a>
             <a href="index.php?ruta=consulta&tipo=ingresos" class="pestana<?= $tipo === 'ingresos' ? ' activa' : '' ?>">Ingresos</a>
