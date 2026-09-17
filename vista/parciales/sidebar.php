@@ -94,7 +94,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <a href="publico/documentos/esencia-del-software.docx">¿Para qué sirve?</a>
     <?php elseif ($rolActual === 'consejo_superior'): ?>
             <p class="grupo-menu">Consulta</p>
-            <a href="#">item 1</a>
+            <a href="#">consulta</a>
             <a href="#">item 2</a>
     <?php else: ?>
             <p class="grupo-menu">Resumen</p>
