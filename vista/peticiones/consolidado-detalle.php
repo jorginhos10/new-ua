@@ -32,6 +32,18 @@ $opcionesSede = array_values(array_unique(array_filter(array_map(
     $filas
 ))));
 sort($opcionesSede);
+
+$opcionesLinea = array_values(array_unique(array_filter(array_map(
+    static fn (array $fila): string => $fila['linea'] ?? '',
+    $filas
+))));
+sort($opcionesLinea);
+
+$opcionesRubro = array_values(array_unique(array_filter(array_map(
+    static fn (array $fila): string => $fila['rubro'] ?? '',
+    $filas
+))));
+sort($opcionesRubro);
 ?>
 
     <div class="tarjeta">
@@ -88,6 +100,26 @@ sort($opcionesSede);
                     <option value="">Todas</option>
                     <?php foreach ($opcionesSede as $opcionSede): ?>
                     <option value="<?= htmlspecialchars($opcionSede) ?>"><?= htmlspecialchars($opcionSede) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="campo">
+                <label for="consolidado-detalle-linea">Línea estratégica</label>
+                <select id="consolidado-detalle-linea">
+                    <option value="">Todas</option>
+                    <?php foreach ($opcionesLinea as $opcionLinea): ?>
+                    <option value="<?= htmlspecialchars($opcionLinea) ?>"><?= htmlspecialchars($opcionLinea) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="campo">
+                <label for="consolidado-detalle-rubro">Rubro</label>
+                <select id="consolidado-detalle-rubro">
+                    <option value="">Todos</option>
+                    <?php foreach ($opcionesRubro as $opcionRubro): ?>
+                    <option value="<?= htmlspecialchars($opcionRubro) ?>"><?= htmlspecialchars($opcionRubro) ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -162,6 +194,8 @@ sort($opcionesSede);
                         data-fila-tipo="<?= htmlspecialchars($fila['tipo'] ?? '') ?>"
                         data-fila-dependencia="<?= htmlspecialchars($fila['dependencia'] ?? '') ?>"
                         data-fila-sede="<?= htmlspecialchars($fila['sede'] ?? '') ?>"
+                        data-fila-linea="<?= htmlspecialchars($fila['linea'] ?? '') ?>"
+                        data-fila-rubro="<?= htmlspecialchars($fila['rubro'] ?? '') ?>"
                     >
                         <td>
                             <input
@@ -342,6 +376,8 @@ sort($opcionesSede);
         var selectTipo = document.getElementById('consolidado-detalle-tipo');
         var selectDependencia = document.getElementById('consolidado-detalle-dependencia');
         var selectSede = document.getElementById('consolidado-detalle-sede');
+        var selectLinea = document.getElementById('consolidado-detalle-linea');
+        var selectRubro = document.getElementById('consolidado-detalle-rubro');
         var botonLimpiar = document.getElementById('consolidado-detalle-limpiar-filtros');
 
         if (!filtroRapido || !contador || !tabla) {
@@ -355,6 +391,8 @@ sort($opcionesSede);
             var tipo = selectTipo ? selectTipo.value : '';
             var dependencia = selectDependencia ? selectDependencia.value : '';
             var sede = selectSede ? selectSede.value : '';
+            var linea = selectLinea ? selectLinea.value : '';
+            var rubro = selectRubro ? selectRubro.value : '';
             var visibles = 0;
 
             filas.forEach(function (fila) {
@@ -367,6 +405,12 @@ sort($opcionesSede);
                     coincide = false;
                 }
                 if (coincide && sede !== '' && fila.dataset.filaSede !== sede) {
+                    coincide = false;
+                }
+                if (coincide && linea !== '' && fila.dataset.filaLinea !== linea) {
+                    coincide = false;
+                }
+                if (coincide && rubro !== '' && fila.dataset.filaRubro !== rubro) {
                     coincide = false;
                 }
                 if (coincide && texto !== '' && fila.textContent.toLowerCase().indexOf(texto) === -1) {
@@ -386,12 +430,16 @@ sort($opcionesSede);
         if (selectTipo) { selectTipo.addEventListener('change', aplicarFiltros); }
         if (selectDependencia) { selectDependencia.addEventListener('change', aplicarFiltros); }
         if (selectSede) { selectSede.addEventListener('change', aplicarFiltros); }
+        if (selectLinea) { selectLinea.addEventListener('change', aplicarFiltros); }
+        if (selectRubro) { selectRubro.addEventListener('change', aplicarFiltros); }
         if (botonLimpiar) {
             botonLimpiar.addEventListener('click', function () {
                 filtroRapido.value = '';
                 if (selectTipo) { selectTipo.value = ''; }
                 if (selectDependencia) { selectDependencia.value = ''; }
                 if (selectSede) { selectSede.value = ''; }
+                if (selectLinea) { selectLinea.value = ''; }
+                if (selectRubro) { selectRubro.value = ''; }
                 aplicarFiltros();
             });
         }
