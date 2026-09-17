@@ -436,20 +436,17 @@ class GeneradorXlsx
             return '<c r="' . $referencia . '"' . $atributoEstilo . ' t="inlineStr"><is><t xml:space="preserve">' . $texto . '</t></is></c>';
         };
 
+        $celdaNumero = static function (string $referencia, float $valor, ?int $estilo = null): string {
+            $atributoEstilo = $estilo !== null ? ' s="' . $estilo . '"' : '';
+
+            return '<c r="' . $referencia . '"' . $atributoEstilo . '><v>' . $valor . '</v></c>';
+        };
+
         $celdaFormula = static function (string $referencia, string $formula, ?int $estilo = null): string {
             $atributoEstilo = $estilo !== null ? ' s="' . $estilo . '"' : '';
 
             return '<c r="' . $referencia . '"' . $atributoEstilo . '><f>' . htmlspecialchars($formula, ENT_QUOTES | ENT_XML1, 'UTF-8') . '</f></c>';
         };
-
-        // El % configurado no se escribe como valor editable en la hoja visible: se guarda en la
-        // hoja oculta "Listas" (igual que las demás listas de la plantilla) y el bloque de
-        // validación solo lo LEE por fórmula — junto con la protección de hoja más abajo, esto es
-        // lo que evita que se pueda editar directamente.
-        $listasComunes['Porcentajes'] = array_map(
-            static fn (array $fila): string => $fila['porcentaje'] !== null ? (string) $fila['porcentaje'] : '',
-            array_values($validacionPorcentajes)
-        );
 
         $numeroCategorias = count($validacionPorcentajes);
         // 1 fila título + 1 fila encabezado del bloque + n categorías + 1 fila en blanco, luego el
@@ -461,20 +458,37 @@ class GeneradorXlsx
         $letraCategoriaGastos = self::columnaLetra($hojaGastos['columnaCategoria']);
         $letraValorTotalGastos = self::columnaLetra($hojaGastos['columnaValorTotal']);
         $letraValorTotalIngresos = self::columnaLetra($hojaIngresos['columnaValorTotal']);
-        $letraPorcentajes = self::columnaLetraLista('Porcentajes', $listasComunes);
         $rangoCategoriaGastos = 'Gastos!$' . $letraCategoriaGastos . '$' . $filaEjemplo . ':$' . $letraCategoriaGastos . '$' . $ultimaFilaDatos;
         $rangoValorTotalGastos = 'Gastos!$' . $letraValorTotalGastos . '$' . $filaEjemplo . ':$' . $letraValorTotalGastos . '$' . $ultimaFilaDatos;
         $rangoValorTotalIngresos = 'Ingresos!$' . $letraValorTotalIngresos . '$' . $filaEjemplo . ':$' . $letraValorTotalIngresos . '$' . $ultimaFilaDatos;
 
+        // --- Hoja "Porcentaje" (oculta): es la ÚNICA hoja protegida del libro. Guarda el % de cada
+        // categoría en una celda real (no fórmula) — Ingresos y Gastos solo la LEEN por referencia
+        // directa de celda, así que el % nunca aparece como un valor editable en esas dos hojas, que
+        // quedan totalmente sin proteger (se pueden redimensionar columnas, etc.). ---
+        $filasPorcentajeXml = '<row r="1">' . $celdaTexto('A1', 'Categoría', 1) . $celdaTexto('B1', '% Configurado', 1) . '</row>';
+        foreach (array_values($validacionPorcentajes) as $indice => $fila) {
+            $numeroFilaPorcentaje = 2 + $indice;
+            $porcentaje = $fila['porcentaje'];
+
+            $filasPorcentajeXml .= '<row r="' . $numeroFilaPorcentaje . '">'
+                . $celdaTexto('A' . $numeroFilaPorcentaje, $fila['etiqueta'], 4)
+                . ($porcentaje !== null ? $celdaNumero('B' . $numeroFilaPorcentaje, $porcentaje, 2) : $celdaTexto('B' . $numeroFilaPorcentaje, 'N/A', 4))
+                . '</row>';
+        }
+
+        $sheetPorcentajeXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . '<sheetData>' . $filasPorcentajeXml . '</sheetData>'
+            . '<sheetProtection sheet="1" selectLockedCells="0"/>'
+            . '</worksheet>';
+
         // --- Bloque de validación (idéntico en ambas hojas): título + encabezado + una fila por
-        // categoría. El estilo 0 (por defecto, el que usa cualquier celda SIN estilo explícito en
-        // toda la hoja) queda desbloqueado — así la zona de captura de datos permanece editable sin
-        // necesidad de marcar cada celda una por una. Por eso las celdas de este bloque necesitan
-        // SIEMPRE un estilo explícito que sí quede bloqueado: 4 = etiqueta bloqueada (sin formato
-        // especial), 2 = % bloqueado (numFmt de porcentaje), 3 = moneda bloqueada (numFmt de
-        // moneda). Ninguno de los tres lleva <protection locked="0"/>, así que con la hoja
-        // protegida quedan de solo lectura. ---
-        $bloqueValidacionXml = '<row r="1">' . $celdaTexto('A1', 'Validación de cumplimiento de porcentajes (bloqueada; % configurado en Configuraciones > Autogestión)', 1) . '</row>';
+        // categoría. "% Configurado" (B) referencia directamente la celda de la hoja "Porcentaje"
+        // (la única protegida); las hojas de Ingresos y Gastos no llevan sheetProtection, así que
+        // ninguna de sus celdas queda bloqueada — solo se muestran con formato de % o moneda para
+        // que se lean bien. ---
+        $bloqueValidacionXml = '<row r="1">' . $celdaTexto('A1', 'Validación de cumplimiento de porcentajes (el % se administra en la hoja oculta "Porcentaje")', 1) . '</row>';
         $bloqueValidacionXml .= '<row r="2">'
             . $celdaTexto('A2', 'Categoría', 1)
             . $celdaTexto('B2', '% Configurado', 1)
@@ -485,11 +499,11 @@ class GeneradorXlsx
 
         foreach (array_values($validacionPorcentajes) as $indice => $fila) {
             $numeroFila = 3 + $indice;
-            $filaListas = 2 + $indice;
+            $numeroFilaPorcentaje = 2 + $indice;
 
             $bloqueValidacionXml .= '<row r="' . $numeroFila . '">'
-                . $celdaTexto('A' . $numeroFila, $fila['etiqueta'], 4)
-                . $celdaFormula('B' . $numeroFila, 'IFERROR(VALUE(Listas!$' . $letraPorcentajes . '$' . $filaListas . '),"N/A")', 2)
+                . $celdaTexto('A' . $numeroFila, $fila['etiqueta'])
+                . $celdaFormula('B' . $numeroFila, 'Porcentaje!$B$' . $numeroFilaPorcentaje, 2)
                 . $celdaFormula('C' . $numeroFila, 'SUM(' . $rangoValorTotalIngresos . ')', 3)
                 . $celdaFormula('D' . $numeroFila, 'IFERROR(B' . $numeroFila . '/100*C' . $numeroFila . ',"N/A")', 3)
                 . $celdaFormula('E' . $numeroFila, 'SUMIF(' . $rangoCategoriaGastos . ',A' . $numeroFila . ',' . $rangoValorTotalGastos . ')', 3)
@@ -504,9 +518,9 @@ class GeneradorXlsx
             . '</conditionalFormatting>';
 
         // --- Construye una hoja de datos (Ingresos o Gastos): bloque de validación + tabla real.
-        // La hoja queda protegida (sheetProtection); como el estilo por defecto (0) ya es
-        // desbloqueado, la captura de datos (incluida la Tabla de Excel) sigue funcionando con
-        // normalidad y solo el bloque de arriba, con sus estilos explícitos, queda de solo lectura. ---
+        // Ninguna de las dos lleva sheetProtection, así que ninguna celda queda bloqueada (se puede
+        // redimensionar columnas, dar formato, etc.) — el % configurado, que sí debe quedar de solo
+        // lectura, vive únicamente en la hoja oculta y protegida "Porcentaje". ---
         $construirHoja = function (array $config, int $idTabla, string $nombreTabla) use ($celdaTexto, $celdaFormula, $bloqueValidacionXml, $conditionalFormattingXml, $filaEncabezado, $filaEjemplo, $ultimaFilaDatos, $listasComunes): array {
             $columnas = count($config['encabezados']);
 
@@ -562,7 +576,6 @@ class GeneradorXlsx
             $sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
                 . '<sheetData>' . $filasXml . '</sheetData>'
-                . '<sheetProtection sheet="1" selectLockedCells="0" selectUnlockedCells="0"/>'
                 . $conditionalFormattingXml
                 . ($validaciones !== '' ? '<dataValidations count="' . $cantidadListas . '">' . $validaciones . '</dataValidations>' : '')
                 . '<tableParts count="1"><tablePart r:id="rId1"/></tableParts>'
@@ -642,7 +655,7 @@ class GeneradorXlsx
                 . '</row>';
         }
 
-        $sheet4Xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        $sheet5Xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
             . '<sheetData>' . $filasMetadatosXml . '</sheetData>'
             . '</worksheet>';
@@ -708,6 +721,7 @@ class GeneradorXlsx
             . '<Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
             . '<Override PartName="/xl/worksheets/sheet3.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
             . '<Override PartName="/xl/worksheets/sheet4.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+            . '<Override PartName="/xl/worksheets/sheet5.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
             . '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
             . '<Override PartName="/xl/tables/table1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>'
             . '<Override PartName="/xl/tables/table2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>'
@@ -728,7 +742,8 @@ class GeneradorXlsx
             . '<sheet name="Ingresos" sheetId="1" r:id="rId1"/>'
             . '<sheet name="Gastos" sheetId="2" r:id="rId2"/>'
             . '<sheet name="Listas" sheetId="3" r:id="rId3" state="hidden"/>'
-            . '<sheet name="Metadatos" sheetId="4" r:id="rId5" state="hidden"/>'
+            . '<sheet name="Porcentaje" sheetId="4" r:id="rId4" state="hidden"/>'
+            . '<sheet name="Metadatos" sheetId="5" r:id="rId6" state="hidden"/>'
             . '</sheets>'
             . '<calcPr calcId="0" fullCalcOnLoad="1"/>'
             . '</workbook>';
@@ -738,8 +753,9 @@ class GeneradorXlsx
             . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
             . '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/>'
             . '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet3.xml"/>'
-            . '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
-            . '<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/>'
+            . '<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet4.xml"/>'
+            . '<Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+            . '<Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet5.xml"/>'
             . '</Relationships>';
 
         header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -766,7 +782,8 @@ class GeneradorXlsx
         $zip->addFromString('xl/worksheets/sheet1.xml', $hojaIngresosXml['sheet']);
         $zip->addFromString('xl/worksheets/sheet2.xml', $hojaGastosXml['sheet']);
         $zip->addFromString('xl/worksheets/sheet3.xml', $sheet3Xml);
-        $zip->addFromString('xl/worksheets/sheet4.xml', $sheet4Xml);
+        $zip->addFromString('xl/worksheets/sheet4.xml', $sheetPorcentajeXml);
+        $zip->addFromString('xl/worksheets/sheet5.xml', $sheet5Xml);
         $zip->addFromString('xl/worksheets/_rels/sheet1.xml.rels', $hojaIngresosXml['rels']);
         $zip->addFromString('xl/worksheets/_rels/sheet2.xml.rels', $hojaGastosXml['rels']);
         $zip->addFromString('xl/tables/table1.xml', $hojaIngresosXml['table']);
