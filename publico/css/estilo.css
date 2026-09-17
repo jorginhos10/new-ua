@@ -2622,6 +2622,26 @@ a.barra-progreso:hover {
 
 .barra-filtros .campo {
     min-width: 160px;
+    max-width: 220px;
+    flex: 1 1 180px;
+}
+
+/* Un <select> con width:100% dentro de un flex item sin ancho fijo hereda el ancho de su opción
+   más larga (ej. nombres de dependencia o rubro), lo que estiraba cada campo del filtro a un
+   tamaño distinto y muy ancho. Con max-width fijo arriba y elipsis aquí, el valor cerrado se
+   trunca y el menú desplegado sigue mostrando el texto completo de cada opción. */
+.barra-filtros .campo select {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.barra-filtros .acciones-filtros-consulta {
+    flex-shrink: 0;
+}
+
+.barra-filtros .acciones-filtros-consulta .boton-secundario {
+    white-space: nowrap;
 }
 
 .campo-busqueda-filtros {
