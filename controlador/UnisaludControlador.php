@@ -749,22 +749,26 @@ class UnisaludControlador
                     continue;
                 }
 
-                $totalExistenteCategoria = $this->modeloGasto->obtenerTotalPorAnioYCategoriaYDependencias($anioId, $categoria, [$dependenciaTexto]);
                 $valorEsperadoCategoria = round($ingresosDisponibles * (float) $porcentajesModulo[$clavePorcentaje] / 100, 2);
-                $totalRealCategoria = round($totalExistenteCategoria + $totalCategoria, 2);
 
-                // Excedentes es un % fijo del total de ingresos (el mismo cálculo que ya usa
-                // generarEgresosAutomaticos() para el alta manual de ingresos): cuando está
-                // configurado, el valor importado debe corresponder EXACTAMENTE a ese %, no solo
-                // no superarlo como sí se permite en Gastos/Inversiones.
+                // Excedentes se calcula SOLO a partir del ingreso de esta importación (% × ingresos
+                // disponibles de esta dependencia): no se compara contra lo que ya exista en la base
+                // de datos para "Excedentes" en esa dependencia, porque esa dependencia puede tener
+                // registros de otras personas o de pruebas anteriores que no son parte de este
+                // archivo — si no hay ingreso, el excedente esperado es 0, sin importar qué otro
+                // valor exista ya. Para Gastos/Inversiones sí se sigue acumulando contra lo
+                // existente, porque esas categorías sí son de cupo compartido con el resto del año.
                 if ($categoria === 'Excedentes') {
-                    if (abs($totalRealCategoria - $valorEsperadoCategoria) > 0.01) {
+                    if (abs(round($totalCategoria, 2) - $valorEsperadoCategoria) > 0.01) {
                         $porcentajeTexto = rtrim(rtrim(number_format((float) $porcentajesModulo[$clavePorcentaje], 2), '0'), '.');
-                        $errores[] = "Gastos, \"$dependenciaTexto\", categoría Excedentes: el valor total (" . number_format($totalRealCategoria, 2, ',', '.')
-                            . ") debe corresponder exactamente al {$porcentajeTexto}% de los ingresos (" . number_format($valorEsperadoCategoria, 2, ',', '.') . ').';
+                        $errores[] = "Gastos, \"$dependenciaTexto\", categoría Excedentes: el valor que intentas importar (" . number_format($totalCategoria, 2, ',', '.')
+                            . ") debe corresponder exactamente al {$porcentajeTexto}% de los ingresos de esta dependencia (" . number_format($valorEsperadoCategoria, 2, ',', '.') . ').';
                     }
                     continue;
                 }
+
+                $totalExistenteCategoria = $this->modeloGasto->obtenerTotalPorAnioYCategoriaYDependencias($anioId, $categoria, [$dependenciaTexto]);
+                $totalRealCategoria = round($totalExistenteCategoria + $totalCategoria, 2);
 
                 if ($totalRealCategoria > $valorEsperadoCategoria) {
                     $disponibleCategoria = max(0, $valorEsperadoCategoria - $totalExistenteCategoria);
