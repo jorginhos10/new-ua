@@ -159,7 +159,16 @@ class IngresoUnisalud
 
     public function actualizar(int $id, array $cabecera, array $conceptos): bool
     {
-        $this->db->beginTransaction();
+        // Si ya hay una transacción activa (ej. una importación que agrupa varios ingresos y
+        // gastos en una sola transacción), no abre otra — PDO no soporta transacciones anidadas y
+        // eso terminaba lanzando "There is already an active transaction", capturado más arriba
+        // como un genérico "No se pudo importar el archivo". Delega el commit/rollback a quien
+        // haya abierto la transacción externa.
+        $transaccionPropia = !$this->db->inTransaction();
+
+        if ($transaccionPropia) {
+            $this->db->beginTransaction();
+        }
 
         try {
             $consulta = $this->db->prepare(
@@ -197,11 +206,15 @@ class IngresoUnisalud
                 ]);
             }
 
-            $this->db->commit();
+            if ($transaccionPropia) {
+                $this->db->commit();
+            }
 
             return true;
         } catch (PDOException $excepcion) {
-            $this->db->rollBack();
+            if ($transaccionPropia) {
+                $this->db->rollBack();
+            }
 
             throw $excepcion;
         }
@@ -217,7 +230,12 @@ class IngresoUnisalud
 
     public function crear(array $cabecera, array $conceptos): int
     {
-        $this->db->beginTransaction();
+        // Ver el comentario en actualizar(): no abrir una segunda transacción si ya hay una activa.
+        $transaccionPropia = !$this->db->inTransaction();
+
+        if ($transaccionPropia) {
+            $this->db->beginTransaction();
+        }
 
         try {
             $consulta = $this->db->prepare(
@@ -251,11 +269,15 @@ class IngresoUnisalud
                 ]);
             }
 
-            $this->db->commit();
+            if ($transaccionPropia) {
+                $this->db->commit();
+            }
 
             return $ingresoId;
         } catch (PDOException $excepcion) {
-            $this->db->rollBack();
+            if ($transaccionPropia) {
+                $this->db->rollBack();
+            }
 
             throw $excepcion;
         }
