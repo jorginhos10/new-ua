@@ -784,7 +784,7 @@ class SinExcedentesControlador
             $db->commit();
         } catch (PDOException $excepcion) {
             $db->rollBack();
-            return ['No se pudo importar el archivo. Verifica los datos e inténtalo de nuevo.', '', []];
+            return ['No se pudo importar el archivo: ' . $excepcion->getMessage(), '', []];
         }
 
         foreach ($gruposAfectados as $grupo) {
