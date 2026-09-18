@@ -4532,6 +4532,40 @@ document.addEventListener('DOMContentLoaded', function () {
             boton.setAttribute('aria-expanded', expandir ? 'true' : 'false');
         });
     });
+
+    var botonOcultarProgramas = document.getElementById('boton-ocultar-programas');
+
+    if (botonOcultarProgramas) {
+        var nodosPrograma = document.querySelectorAll('.nodo-arbol-presupuesto[data-tipo="pregrado"], .nodo-arbol-presupuesto[data-tipo="postgrado"]');
+
+        var aplicarOcultamiento = function (ocultar) {
+            nodosPrograma.forEach(function (nodo) {
+                nodo.classList.toggle('oculto', ocultar);
+            });
+            botonOcultarProgramas.textContent = ocultar ? 'Mostrar pregrado y postgrado' : 'Ocultar pregrado y postgrado';
+            botonOcultarProgramas.setAttribute('aria-pressed', ocultar ? 'true' : 'false');
+        };
+
+        var ocultarInicial = false;
+        try {
+            ocultarInicial = localStorage.getItem('techos_ocultar_programas') === '1';
+        } catch (error) {
+            ocultarInicial = false;
+        }
+
+        aplicarOcultamiento(ocultarInicial);
+
+        botonOcultarProgramas.addEventListener('click', function () {
+            var ocultarAhora = botonOcultarProgramas.getAttribute('aria-pressed') !== 'true';
+            aplicarOcultamiento(ocultarAhora);
+
+            try {
+                localStorage.setItem('techos_ocultar_programas', ocultarAhora ? '1' : '0');
+            } catch (error) {
+                // almacenamiento no disponible: la preferencia simplemente no persiste
+            }
+        });
+    }
 });
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -4680,6 +4714,65 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
+    var camposMoneda = document.querySelectorAll('.campo-moneda input[type="text"]');
+
+    if (camposMoneda.length === 0) {
+        return;
+    }
+
+    // Formatea mientras se escribe (miles con punto, decimales con coma) sin usar
+    // <input type="number">: sus flechas de ajustar centavos se disparan por accidente con
+    // trackpad (scroll/gestos), cambiando el valor sin que el usuario se dé cuenta.
+    function formatearTextoMoneda(texto) {
+        var limpio = texto.replace(/[^0-9,]/g, '');
+        var indiceComa = limpio.indexOf(',');
+        var parteEntera = (indiceComa === -1 ? limpio : limpio.slice(0, indiceComa)).replace(/^0+(?=\d)/, '');
+        var parteDecimal = indiceComa === -1 ? '' : limpio.slice(indiceComa + 1, indiceComa + 3).replace(/,/g, '');
+        var enteroConMiles = parteEntera.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+        return indiceComa === -1 ? enteroConMiles : enteroConMiles + ',' + parteDecimal;
+    }
+
+    function valorPlanoDesdeMoneda(texto) {
+        if (!texto) {
+            return null;
+        }
+
+        var numero = parseFloat(texto.replace(/\./g, '').replace(',', '.'));
+
+        return isNaN(numero) ? null : numero;
+    }
+
+    camposMoneda.forEach(function (campo) {
+        if (campo.value) {
+            campo.value = formatearTextoMoneda(campo.value.replace('.', ','));
+        }
+
+        campo.addEventListener('input', function () {
+            var posicion = campo.selectionStart;
+            var digitosAntes = campo.value.slice(0, posicion).replace(/[^0-9,]/g, '').length;
+
+            campo.value = formatearTextoMoneda(campo.value);
+
+            var contador = 0;
+            var nuevaPosicion = campo.value.length;
+
+            for (var i = 0; i < campo.value.length; i++) {
+                if (/[0-9,]/.test(campo.value[i])) {
+                    contador++;
+                }
+                if (contador === digitosAntes) {
+                    nuevaPosicion = i + 1;
+                    break;
+                }
+            }
+
+            campo.setSelectionRange(digitosAntes === 0 ? 0 : nuevaPosicion, digitosAntes === 0 ? 0 : nuevaPosicion);
+        });
+    });
+
+    // Techo no puede quedar por debajo del mínimo presupuestal de la misma dependencia (solo
+    // aplica en la página de Techos, donde .campo-techo-input trae el mínimo en data-minimo).
     var camposConMinimo = [];
 
     document.querySelectorAll('.campo-techo-input').forEach(function (campo) {
@@ -4700,8 +4793,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         function validar() {
-            var valor = campo.value !== '' ? parseFloat(campo.value) : null;
-            var esMenor = valor !== null && !isNaN(valor) && valor < minimo;
+            var valor = valorPlanoDesdeMoneda(campo.value);
+            var esMenor = valor !== null && valor < minimo;
             advertencia.classList.toggle('oculto', !esMenor);
         }
 
@@ -4709,27 +4802,37 @@ document.addEventListener('DOMContentLoaded', function () {
         validar();
     });
 
-    if (camposConMinimo.length === 0) {
-        return;
-    }
+    var formularios = new Set();
 
-    var formulario = camposConMinimo[0].campo.closest('form');
+    camposMoneda.forEach(function (campo) {
+        var formulario = campo.closest('form');
 
-    if (!formulario) {
-        return;
-    }
-
-    formulario.addEventListener('submit', function (evento) {
-        var invalido = camposConMinimo.find(function (item) {
-            var valor = item.campo.value !== '' ? parseFloat(item.campo.value) : null;
-            return valor !== null && !isNaN(valor) && valor < item.minimo;
-        });
-
-        if (invalido) {
-            evento.preventDefault();
-            alert('El techo presupuestal no puede ser menor al mínimo presupuestal de la dependencia.');
-            invalido.campo.focus();
+        if (formulario) {
+            formularios.add(formulario);
         }
+    });
+
+    formularios.forEach(function (formulario) {
+        formulario.addEventListener('submit', function (evento) {
+            var invalido = camposConMinimo.find(function (item) {
+                var valor = valorPlanoDesdeMoneda(item.campo.value);
+                return valor !== null && valor < item.minimo;
+            });
+
+            if (invalido) {
+                evento.preventDefault();
+                alert('El techo presupuestal no puede ser menor al mínimo presupuestal de la dependencia.');
+                invalido.campo.focus();
+                return;
+            }
+
+            // Recién aquí, con la validación superada, se pasa de formato visual
+            // ("1.234.567,50") a número plano ("1234567.50") para que el backend lo procese.
+            camposMoneda.forEach(function (campoMoneda) {
+                var numero = valorPlanoDesdeMoneda(campoMoneda.value);
+                campoMoneda.value = numero !== null ? String(numero) : '';
+            });
+        });
     });
 });
 

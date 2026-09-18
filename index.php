@@ -72,6 +72,7 @@ $rutaAMenuKey = [
     'techos' => 'techos',
     'resumen-techos' => 'techos',
     'control-versiones' => 'techos',
+    'techos-exportar' => 'techos',
     'actas' => 'actas',
     'configurar-presupuestos' => 'configuraciones',
     'configuraciones' => 'configuraciones',
@@ -362,6 +363,10 @@ switch ($ruta) {
 
     case 'resumen-techos':
         (new TechosControlador())->resumen();
+        break;
+
+    case 'techos-exportar':
+        (new TechosControlador())->exportar();
         break;
 
     case 'techos-alternar-bloqueo':
