@@ -537,8 +537,8 @@ class ExtensionControlador
         // Sheet 1 = Ingresos, sheet 2 = Gastos: se leen en ese orden a propósito, porque los
         // totales de Ingresos son los que se necesitan para validar el balance de Gastos.
         try {
-            $filasIngresos = array_slice(LectorXlsx::leerHoja($rutaArchivo, 1), $filaEncabezadoPlantilla);
-            $filasGastos = array_slice(LectorXlsx::leerHoja($rutaArchivo, 2), $filaEncabezadoPlantilla);
+            $filasIngresos = array_slice(LectorXlsx::leerHojaPorNombre($rutaArchivo, 'Ingresos'), $filaEncabezadoPlantilla);
+            $filasGastos = array_slice(LectorXlsx::leerHojaPorNombre($rutaArchivo, 'Gastos'), $filaEncabezadoPlantilla);
         } catch (Throwable $excepcion) {
             return ['No se pudo leer el archivo: ' . $excepcion->getMessage(), '', []];
         }
@@ -822,14 +822,18 @@ class ExtensionControlador
             $itemTexto = array_search($itemId, $mapaItems, true);
             $itemTexto = $itemTexto !== false ? $itemTexto : '';
 
+            $ingresosExistentes = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $itemId, [$dependenciaTexto]);
+            $ingresosNuevos = $totalIngresosPorGrupo[$clave] ?? 0.0;
+            $ingresosDisponibles = $ingresosExistentes + $ingresosNuevos;
             $totalExistente = $this->modeloGasto->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $itemId, [$dependenciaTexto]);
-            $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $itemId, [$dependenciaTexto])
-                + ($totalIngresosPorGrupo[$clave] ?? 0.0);
 
             if ($totalExistente + $grupo['total'] > $ingresosDisponibles) {
                 $disponible = max(0, $ingresosDisponibles - $totalExistente);
                 $errores[] = "Gastos, \"$itemTexto\" en \"$dependenciaTexto\": el valor total de gastos que intentas importar ("
-                    . number_format($grupo['total'], 2, ',', '.') . ') excede el disponible (' . number_format($disponible, 2, ',', '.') . ').';
+                    . number_format($grupo['total'], 2, ',', '.') . ') excede el disponible (' . number_format($disponible, 2, ',', '.') . '). '
+                    . 'Ingresos de "' . $itemTexto . '" en "' . $dependenciaTexto . '" para este año: ' . number_format($ingresosExistentes, 2, ',', '.') . ' ya registrados + '
+                    . number_format($ingresosNuevos, 2, ',', '.') . ' nuevos en la hoja "Ingresos" de este archivo.'
+                    . ($ingresosNuevos <= 0 ? ' No se detectó ninguna fila de Ingresos para este ítem y dependencia en este archivo: revisa que el ítem de autogestión, la dependencia y el año coincidan exactamente (elegidos del desplegable) en ambas hojas.' : '');
                 continue;
             }
 

@@ -65,12 +65,92 @@ class LectorXlsx
 
     /**
      * Igual que leerPrimeraHoja(), pero para cualquier hoja del libro por su número de orden
-     * (1 = la primera) — usada para leer plantillas de más de una hoja de datos (ej. "Ingresos" y
-     * "Gastos" en la plantilla de Autogestión).
+     * (1 = la primera). OJO: asume que la hoja N vive en "xl/worksheets/sheetN.xml" — eso es
+     * cierto para un archivo recién generado por GeneradorXlsx, pero si el usuario lo abrió y
+     * volvió a guardar en Excel/LibreOffice antes de subirlo, el programa es libre de renumerar
+     * esas partes internas (el nombre del archivo interno ya no tiene por qué corresponder con el
+     * orden de las pestañas). Para leer una hoja de un archivo que pudo haber sido reguardado, usa
+     * leerHojaPorNombre() en su lugar, que resuelve la hoja por su NOMBRE real (el de la pestaña),
+     * que Excel sí conserva.
      *
      * @return array<int, array<int, string>>
      */
     public static function leerHoja(string $rutaArchivo, int $numeroHoja): array
+    {
+        return self::leerHojaPorRuta($rutaArchivo, 'xl/worksheets/sheet' . $numeroHoja . '.xml');
+    }
+
+    /**
+     * Lee una hoja por su NOMBRE (el de la pestaña en Excel), resolviéndolo primero contra
+     * xl/workbook.xml (nombre de hoja => r:id) y xl/_rels/workbook.xml.rels (r:id => archivo físico
+     * real) en vez de asumir una convención de nombres como "sheet1.xml", "sheet2.xml" — esa
+     * convención solo es válida para un archivo recién descargado; en cuanto el usuario lo abre y
+     * lo vuelve a guardar en Excel/LibreOffice, el programa reescribe el paquete completo y es
+     * libre de renumerar esas partes internas sin conservar el orden original. Sin esto, importar()
+     * podía terminar leyendo la hoja "Gastos" pensando que era "Ingresos" (o viceversa) en archivos
+     * reguardados, con el síntoma de "0 ingresos importados" aunque la hoja sí tuviera datos.
+     *
+     * @return array<int, array<int, string>>
+     */
+    public static function leerHojaPorNombre(string $rutaArchivo, string $nombreHoja): array
+    {
+        $zip = new ZipArchive();
+
+        if ($zip->open($rutaArchivo) !== true) {
+            throw new RuntimeException('No se pudo abrir el archivo. Verifica que sea un .xlsx válido.');
+        }
+
+        $workbookXml = $zip->getFromName('xl/workbook.xml');
+        $relsXml = $zip->getFromName('xl/_rels/workbook.xml.rels');
+        $zip->close();
+
+        if ($workbookXml === false || $relsXml === false) {
+            throw new RuntimeException('El archivo no tiene una estructura de libro válida.');
+        }
+
+        $workbookDoc = simplexml_load_string($workbookXml);
+        $relsDoc = simplexml_load_string($relsXml);
+
+        if ($workbookDoc === false || $relsDoc === false) {
+            throw new RuntimeException('No se pudo leer la estructura del libro.');
+        }
+
+        $espacioR = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+        $rId = null;
+
+        foreach ($workbookDoc->sheets->sheet as $hoja) {
+            if ((string) $hoja['name'] === $nombreHoja) {
+                $atributosR = $hoja->attributes($espacioR);
+                $rId = (string) $atributosR['id'];
+                break;
+            }
+        }
+
+        if ($rId === null) {
+            throw new RuntimeException("El archivo no contiene una hoja llamada \"$nombreHoja\".");
+        }
+
+        $destino = null;
+
+        foreach ($relsDoc->Relationship as $relacion) {
+            if ((string) $relacion['Id'] === $rId) {
+                $destino = (string) $relacion['Target'];
+                break;
+            }
+        }
+
+        if ($destino === null) {
+            throw new RuntimeException("No se pudo resolver la hoja \"$nombreHoja\" dentro del archivo.");
+        }
+
+        // Target en workbook.xml.rels es relativo a "xl/" (ej. "worksheets/sheet3.xml").
+        return self::leerHojaPorRuta($rutaArchivo, 'xl/' . ltrim($destino, '/'));
+    }
+
+    /**
+     * @return array<int, array<int, string>>
+     */
+    private static function leerHojaPorRuta(string $rutaArchivo, string $rutaHojaEnZip): array
     {
         $zip = new ZipArchive();
 
@@ -80,7 +160,7 @@ class LectorXlsx
 
         $cadenasCompartidas = self::leerCadenasCompartidas($zip);
 
-        $hojaXml = $zip->getFromName('xl/worksheets/sheet' . $numeroHoja . '.xml');
+        $hojaXml = $zip->getFromName($rutaHojaEnZip);
 
         if ($hojaXml === false) {
             $zip->close();
@@ -123,9 +203,27 @@ class LectorXlsx
             $filas[$numeroFila - 1] = $filaCompleta;
         }
 
-        ksort($filas);
+        if (empty($filas)) {
+            return [];
+        }
 
-        return array_values($filas);
+        // OJO: no usar array_values() aquí. Filas que no tienen ninguna celda (ej. la fila 6, en
+        // blanco entre el bloque de validación y el encabezado real de la tabla) nunca se agregan
+        // arriba, dejando huecos en $filas — si se reindexara con array_values(), esos huecos se
+        // "comerían" un puesto y CORRERÍAN una fila hacia arriba todo lo que viene después (típicamente
+        // la fila 8, la primera fila de datos reales que reemplaza el ejemplo, terminaba leyéndose
+        // como si fuera la fila 9, y la fila 8 real desaparecía sin ningún error — la causa de
+        // "0 ingresos importados" reportada al probar la plantilla). Para que el índice siga
+        // significando siempre "número de fila − 1" (que es lo que asume importar() al calcular a
+        // qué fila de Excel corresponde cada elemento), se rellenan los huecos con filas vacías en
+        // vez de reindexar.
+        $filaMaxima = max(array_keys($filas));
+        $filasCompletas = [];
+        for ($i = 0; $i <= $filaMaxima; $i++) {
+            $filasCompletas[] = $filas[$i] ?? [];
+        }
+
+        return $filasCompletas;
     }
 
     private static function valorCelda(SimpleXMLElement $celdaXml, string $tipo, array $cadenasCompartidas): string
