@@ -869,9 +869,10 @@ class ExtensionControlador
         try {
             $gruposAfectados = [];
 
-            foreach ($gruposIngreso as $grupo) {
+            foreach ($gruposIngreso as $clave => $grupo) {
                 $conceptos = $grupo['conceptos'];
                 unset($grupo['conceptos']);
+                $grupo['valor_total'] = $totalIngresosPorGrupo[$clave] ?? 0.0;
                 $this->modeloIngreso->crear($grupo, $conceptos);
                 $gruposAfectados[$grupo['anio_presupuestal_id'] . ':' . $grupo['autogestion_id'] . ':' . $grupo['dependencia']] = $grupo;
             }
