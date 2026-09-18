@@ -845,10 +845,24 @@ class ExtensionControlador
                 }
 
                 $totalExistenteCategoria = $this->modeloGasto->obtenerTotalPorAnioAutogestionYCategoriaYDependencias($anioId, $itemId, $categoria, [$dependenciaTexto]);
-                $limiteCategoria = round($ingresosDisponibles * (float) $porcentajesModulo[$clavePorcentaje] / 100, 2);
+                $valorEsperadoCategoria = round($ingresosDisponibles * (float) $porcentajesModulo[$clavePorcentaje] / 100, 2);
+                $totalRealCategoria = round($totalExistenteCategoria + $totalCategoria, 2);
 
-                if ($totalExistenteCategoria + $totalCategoria > $limiteCategoria) {
-                    $disponibleCategoria = max(0, $limiteCategoria - $totalExistenteCategoria);
+                // Excedentes es un % fijo del total de ingresos (el mismo cálculo que ya usa
+                // generarEgresosAutomaticos() para el alta manual de ingresos): cuando está
+                // configurado, el valor importado debe corresponder EXACTAMENTE a ese %, no solo
+                // no superarlo como sí se permite en Gastos/Inversiones.
+                if ($categoria === 'Excedentes') {
+                    if (abs($totalRealCategoria - $valorEsperadoCategoria) > 0.01) {
+                        $porcentajeTexto = rtrim(rtrim(number_format((float) $porcentajesModulo[$clavePorcentaje], 2), '0'), '.');
+                        $errores[] = "Gastos, \"$itemTexto\" en \"$dependenciaTexto\", categoría Excedentes: el valor total (" . number_format($totalRealCategoria, 2, ',', '.')
+                            . ") debe corresponder exactamente al {$porcentajeTexto}% de los ingresos (" . number_format($valorEsperadoCategoria, 2, ',', '.') . ').';
+                    }
+                    continue;
+                }
+
+                if ($totalRealCategoria > $valorEsperadoCategoria) {
+                    $disponibleCategoria = max(0, $valorEsperadoCategoria - $totalExistenteCategoria);
                     $errores[] = "Gastos, \"$itemTexto\" en \"$dependenciaTexto\", categoría $categoria: el valor total que intentas importar ("
                         . number_format($totalCategoria, 2, ',', '.') . ') excede el % disponible (' . number_format($disponibleCategoria, 2, ',', '.') . ').';
                 }
