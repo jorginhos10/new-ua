@@ -1,0 +1,19 @@
+# Local runtime data
+almacenamiento/*
+!almacenamiento/.htaccess
+
+publico/documentos/*
+!publico/documentos/.gitkeep
+
+# Local editor/OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+
+# Temporary project local files
+.claude/
+.claude.zip
+.config/conexion.php
+config/conexion.php
