@@ -213,9 +213,34 @@ class GastoControlador
 
         $catalogos = $this->construirCatalogos();
 
+        $dependenciaUsuarioId = !empty($catalogos['usuarioActual']['dependencia_id']) ? (int) $catalogos['usuarioActual']['dependencia_id'] : null;
+        $dependenciaUsuario = $dependenciaUsuarioId !== null ? $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId) : null;
+        $dependenciaUsuarioEsRaiz = $dependenciaUsuario !== null && !empty($dependenciaUsuario['es_raiz_superadmin']);
+
+        $anioSeleccionadoId = isset($_GET['anio_id']) ? (int) $_GET['anio_id'] : (int) ($catalogos['aniosActivos'][0]['id'] ?? 0);
+        $anioSeleccionado = null;
+        foreach ($catalogos['aniosActivos'] as $anioFila) {
+            if ((int) $anioFila['id'] === $anioSeleccionadoId) {
+                $anioSeleccionado = $anioFila;
+                break;
+            }
+        }
+
+        $techoDependencia = null;
+        if ($dependenciaUsuarioId !== null && $anioSeleccionadoId > 0) {
+            if ($dependenciaUsuarioEsRaiz) {
+                $techoDependencia = $anioSeleccionado !== null ? (float) $anioSeleccionado['presupuesto'] : null;
+            } else {
+                $presupuestosDependencia = $this->modeloPresupuestoDependencia->obtenerPorAnio($anioSeleccionadoId);
+                $techoDependencia = $presupuestosDependencia[$dependenciaUsuarioId]['techo'] ?? null;
+                $techoDependencia = $techoDependencia !== null ? (float) $techoDependencia : null;
+            }
+        }
+
         $encabezados = [
             'Año presupuestal *', 'Sede *', 'Dependencia *', 'Proyecto PDI *', 'Contratos comunes',
-            'Actividad *', 'Rubro *', 'Insumo *', 'Cantidad *', 'Costo unitario *', 'Meses de ejecución * (ej: 1,3,5)',
+            'Actividad *', 'Rubro *', 'Insumo *', 'Cantidad *', 'Costo unitario *', 'Valor total',
+            'Meses de ejecución * (ej: 1,3,5)',
         ];
 
         $listas = [
@@ -247,6 +272,7 @@ class GastoControlador
             'Ejemplo: computadores portátiles',
             '1',
             '1000000',
+            '',
             '1,2,3',
         ];
 
@@ -256,7 +282,16 @@ class GastoControlador
             'usuario_nombre' => $catalogos['usuarioActual']['nombre'] ?? '',
         ];
 
-        GeneradorXlsx::descargar('plantilla_gastos.xlsx', $encabezados, $columnasConLista, $listas, $filaEjemplo, $metadatos);
+        // Siempre se incluye (con 0.00 si no hay techo asignado) para que la plantilla tenga
+        // siempre la misma forma: fila 1 = techo, fila 2 = encabezados, datos desde la fila 3.
+        $validacionTecho = [
+            'techo' => $techoDependencia ?? 0.0,
+            'columnaCantidad' => 8,
+            'columnaValorUnitario' => 9,
+            'columnaValorTotal' => 10,
+        ];
+
+        GeneradorXlsx::descargar('plantilla_gastos.xlsx', $encabezados, $columnasConLista, $listas, $filaEjemplo, $metadatos, $validacionTecho);
         exit;
     }
 
@@ -395,15 +430,14 @@ class GastoControlador
             return ['No se pudo leer el archivo: ' . $excepcion->getMessage(), '', []];
         }
 
+        // Se descartan las 2 filas de encabezado (1: validación de techo, 2: nombres de columna).
+        // No se filtran filas "vacías" aquí por su texto concatenado: la columna Valor total trae
+        // fórmula en las 200 filas de la plantilla, así que una fila realmente vacía igual puede
+        // traer un "0" residual ahí. Cada fila se evalúa más abajo contando cuántos de sus campos
+        // obligatorios (*) están vacíos (ver validarFilaImportacion()).
         array_shift($filas);
-        $filas = array_values(array_filter(
-            $filas,
-            static fn (array $fila): bool => trim(implode('', $fila)) !== ''
-        ));
-
-        if (empty($filas)) {
-            return ['El archivo no contiene filas para importar.', '', []];
-        }
+        array_shift($filas);
+        $filas = array_values($filas);
 
         $catalogos = $this->construirCatalogos();
         $dependenciasPermitidas = $catalogos['dependenciasSugeridas'];
@@ -447,8 +481,10 @@ class GastoControlador
                 $mapaRubros
             );
 
-            if ($errorFila !== '') {
-                $errores[] = "Fila $numeroFilaExcel: $errorFila";
+            if ($datos === null) {
+                if ($errorFila !== '') {
+                    $errores[] = "Fila $numeroFilaExcel: $errorFila";
+                }
                 continue;
             }
 
@@ -507,7 +543,11 @@ class GastoControlador
     }
 
     /**
-     * @return array{0: array|null, 1: string} [datos listos para Gasto::crear(), mensaje de error]
+     * @return array{0: array|null, 1: string} [datos listos para Gasto::crear(), mensaje de error].
+     *         Cuando datos es null y el error es '', la fila se ignora en silencio (más de 4 de
+     *         sus campos obligatorios en blanco: sobra de la plantilla, no un intento real de
+     *         diligenciarla — mismo criterio que usan las plantillas de Autogestión), en vez de
+     *         reportarse como error.
      */
     private function validarFilaImportacion(
         array $fila,
@@ -528,12 +568,18 @@ class GastoControlador
         $insumo = trim($fila[7] ?? '');
         $cantidadTexto = trim($fila[8] ?? '');
         $costoTexto = trim($fila[9] ?? '');
-        $mesesTexto = trim($fila[10] ?? '');
+        $mesesTexto = trim($fila[11] ?? '');
 
-        if ($anioTexto === '' || $sedeTexto === '' || $dependenciaTexto === '' || $proyectoTexto === ''
-            || $actividad === '' || $rubroTexto === '' || $insumo === '' || $cantidadTexto === ''
-            || $costoTexto === '' || $mesesTexto === ''
-        ) {
+        $vacios = count(array_filter(
+            [$anioTexto, $sedeTexto, $dependenciaTexto, $proyectoTexto, $actividad, $rubroTexto, $insumo, $cantidadTexto, $costoTexto, $mesesTexto],
+            static fn (string $valor): bool => $valor === ''
+        ));
+
+        if ($vacios > 4) {
+            return [null, ''];
+        }
+
+        if ($vacios > 0) {
             return [null, 'todos los campos obligatorios (*) deben estar diligenciados.'];
         }
 

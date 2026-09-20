@@ -25,6 +25,12 @@ class GeneradorXlsx
      *        'plantilla' identifica el módulo (ej. 'gastos') para que la plantilla de un módulo
      *        no pueda importarse en otro; 'usuario_id'/'usuario_nombre' identifican a quién la
      *        descargó, para trazabilidad.
+     * @param array{techo: float, columnaCantidad: int, columnaValorUnitario: int, columnaValorTotal: int}|null $validacionTecho
+     *        Si se indica, agrega una fila 1 con Techo/Total/Disponible (el Total suma, con
+     *        fórmula, la columna 'columnaValorTotal'; esa misma columna se llena en cada fila de
+     *        datos con la fórmula Cantidad×Costo unitario) y corre la tabla una fila hacia abajo
+     *        (encabezado en la fila 2, datos desde la fila 3). "Disponible" se colorea en rojo si
+     *        queda negativo.
      */
     public static function descargar(
         string $nombreArchivo,
@@ -32,7 +38,8 @@ class GeneradorXlsx
         array $columnasConLista,
         array $listas,
         array $filaEjemplo,
-        array $metadatos
+        array $metadatos,
+        ?array $validacionTecho = null
     ): void {
         $columnas = count($encabezados);
 
@@ -43,22 +50,88 @@ class GeneradorXlsx
             return '<c r="' . $referencia . '"' . $atributoEstilo . ' t="inlineStr"><is><t xml:space="preserve">' . $texto . '</t></is></c>';
         };
 
+        $celdaNumero = static function (string $referencia, float $valor, ?int $estilo = null): string {
+            $atributoEstilo = $estilo !== null ? ' s="' . $estilo . '"' : '';
+
+            return '<c r="' . $referencia . '"' . $atributoEstilo . '><v>' . $valor . '</v></c>';
+        };
+
+        $celdaFormula = static function (string $referencia, string $formula, ?int $estilo = null): string {
+            $atributoEstilo = $estilo !== null ? ' s="' . $estilo . '"' : '';
+
+            return '<c r="' . $referencia . '"' . $atributoEstilo . '><f>' . htmlspecialchars($formula, ENT_QUOTES | ENT_XML1, 'UTF-8') . '</f></c>';
+        };
+
+        $filaEncabezado = $validacionTecho !== null ? 2 : 1;
+        $numeroFilaEjemplo = $filaEncabezado + 1;
+        $ultimaFilaDatos = $numeroFilaEjemplo + 199;
+
         // --- Hoja 1: Datos ---
-        $filasXml = '<row r="1">';
+        $filasXml = '';
+        $conditionalFormattingXml = '';
+
+        if ($validacionTecho !== null) {
+            $letraValorTotal = self::columnaLetra($validacionTecho['columnaValorTotal']);
+            $rangoValorTotal = '$' . $letraValorTotal . '$' . $numeroFilaEjemplo . ':$' . $letraValorTotal . '$' . $ultimaFilaDatos;
+
+            $filasXml .= '<row r="1">'
+                . $celdaTexto('A1', 'Techo', 1)
+                . $celdaNumero('B1', $validacionTecho['techo'], 3)
+                . $celdaTexto('C1', 'Total', 1)
+                . $celdaFormula('D1', 'SUM(' . $rangoValorTotal . ')', 3)
+                . $celdaTexto('E1', 'Disponible', 1)
+                . $celdaFormula('F1', 'B1-D1', 3)
+                . '</row>';
+
+            $conditionalFormattingXml = '<conditionalFormatting sqref="F1">'
+                . '<cfRule type="cellIs" dxfId="1" priority="1" operator="lessThan"><formula>0</formula></cfRule>'
+                . '<cfRule type="cellIs" dxfId="0" priority="2" operator="greaterThanOrEqual"><formula>0</formula></cfRule>'
+                . '</conditionalFormatting>';
+        }
+
+        $filasXml .= '<row r="' . $filaEncabezado . '">';
         for ($col = 0; $col < $columnas; $col++) {
-            $filasXml .= $celdaTexto(self::columnaLetra($col) . '1', $encabezados[$col], 1);
+            $filasXml .= $celdaTexto(self::columnaLetra($col) . $filaEncabezado, $encabezados[$col], 1);
         }
         $filasXml .= '</row>';
 
-        if (!empty($filaEjemplo)) {
-            $filasXml .= '<row r="2">';
+        if ($validacionTecho !== null) {
+            // La columna de Valor total se llena con fórmula en las 200 filas de datos (no solo la
+            // de ejemplo), igual que en las plantillas de Autogestión, para que calcule apenas se
+            // diligencian Cantidad y Costo unitario.
+            $letraCantidad = self::columnaLetra($validacionTecho['columnaCantidad']);
+            $letraValorUnitario = self::columnaLetra($validacionTecho['columnaValorUnitario']);
+
+            // Todas las filas de datos se ven iguales (sin bandas de color por fila): en vez de eso,
+            // el fondo distingue el TIPO de columna, para que quien diligencia sepa de un vistazo
+            // qué debe llenar sí o sí (blanco, las marcadas con *), qué es opcional (gris) y qué se
+            // calcula solo (azul, fórmula Cantidad×Costo unitario) — se escribe cada celda aunque
+            // esté vacía para que el color se vea también ahí.
+            for ($fila = $numeroFilaEjemplo; $fila <= $ultimaFilaDatos; $fila++) {
+                $filaXml = '<row r="' . $fila . '">';
+                for ($col = 0; $col < $columnas; $col++) {
+                    $esCalculada = $col === $validacionTecho['columnaValorTotal'];
+                    $esObligatoria = !$esCalculada && str_contains($encabezados[$col], '*');
+                    $estiloColumna = $esCalculada ? 5 : ($esObligatoria ? 2 : 4);
+
+                    if ($esCalculada) {
+                        $filaXml .= $celdaFormula(self::columnaLetra($col) . $fila, $letraCantidad . $fila . '*' . $letraValorUnitario . $fila, $estiloColumna);
+                        continue;
+                    }
+
+                    $valorTexto = $fila === $numeroFilaEjemplo ? (string) ($filaEjemplo[$col] ?? '') : '';
+                    $filaXml .= $celdaTexto(self::columnaLetra($col) . $fila, $valorTexto, $estiloColumna);
+                }
+                $filasXml .= $filaXml . '</row>';
+            }
+        } elseif (!empty($filaEjemplo)) {
+            $filasXml .= '<row r="' . $numeroFilaEjemplo . '">';
             for ($col = 0; $col < $columnas; $col++) {
-                $filasXml .= $celdaTexto(self::columnaLetra($col) . '2', (string) ($filaEjemplo[$col] ?? ''));
+                $filasXml .= $celdaTexto(self::columnaLetra($col) . $numeroFilaEjemplo, (string) ($filaEjemplo[$col] ?? ''));
             }
             $filasXml .= '</row>';
         }
 
-        $ultimaFilaDatos = 200;
         $validaciones = '';
         foreach ($columnasConLista as $indiceColumna => $nombreLista) {
             $valores = $listas[$nombreLista] ?? [];
@@ -72,17 +145,18 @@ class GeneradorXlsx
             $rango = 'Listas!$' . $letra . '$2:$' . $letra . '$' . ($cantidadValores + 1);
             $colLetra = self::columnaLetra($indiceColumna);
 
-            $validaciones .= '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Valor no válido" error="Selecciona un valor de la lista." sqref="' . $colLetra . '2:' . $colLetra . $ultimaFilaDatos . '">'
+            $validaciones .= '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Valor no válido" error="Selecciona un valor de la lista." sqref="' . $colLetra . $numeroFilaEjemplo . ':' . $colLetra . $ultimaFilaDatos . '">'
                 . '<formula1>' . htmlspecialchars($rango, ENT_QUOTES | ENT_XML1, 'UTF-8') . '</formula1>'
                 . '</dataValidation>';
         }
 
         $ultimaColumnaLetra = self::columnaLetra($columnas - 1);
-        $rangoTabla = 'A1:' . $ultimaColumnaLetra . $ultimaFilaDatos;
+        $rangoTabla = 'A' . $filaEncabezado . ':' . $ultimaColumnaLetra . $ultimaFilaDatos;
 
         $sheet1Xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
             . '<sheetData>' . $filasXml . '</sheetData>'
+            . $conditionalFormattingXml
             . ($validaciones !== '' ? '<dataValidations count="' . count($columnasConLista) . '">' . $validaciones . '</dataValidations>' : '')
             . '<tableParts count="1"><tablePart r:id="rId1"/></tableParts>'
             . '</worksheet>';
@@ -158,7 +232,7 @@ class GeneradorXlsx
                 return '<tableColumn id="' . ($indice + 1) . '" name="' . $nombre . '"/>';
             }, range(0, $columnas - 1)))
             . '</tableColumns>'
-            . '<tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/>'
+            . '<tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="0" showColumnStripes="0"/>'
             . '</table>';
 
         $sheet1Rels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -169,22 +243,34 @@ class GeneradorXlsx
         // --- Estilos: encabezado en negrilla blanca sobre fondo azul (paleta azul) ---
         $stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            . '<numFmts count="1"><numFmt numFmtId="164" formatCode="&quot;$&quot; #,##0.00"/></numFmts>'
             . '<fonts count="2">'
             . '<font><sz val="11"/><name val="Calibri"/></font>'
             . '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>'
             . '</fonts>'
-            . '<fills count="3">'
+            . '<fills count="6">'
             . '<fill><patternFill patternType="none"/></fill>'
             . '<fill><patternFill patternType="gray125"/></fill>'
             . '<fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/><bgColor indexed="64"/></patternFill></fill>'
+            . '<fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/><bgColor indexed="64"/></patternFill></fill>'
+            . '<fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill>'
+            . '<fill><patternFill patternType="solid"><fgColor rgb="FFDCE6F1"/><bgColor indexed="64"/></patternFill></fill>'
             . '</fills>'
             . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
             . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-            . '<cellXfs count="2">'
+            . '<cellXfs count="6">'
             . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
             . '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            . '<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/>'
+            . '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
+            . '<xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1"/>'
+            . '<xf numFmtId="164" fontId="0" fillId="5" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1"/>'
             . '</cellXfs>'
             . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+            . '<dxfs count="2">'
+            . '<dxf><font><color rgb="FF006100"/></font><fill><patternFill><bgColor rgb="FFC6EFCE"/></patternFill></fill></dxf>'
+            . '<dxf><font><color rgb="FF9C0006"/></font><fill><patternFill><bgColor rgb="FFFFC7CE"/></patternFill></fill></dxf>'
+            . '</dxfs>'
             . '</styleSheet>';
 
         // --- Metadatos: propiedades personalizadas que identifican plataforma + usuario ---
@@ -284,7 +370,9 @@ class GeneradorXlsx
      * de Excel ni metadatos de plantilla — sirve para exportar el contenido tal cual, no para
      * volver a importarlo (a diferencia de descargar(), usado por "Exportar plantilla").
      *
-     * @param array<int, array{nombre: string, encabezados: string[], filas: array<int, array<int, string>>}> $hojas
+     * @param array<int, array{nombre: string, encabezados: string[], filas: array<int, array<int, string>>, filasPrevias?: array<int, array<int, string>>}> $hojas
+     *        'filasPrevias' (opcional) son filas libres antes del encabezado (ej. dependencia y
+     *        techo), que corren la tabla (encabezado + datos) hacia abajo esa misma cantidad de filas.
      */
     public static function descargarHojas(string $nombreArchivo, array $hojas): void
     {
@@ -303,21 +391,37 @@ class GeneradorXlsx
         foreach ($hojas as $indice => $hoja) {
             $numeroHoja = $indice + 1;
             $columnas = count($hoja['encabezados']);
+            $filasPrevias = $hoja['filasPrevias'] ?? [];
 
-            $filasXml = '<row r="1">';
-            for ($col = 0; $col < $columnas; $col++) {
-                $filasXml .= $celdaTexto(self::columnaLetra($col) . '1', $hoja['encabezados'][$col], 1);
+            $filasXml = '';
+            $numeroFila = 1;
+
+            foreach ($filasPrevias as $filaPrevia) {
+                $filaXml = '<row r="' . $numeroFila . '">';
+                foreach (array_values($filaPrevia) as $col => $valor) {
+                    $filaXml .= $celdaTexto(self::columnaLetra($col) . $numeroFila, (string) $valor);
+                }
+                $filaXml .= '</row>';
+                $filasXml .= $filaXml;
+                $numeroFila++;
             }
-            $filasXml .= '</row>';
 
-            foreach ($hoja['filas'] as $indiceFila => $fila) {
-                $numeroFila = $indiceFila + 2;
+            $filaXml = '<row r="' . $numeroFila . '">';
+            for ($col = 0; $col < $columnas; $col++) {
+                $filaXml .= $celdaTexto(self::columnaLetra($col) . $numeroFila, $hoja['encabezados'][$col], 1);
+            }
+            $filaXml .= '</row>';
+            $filasXml .= $filaXml;
+            $numeroFila++;
+
+            foreach ($hoja['filas'] as $fila) {
                 $filaXml = '<row r="' . $numeroFila . '">';
                 for ($col = 0; $col < $columnas; $col++) {
                     $filaXml .= $celdaTexto(self::columnaLetra($col) . $numeroFila, (string) ($fila[$col] ?? ''));
                 }
                 $filaXml .= '</row>';
                 $filasXml .= $filaXml;
+                $numeroFila++;
             }
 
             $sheetsXml[] = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'

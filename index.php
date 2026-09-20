@@ -45,6 +45,7 @@ require_once __DIR__ . '/controlador/TechosControlador.php';
 require_once __DIR__ . '/controlador/HistorialControlador.php';
 require_once __DIR__ . '/controlador/ActaControlador.php';
 require_once __DIR__ . '/controlador/ConsultaControlador.php';
+require_once __DIR__ . '/controlador/DevControlador.php';
 
 $ruta = $_GET['ruta'] ?? 'login';
 
@@ -367,6 +368,14 @@ switch ($ruta) {
 
     case 'techos-exportar':
         (new TechosControlador())->exportar();
+        break;
+
+    case 'dev':
+        (new DevControlador())->index();
+        break;
+
+    case 'dev-vista':
+        (new DevControlador())->vista();
         break;
 
     case 'techos-alternar-bloqueo':

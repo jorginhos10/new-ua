@@ -94,6 +94,21 @@ class TechosControlador
 
         $totalRestante = $totalTecho - $totalAsignado;
 
+        if ($esSuperAdmin) {
+            $anioSeleccionado = null;
+            foreach ($aniosActivos as $anioFila) {
+                if ((int) $anioFila['id'] === $anioSeleccionadoId) {
+                    $anioSeleccionado = $anioFila;
+                    break;
+                }
+            }
+            $techoAsignadoPadre = $anioSeleccionado !== null ? (float) $anioSeleccionado['presupuesto'] : null;
+        } else {
+            $techoAsignadoPadre = $dependenciaUsuarioId !== null && isset($presupuestosActuales[$dependenciaUsuarioId]['techo'])
+                ? (float) $presupuestosActuales[$dependenciaUsuarioId]['techo']
+                : null;
+        }
+
         require __DIR__ . '/../vista/techos/index.php';
     }
 
@@ -128,11 +143,19 @@ class TechosControlador
             $this->calcularAsignadoArbol($nodoRaiz, $presupuestosActuales, $gastadoPorDependencia, $asignadoPorId);
         }
 
+        $ocultarProgramas = !empty($_GET['ocultar_programas']);
+        $tiposOcultos = ['pregrado', 'postgrado'];
+
         $filas = [];
 
-        $aplanar = function (array $nodos, int $nivel) use (&$aplanar, &$filas, $presupuestosActuales, $asignadoPorId, $esSuperAdmin): void {
+        $aplanar = function (array $nodos, int $nivel) use (&$aplanar, &$filas, $presupuestosActuales, $asignadoPorId, $esSuperAdmin, $ocultarProgramas, $tiposOcultos): void {
             foreach ($nodos as $nodo) {
                 $dependencia = $nodo['dependencia'];
+
+                if ($ocultarProgramas && in_array($dependencia['tipo'] ?? null, $tiposOcultos, true)) {
+                    continue;
+                }
+
                 $valores = $presupuestosActuales[$dependencia['id']] ?? ['minimo' => null, 'techo' => null];
                 $gastado = $asignadoPorId[(int) $dependencia['id']] ?? 0.0;
                 $techo = $valores['techo'] !== null ? (float) $valores['techo'] : null;
@@ -166,8 +189,34 @@ class TechosControlador
         $encabezados[] = 'Asignado';
         $encabezados[] = 'Restante';
 
+        $nombreDependencia = '';
+        if ($dependenciaUsuarioId !== null) {
+            $dependenciaUsuario = $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId);
+            $nombreDependencia = $dependenciaUsuario['nombre'] ?? '';
+        }
+
+        if ($esSuperAdmin) {
+            $anioSeleccionado = null;
+            foreach ($aniosActivos as $anioFila) {
+                if ((int) $anioFila['id'] === $anioSeleccionadoId) {
+                    $anioSeleccionado = $anioFila;
+                    break;
+                }
+            }
+            $techoAsignadoPadre = $anioSeleccionado !== null ? (float) $anioSeleccionado['presupuesto'] : 0.0;
+        } else {
+            $techoAsignadoPadre = $dependenciaUsuarioId !== null && isset($presupuestosActuales[$dependenciaUsuarioId]['techo'])
+                ? (float) $presupuestosActuales[$dependenciaUsuarioId]['techo']
+                : 0.0;
+        }
+
+        $filasPrevias = [
+            ['Dependencia', $nombreDependencia],
+            [$esSuperAdmin ? 'Presupuesto total del año' : 'Techo asignado', '$' . number_format($techoAsignadoPadre, 2, ',', '.')],
+        ];
+
         $hojas = [
-            ['nombre' => 'Techos', 'encabezados' => $encabezados, 'filas' => $filas],
+            ['nombre' => 'Techos', 'filasPrevias' => $filasPrevias, 'encabezados' => $encabezados, 'filas' => $filas],
         ];
 
         GeneradorXlsx::descargarHojas('techos_' . $anioTexto . '.xlsx', $hojas);

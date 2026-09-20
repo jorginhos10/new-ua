@@ -4,6 +4,7 @@ $rutaActual = $_GET['ruta'] ?? 'dashboard';
 
 $menuPermitido = null; // null = sin restricción configurada (se muestra todo)
 $puedeVerActas = false;
+$esDependenciaSuperadmin = false;
 
 if (!empty($_SESSION['usuario_id']) && $rolActual === 'administrador') {
     require_once __DIR__ . '/../../modelo/Usuario.php';
@@ -21,6 +22,8 @@ if (!empty($_SESSION['usuario_id']) && $rolActual === 'administrador') {
             $dependenciaActualSidebar = (new Dependencia())->obtenerPorId((int) $usuarioActualSidebar['dependencia_id']);
             $puedeVerActas = $dependenciaActualSidebar !== null
                 && in_array($dependenciaActualSidebar['tipo'] ?? '', ['Facultad', 'Vicerrectoria'], true);
+            $esDependenciaSuperadmin = $dependenciaActualSidebar !== null
+                && !empty($dependenciaActualSidebar['es_raiz_superadmin']);
         }
     }
 }
@@ -79,13 +82,16 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <a href="index.php?ruta=perfil-proyectos" class="<?= $rutaActual === 'perfil-proyectos' ? 'activo' : '' ?>">Perfil de proyectos</a>
             <?php endif; ?>
 
-            <?php if ($puedeVerMenu('configuraciones') || $puedeVerMenu('usuarios')): ?>
+            <?php if ($puedeVerMenu('configuraciones') || $puedeVerMenu('usuarios') || $esDependenciaSuperadmin): ?>
             <p class="grupo-menu">Administración</p>
             <?php if ($puedeVerMenu('configuraciones')): ?>
             <a href="index.php?ruta=configuraciones" class="<?= in_array($rutaActual, ['configuraciones', 'usuarios', 'roles', 'estamentos', 'lineas', 'motores', 'proyectos', 'rubros', 'anios-presupuestales', 'sedes', 'dependencias', 'facultades', 'jerarquias', 'variables-macroeconomicas', 'reloj-arena'], true) ? 'activo' : '' ?>">Configuraciones</a>
             <?php endif; ?>
             <?php if ($puedeVerMenu('usuarios')): ?>
             <a href="index.php?ruta=usuarios" class="<?= $rutaActual === 'usuarios' ? 'activo' : '' ?>">Usuarios</a>
+            <?php endif; ?>
+            <?php if ($esDependenciaSuperadmin): ?>
+            <a href="index.php?ruta=dev" class="<?= in_array($rutaActual, ['dev', 'dev-vista'], true) ? 'activo' : '' ?>">Dev</a>
             <?php endif; ?>
             <?php endif; ?>
 

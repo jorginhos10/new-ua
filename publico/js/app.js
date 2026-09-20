@@ -4537,6 +4537,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (botonOcultarProgramas) {
         var nodosPrograma = document.querySelectorAll('.nodo-arbol-presupuesto[data-tipo="pregrado"], .nodo-arbol-presupuesto[data-tipo="postgrado"]');
+        var enlaceExportar = document.getElementById('enlace-exportar-techos');
+        var hrefExportarBase = enlaceExportar ? enlaceExportar.getAttribute('href') : null;
 
         var aplicarOcultamiento = function (ocultar) {
             nodosPrograma.forEach(function (nodo) {
@@ -4544,6 +4546,10 @@ document.addEventListener('DOMContentLoaded', function () {
             });
             botonOcultarProgramas.textContent = ocultar ? 'Mostrar pregrado y postgrado' : 'Ocultar pregrado y postgrado';
             botonOcultarProgramas.setAttribute('aria-pressed', ocultar ? 'true' : 'false');
+
+            if (enlaceExportar) {
+                enlaceExportar.setAttribute('href', hrefExportarBase + (ocultar ? '&ocultar_programas=1' : ''));
+            }
         };
 
         var ocultarInicial = false;

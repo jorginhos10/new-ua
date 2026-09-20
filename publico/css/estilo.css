@@ -647,6 +647,11 @@ input[type="file"]::-webkit-file-upload-button:hover {
     font-size: 0.85rem;
     font-weight: 700;
     color: var(--color-texto);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--color-superficie);
+    border-bottom: 1px solid var(--color-borde);
 }
 
 .fila-presupuesto-total.sin-minimo {
@@ -2962,6 +2967,19 @@ a.barra-progreso:hover {
 
 .cabecera-modulo h1 {
     margin: 0;
+}
+
+.etiqueta-techo-padre {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.6rem;
+    padding: 0.15rem 0.65rem;
+    border-radius: 999px;
+    background: var(--color-primario-suave);
+    color: var(--color-primario);
+    font-size: 0.8rem;
+    font-weight: 700;
+    vertical-align: middle;
 }
 
 .cabecera-modulo-titulo {

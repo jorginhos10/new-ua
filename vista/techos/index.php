@@ -3,14 +3,19 @@
     <div class="tarjeta">
         <div class="cabecera-modulo">
             <div>
-                <h1>Techos</h1>
+                <h1>
+                    Techos
+                    <?php if ($techoAsignadoPadre !== null): ?>
+                    <span class="etiqueta-techo-padre" title="<?= $esSuperAdmin ? 'Presupuesto total del año' : 'Techo asignado por tu dependencia superior' ?>">$<?= number_format($techoAsignadoPadre, 2, ',', '.') ?></span>
+                    <?php endif; ?>
+                </h1>
                 <p class="texto-atenuado">Configura el mínimo y el techo presupuestal de las dependencias que reportan a la tuya.</p>
             </div>
             <div class="grupo-acciones-encabezado">
                 <?php if (!empty($arbolHijas)): ?>
                 <button type="button" id="boton-ocultar-programas" class="boton-accion boton-accion-ver" aria-pressed="false">Ocultar pregrado y postgrado</button>
                 <?php endif; ?>
-                <a href="index.php?ruta=techos-exportar&anio_id=<?= (int) $anioSeleccionadoId ?>" class="boton-accion boton-accion-enviar">Exportar Excel</a>
+                <a id="enlace-exportar-techos" href="index.php?ruta=techos-exportar&anio_id=<?= (int) $anioSeleccionadoId ?>" class="boton-accion boton-accion-enviar">Exportar Excel</a>
                 <a href="index.php?ruta=resumen-techos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="boton-accion boton-accion-ver">Resumen de techos</a>
                 <a href="index.php?ruta=control-versiones&anio_id=<?= (int) $anioSeleccionadoId ?>" class="boton-accion boton-accion-ver">Control de versiones</a>
             </div>
