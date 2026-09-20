@@ -2484,6 +2484,52 @@ a.barra-progreso:hover {
     flex-shrink: 0;
 }
 
+/* Icono de rol (Roles): mismo tamaño/forma que .avatar-usuario, pero con color configurable
+   por rol (inline style), para distinguir de un vistazo Gestor/Avalador/etc. cuando una persona
+   con ese rol comparte nombre con otra en listas y selectores. */
+.icono-rol {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.celda-rol-nombre {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.campo-color-icono {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 0 0 auto;
+}
+
+.campo-color-icono input[type="color"] {
+    width: 42px;
+    height: 38px;
+    padding: 2px;
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-chico);
+    cursor: pointer;
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+.campo-color-icono input[type="text"] {
+    width: 110px;
+    min-width: 0;
+    flex: 0 0 auto;
+}
+
 .nombre-usuario {
     font-weight: 600;
     font-size: 0.88rem;

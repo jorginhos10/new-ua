@@ -2031,6 +2031,33 @@ document.addEventListener('DOMContentLoaded', function () {
     var campoId = document.getElementById('editar-rol-id');
     var campoNombre = document.getElementById('editar-rol-nombre');
     var campoOrden = document.getElementById('editar-rol-orden');
+    var campoColor = document.getElementById('editar-rol-color');
+    var campoColorHex = document.getElementById('editar-rol-color-hex');
+
+    // El selector nativo de color y el campo de texto hex se mantienen sincronizados en los dos
+    // sentidos, tanto para agregar un rol como para editarlo — el que de verdad se envía en el
+    // formulario es el de texto (name="color"); el nativo es solo el selector visual.
+    function enlazarSelectorColor(inputColor, inputHex) {
+        if (!inputColor || !inputHex) {
+            return;
+        }
+
+        var patronHex = /^#[0-9A-Fa-f]{6}$/;
+
+        inputColor.addEventListener('input', function () {
+            inputHex.value = inputColor.value;
+        });
+
+        inputHex.addEventListener('input', function () {
+            var valor = inputHex.value.trim();
+            if (patronHex.test(valor)) {
+                inputColor.value = valor;
+            }
+        });
+    }
+
+    enlazarSelectorColor(document.getElementById('nuevo-rol-color'), document.getElementById('nuevo-rol-color-hex'));
+    enlazarSelectorColor(campoColor, campoColorHex);
 
     function cerrarEditar() {
         modalEditar.classList.remove('abierto');
@@ -2041,6 +2068,13 @@ document.addEventListener('DOMContentLoaded', function () {
             campoId.value = boton.dataset.id;
             campoNombre.value = boton.dataset.nombre;
             campoOrden.value = boton.dataset.orden;
+            var color = boton.dataset.color || '#0071e3';
+            if (campoColor) {
+                campoColor.value = color;
+            }
+            if (campoColorHex) {
+                campoColorHex.value = color;
+            }
             modalEditar.classList.add('abierto');
         });
     });

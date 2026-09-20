@@ -21,6 +21,10 @@ class DevControlador
             'descripcion' => 'Diseño de tabla ya existente en el sistema (la página "Consulta" del rol Consejo Superior), para comparar contra el nuevo prototipo "Tabla".',
             'href' => 'index.php?ruta=consulta',
         ],
+        'arbol' => [
+            'titulo' => 'Comparativo Árbol',
+            'descripcion' => 'Combinación de tabla y árbol jerárquico (Línea > Motor > Proyecto), usando los proyectos del PDI como ejemplo. Columnas: año vigente, año anterior (total y a una fecha de corte ajustable) y los 5 años anteriores.',
+        ],
     ];
 
     public function index(): void
