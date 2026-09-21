@@ -159,12 +159,20 @@
 
     <div class="campo">
         <label for="editar-proyecto-responsable_usuario_id">Responsable *</label>
+        <?php if (empty($avaladores)): ?>
+        <p class="mensaje-error" style="margin: 0;">
+            <?= $esInvitado
+                ? 'Tu cuenta no tiene un Gestor asignado todavía (falta la facultad en tu perfil o esa facultad no tiene un Gestor registrado). Pídele a un administrador que te la asigne desde Usuarios.'
+                : 'No hay avaladores registrados en el sistema.' ?>
+        </p>
+        <?php else: ?>
         <select id="editar-proyecto-responsable_usuario_id" name="responsable_usuario_id" required>
-            <option value="">Selecciona un avalador</option>
+            <option value="">Selecciona un <?= htmlspecialchars($etiquetaResponsable) ?></option>
             <?php foreach ($avaladores as $avaladorOpcion): ?>
             <option value="<?= (int) $avaladorOpcion['id'] ?>"><?= htmlspecialchars($avaladorOpcion['nombre']) ?></option>
             <?php endforeach; ?>
         </select>
+        <?php endif; ?>
     </div>
 
     <div class="campo campo-ancho">

@@ -38,6 +38,15 @@ class Rol
         return $fila !== false ? $fila : null;
     }
 
+    public function obtenerPorNombre(string $nombre): ?array
+    {
+        $consulta = $this->db->prepare('SELECT id, nombre, orden, color, creado_en FROM roles WHERE nombre = :nombre LIMIT 1');
+        $consulta->execute(['nombre' => $nombre]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
     public function existeRol(string $nombre, ?int $ignorarId = null): bool
     {
         if ($ignorarId !== null) {

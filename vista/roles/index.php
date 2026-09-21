@@ -36,7 +36,7 @@
             </thead>
             <tbody>
                 <?php foreach ($roles as $rol): ?>
-                <tr>
+                <tr class="<?= $rol['nombre'] === 'Consulta' ? 'fila-rol-frontera' : '' ?>">
                     <td><?= (int) $rol['orden'] ?></td>
                     <td>
                         <div class="celda-rol-nombre">

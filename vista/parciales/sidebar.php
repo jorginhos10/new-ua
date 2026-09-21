@@ -2,11 +2,18 @@
 $rolActual = $_SESSION['usuario_rol'] ?? '';
 $rutaActual = $_GET['ruta'] ?? 'dashboard';
 
-$menuPermitido = null; // null = sin restricción configurada (se muestra todo)
+$menuPermitido = null; // null = sin restricción configurada (se muestra todo, o el fallback fijo)
 $puedeVerActas = false;
 $esDependenciaSuperadmin = false;
+// Para Consulta (consejo_superior) y Formulador (invitado): si nadie configuró todavía una
+// plantilla de menú para su tipo, se respeta el menú fijo de siempre (ver ramas de abajo) en vez
+// de interpretar "sin restricción" como "mostrar todo" — así ningún usuario existente pierde ni
+// gana acceso hasta que un administrador configure algo a propósito (Jerarquías > Mapa > ⚙, o
+// Usuarios > Permisos).
+$menuConfiguradoParaTipo = false;
+$itemsMenuSidebar = [];
 
-if (!empty($_SESSION['usuario_id']) && $rolActual === 'administrador') {
+if (!empty($_SESSION['usuario_id']) && in_array($rolActual, ['administrador', 'consejo_superior', 'invitado'], true)) {
     require_once __DIR__ . '/../../modelo/Usuario.php';
     require_once __DIR__ . '/../../modelo/MenuPermiso.php';
     require_once __DIR__ . '/../../modelo/Dependencia.php';
@@ -15,16 +22,37 @@ if (!empty($_SESSION['usuario_id']) && $rolActual === 'administrador') {
     $usuarioActualSidebar = $modeloUsuarioSidebar->obtenerPorId((int) $_SESSION['usuario_id']);
 
     if ($usuarioActualSidebar !== null) {
-        $permitidoSidebar = (new MenuPermiso())->calcularPermitidoParaUsuario($usuarioActualSidebar);
+        $modeloMenuPermisoSidebar = new MenuPermiso();
+
+        if ($rolActual === 'invitado') {
+            // Para Invitados, dependencia_id es su Facultad real (para poder enrutar su
+            // necesidad al Gestor de esa Facultad) — NUNCA su alcance de menú: esa Facultad
+            // puede tener (y normalmente tiene) una plantilla de menú pensada para el personal
+            // administrativo real que trabaja ahí (Gastos, Solicitudes, Actas...), que un
+            // invitado no debe heredar. Por eso, para este rol, calcularPermitidoParaUsuario()
+            // no se usa (mezclaría ambos alcances) — solo se respeta una personalización
+            // individual ya guardada (Usuarios > Formulador > Permisos).
+            $permitidoSidebar = (int) ($usuarioActualSidebar['menu_personalizado'] ?? 0) === 1
+                ? $modeloMenuPermisoSidebar->obtenerMenuUsuario((int) $usuarioActualSidebar['id'])
+                : null;
+        } else {
+            $permitidoSidebar = $modeloMenuPermisoSidebar->calcularPermitidoParaUsuario($usuarioActualSidebar);
+        }
+
+        $menuConfiguradoParaTipo = $permitidoSidebar !== null;
         $menuPermitido = $permitidoSidebar === null ? null : array_flip($permitidoSidebar);
 
-        if (!empty($usuarioActualSidebar['dependencia_id'])) {
+        if ($rolActual === 'administrador' && !empty($usuarioActualSidebar['dependencia_id'])) {
             $dependenciaActualSidebar = (new Dependencia())->obtenerPorId((int) $usuarioActualSidebar['dependencia_id']);
             $puedeVerActas = $dependenciaActualSidebar !== null
                 && in_array($dependenciaActualSidebar['tipo'] ?? '', ['Facultad', 'Vicerrectoria'], true);
             $esDependenciaSuperadmin = $dependenciaActualSidebar !== null
                 && !empty($dependenciaActualSidebar['es_raiz_superadmin']);
         }
+    }
+
+    if (in_array($rolActual, ['consejo_superior', 'invitado'], true)) {
+        $itemsMenuSidebar = require __DIR__ . '/../../config/menu_items.php';
     }
 }
 
@@ -99,14 +127,45 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <a href="publico/documentos/ficha-tecnica.docx">Ficha técnica</a>
             <a href="publico/documentos/esencia-del-software.docx">¿Para qué sirve?</a>
     <?php elseif ($rolActual === 'consejo_superior'): ?>
-            <p class="grupo-menu">Consulta</p>
-            <a href="index.php?ruta=consulta" class="<?= $rutaActual === 'consulta' ? 'activo' : '' ?>">consulta</a>
-            <a href="#">item 2</a>
+            <?php
+            // "Consulta" ya no es un enlace fijo: es una opción más de config/menu_items.php,
+            // igual que el resto — se muestra/oculta desde Jerarquías > Mapa > ⚙ o desde
+            // Usuarios > Consulta > Permisos. Mientras nadie configure nada para este tipo, el
+            // valor por defecto es mostrar solo "Consulta" (en vez de "sin restricción = todo").
+            $puedeVerMenuConsejo = $menuConfiguradoParaTipo ? $puedeVerMenu : static fn (string $clave): bool => $clave === 'consulta';
+            ?>
+            <?php foreach ($itemsMenuSidebar as $grupoNombreSidebar => $itemsGrupoSidebar): ?>
+            <?php $clavesVisiblesSidebar = array_filter(array_keys($itemsGrupoSidebar), $puedeVerMenuConsejo); ?>
+            <?php if (!empty($clavesVisiblesSidebar)): ?>
+            <p class="grupo-menu"><?= htmlspecialchars($grupoNombreSidebar) ?></p>
+            <?php foreach ($clavesVisiblesSidebar as $claveSidebar): ?>
+            <a href="index.php?ruta=<?= htmlspecialchars($claveSidebar) ?>" class="<?= $rutaActual === $claveSidebar ? 'activo' : '' ?>"><?= htmlspecialchars($itemsGrupoSidebar[$claveSidebar]) ?></a>
+            <?php endforeach; ?>
+            <?php endif; ?>
+            <?php endforeach; ?>
+    <?php elseif ($rolActual === 'invitado'): ?>
+            <p class="grupo-menu">Resumen</p>
+            <a href="index.php" class="<?= in_array($rutaActual, ['dashboard', 'perfil-proyectos'], true) ? 'activo' : '' ?>">Inicio</a>
+
+            <?php if ($menuConfiguradoParaTipo): ?>
+                <?php foreach ($itemsMenuSidebar as $grupoNombreSidebar => $itemsGrupoSidebar): ?>
+                <?php $clavesVisiblesSidebar = array_filter(array_keys($itemsGrupoSidebar), $puedeVerMenu); ?>
+                <?php if (!empty($clavesVisiblesSidebar)): ?>
+                <p class="grupo-menu"><?= htmlspecialchars($grupoNombreSidebar) ?></p>
+                <?php foreach ($clavesVisiblesSidebar as $claveSidebar): ?>
+                <a href="index.php?ruta=<?= htmlspecialchars($claveSidebar) ?>" class="<?= $rutaActual === $claveSidebar ? 'activo' : '' ?>"><?= htmlspecialchars($itemsGrupoSidebar[$claveSidebar]) ?></a>
+                <?php endforeach; ?>
+                <?php endif; ?>
+                <?php endforeach; ?>
+            <?php endif; ?>
+
+            <p class="grupo-menu">Documentación</p>
+            <a href="publico/documentos/ficha-tecnica.docx">Ficha técnica</a>
+            <a href="publico/documentos/esencia-del-software.docx">¿Para qué sirve?</a>
     <?php else: ?>
             <p class="grupo-menu">Resumen</p>
             <a href="index.php">Inicio</a>
             <a href="index.php?ruta=dashboard" class="<?= $rutaActual === 'dashboard' ? 'activo' : '' ?>">Dashboard</a>
-            <a href="index.php?ruta=formulario-invitado" class="<?= $rutaActual === 'formulario-invitado' ? 'activo' : '' ?>">Formulario de necesidades</a>
 
             <p class="grupo-menu">Documentación</p>
             <a href="publico/documentos/ficha-tecnica.docx">Ficha técnica</a>

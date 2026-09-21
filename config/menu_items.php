@@ -4,6 +4,7 @@ return [
     'Resumen' => [
         'inicio' => 'Inicio',
         'peticiones' => 'Peticiones',
+        'consulta' => 'Consulta',
     ],
     'Autogestión' => [
         'extension' => 'Extensión',

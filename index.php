@@ -6,7 +6,6 @@ require_once __DIR__ . '/controlador/LoginControlador.php';
 require_once __DIR__ . '/controlador/RegistroControlador.php';
 require_once __DIR__ . '/controlador/DashboardControlador.php';
 require_once __DIR__ . '/controlador/UsuarioControlador.php';
-require_once __DIR__ . '/controlador/NecesidadControlador.php';
 require_once __DIR__ . '/controlador/ProximamenteControlador.php';
 require_once __DIR__ . '/controlador/ConfiguracionesControlador.php';
 require_once __DIR__ . '/controlador/RolControlador.php';
@@ -284,10 +283,6 @@ switch ($ruta) {
 
     case 'sin-excedentes-exportar':
         (new SinExcedentesControlador())->exportar();
-        break;
-
-    case 'formulario-invitado':
-        (new NecesidadControlador())->index();
         break;
 
     case 'perfil-proyectos':

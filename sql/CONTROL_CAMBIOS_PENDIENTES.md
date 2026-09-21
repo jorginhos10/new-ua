@@ -26,6 +26,35 @@ Cada entrada indica: fecha, qué cambia, qué archivo(s) de `sql/` lo implementa
 
 ---
 
+## 2026-09-20 — Consulta/Formulador: rol_id + dependencia para Consejo Superior e Invitados
+
+- **Archivo:** `sql/usuarios_consulta_formulador_dependencias.sql`
+- **Cambio:** `orden = 0` para el rol "Consulta"; nueva fila en `dependencias` (código
+  `CONSEJOSUP`, tipo `Consejo Superior`, raíz); nueva fila raíz en `jerarquias` con el mismo tipo;
+  el nodo `jerarquias` "formuladores" (id 41 en local) pasa a `padre_id = NULL`; se asigna
+  `rol_id`/`dependencia_id` a todos los usuarios `consejo_superior` (→ rol Consulta + dependencia
+  Consejo Superior) e `invitado` (→ rol Formulador + dependencia `tipo='Formulador'` existente).
+- **Motivo:** Que Consejo Superior e Invitados tengan un rol y una dependencia reales (compartidos
+  con el catálogo de Administrador), para poder configurarles el menú del sidebar por tipo igual
+  que a cualquier otro, y mostrarlos correctamente en el Mapa de Jerarquías.
+- **Aplicado en local:** Sí (2026-09-20).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** El `id` del nodo "formuladores" en `jerarquias` (41) y de la dependencia "FORMULADOR"
+  (509) son los de la BD local — en producción hay que ubicarlos por nombre/tipo, no asumir esos
+  mismos números. Ejecutar **después** de `sql/roles_color.sql` (usa la columna `color`/el rol
+  "Consulta", que ya debe existir).
+- **Corrección posterior (mismo día):** el `dependencia_id` de los Invitados NO debe quedar en la
+  dependencia genérica "FORMULADOR" — debe apuntar a la Facultad real que cada uno eligió al
+  registrarse (columna `usuarios.facultad`), para poder enrutar su envío a un administrador Gestor
+  de esa misma Facultad. Ver `sql/usuarios_invitados_dependencia_facultad_real.sql` (ejecutar
+  después de este script). Además, en Usuarios ya no se fuerza el `rol_id`/`dependencia_id` de
+  Consulta/Formulador desde el backend — el formulario de Editar/Agregar ahora tiene los mismos
+  campos Tipo/Dependencia/Rol/Estamento que Administradores, así que un administrador puede
+  corregir la dependencia de cualquier Invitado a mano si el texto de "facultad" no coincidió con
+  ninguna dependencia real.
+
+---
+
 <!--
 Plantilla para la próxima entrada:
 

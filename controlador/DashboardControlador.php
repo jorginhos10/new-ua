@@ -14,6 +14,7 @@ require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
 require_once __DIR__ . '/../modelo/MensajeGlobal.php';
 require_once __DIR__ . '/../modelo/AutogestionItem.php';
+require_once __DIR__ . '/../modelo/RelojArenaFormulador.php';
 
 class DashboardControlador
 {
@@ -56,6 +57,22 @@ class DashboardControlador
             $relojArena = $this->obtenerRelojArena();
 
             require __DIR__ . '/../vista/dashboard/administrador.php';
+            return;
+        }
+
+        // Formulador (invitado) tiene su propio inicio: antes compartía este mismo placeholder
+        // genérico ("Bienvenido, Rol: invitado") con Consejo Superior y cualquier otro rol, sin
+        // decirle nada útil — en particular, si el plazo para formular necesidades no está
+        // habilitado ahora mismo, necesita saber cuándo sí lo estará.
+        if ($rolUsuario === 'invitado') {
+            $modeloNecesidad = new Necesidad();
+            $modeloRelojFormulador = new RelojArenaFormulador();
+
+            $dentroDeVentana = $modeloRelojFormulador->estaDentroDeVentana();
+            $configuracionFormulador = $modeloRelojFormulador->obtener();
+            $totalNecesidades = count($modeloNecesidad->obtenerPorUsuario((int) $_SESSION['usuario_id']));
+
+            require __DIR__ . '/../vista/dashboard/invitado.php';
             return;
         }
 

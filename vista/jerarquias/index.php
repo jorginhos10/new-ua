@@ -138,8 +138,6 @@
         <?php if (empty($jerarquiasAnidadas)): ?>
         <p class="texto-atenuado">No hay jerarquías registradas.</p>
         <?php else: ?>
-        <div class="organigrama-envoltorio">
-            <ul class="organigrama">
                 <?php
                 $rolesPorId = array_column($roles, null, 'id');
 
@@ -192,12 +190,26 @@
                     echo '</li>';
                 };
 
-                foreach ($jerarquiasAnidadas as $raiz) {
-                    $dibujarNodo($raiz);
-                }
+                $dibujarSeccionOrganigrama = static function (array $raices) use (&$dibujarNodo): void {
+                    echo '<div class="organigrama-envoltorio"><ul class="organigrama">';
+                    foreach ($raices as $raizSeccion) {
+                        $dibujarNodo($raizSeccion);
+                    }
+                    echo '</ul></div>';
+                };
                 ?>
-            </ul>
-        </div>
+
+                <?php if (!empty($raicesConsejoSuperior)): ?>
+                <?php $dibujarSeccionOrganigrama($raicesConsejoSuperior); ?>
+                <div class="organigrama-separador"></div>
+                <?php endif; ?>
+
+                <?php $dibujarSeccionOrganigrama($raicesEstructura); ?>
+
+                <?php if (!empty($raicesFormulador)): ?>
+                <div class="organigrama-separador"></div>
+                <?php $dibujarSeccionOrganigrama($raicesFormulador); ?>
+                <?php endif; ?>
         <?php endif; ?>
     </div>
 

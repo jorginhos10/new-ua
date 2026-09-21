@@ -2465,6 +2465,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var campoUsuarioNombre = document.getElementById('editar-usuario-nombre');
     var campoUsuarioCorreo = document.getElementById('editar-usuario-correo');
     var campoUsuarioPassword = document.getElementById('editar-usuario-password');
+    var campoUsuarioTipo = document.getElementById('editar-usuario-tipo');
     var campoUsuarioDependencia = document.getElementById('editar-usuario-dependencia');
     var campoUsuarioRol = document.getElementById('editar-usuario-rol');
     var campoUsuarioEstamento = document.getElementById('editar-usuario-estamento');
@@ -2488,6 +2489,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 if (window.aplicarFiltroRolUsuario) {
                     window.aplicarFiltroRolUsuario(campoUsuarioDependencia);
+                }
+            }
+
+            if (campoUsuarioTipo) {
+                var tipoDependenciaUsuario = boton.dataset.dependenciaTipo || '';
+
+                if (tipoDependenciaUsuario === '') {
+                    campoUsuarioTipo.value = '';
+                } else {
+                    var opcionTipoCoincide = Array.prototype.some.call(campoUsuarioTipo.options, function (opcion) {
+                        return opcion.value === tipoDependenciaUsuario;
+                    });
+
+                    campoUsuarioTipo.value = opcionTipoCoincide ? tipoDependenciaUsuario : '__personalizado__';
                 }
             }
 
@@ -2559,13 +2574,20 @@ document.addEventListener('DOMContentLoaded', function () {
         boton.addEventListener('click', function () {
             campoPermisosId.value = boton.dataset.id;
             campoPermisosNombre.textContent = boton.dataset.nombre;
-            establecerValorBuscable(campoPermisosDependencia.id, boton.dataset.dependenciaId && boton.dataset.dependenciaId !== '0' ? boton.dataset.dependenciaId : '');
 
-            if (window.aplicarFiltroRolUsuario) {
-                window.aplicarFiltroRolUsuario(campoPermisosDependencia);
+            // En Consulta/Formulador (Consejo Superior/Invitados) el rol y la dependencia son
+            // fijos y ese modal no trae estos campos — solo existen para Administradores.
+            if (campoPermisosDependencia) {
+                establecerValorBuscable(campoPermisosDependencia.id, boton.dataset.dependenciaId && boton.dataset.dependenciaId !== '0' ? boton.dataset.dependenciaId : '');
+
+                if (window.aplicarFiltroRolUsuario) {
+                    window.aplicarFiltroRolUsuario(campoPermisosDependencia);
+                }
             }
 
-            campoPermisosRol.value = boton.dataset.rolId && boton.dataset.rolId !== '0' ? boton.dataset.rolId : '';
+            if (campoPermisosRol) {
+                campoPermisosRol.value = boton.dataset.rolId && boton.dataset.rolId !== '0' ? boton.dataset.rolId : '';
+            }
 
             var menuEfectivo = [];
             try {

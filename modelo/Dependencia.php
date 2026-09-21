@@ -33,6 +33,18 @@ class Dependencia
         return $consulta->fetchAll();
     }
 
+    /** Para tipos "de una sola dependencia" (Consejo Superior, Formulador): la primera activa de ese tipo. */
+    public function obtenerPrimeraPorTipo(string $tipo): ?array
+    {
+        $consulta = $this->db->prepare(
+            "SELECT id, codigo, nombre, tipo FROM dependencias WHERE tipo = :tipo AND estado = 'activo' ORDER BY id LIMIT 1"
+        );
+        $consulta->execute(['tipo' => $tipo]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
     /**
      * Dependencias activas cuyo tipo está entre los indicados (ej. programas académicos de
      * pregrado/postgrado, para el campo "Programa académico" de Perfil de proyectos).

@@ -2506,6 +2506,12 @@ a.barra-progreso:hover {
     gap: 0.6rem;
 }
 
+/* Separa "Consulta" (rol de tipo de cuenta) de la cadena Gestor/Avalador/Formulador en la tabla
+   de Roles — puramente visual, la posición real la sigue dando la columna Orden. */
+.fila-rol-frontera td {
+    border-bottom: 2px solid var(--color-borde-hover);
+}
+
 .campo-color-icono {
     display: flex;
     align-items: center;
@@ -3807,6 +3813,13 @@ a.barra-progreso:hover {
 .organigrama-envoltorio {
     overflow-x: auto;
     padding: 1rem 0;
+}
+
+/* Separa las 3 secciones del Mapa (Consejo Superior / estructura actual / Formuladores) — son
+   posiciones puramente visuales, no cambian nada del árbol real de jerarquías. */
+.organigrama-separador {
+    border-top: 2px solid var(--color-borde-hover);
+    margin: 0.25rem 2rem 1rem;
 }
 
 .organigrama {
