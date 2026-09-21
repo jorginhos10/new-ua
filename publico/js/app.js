@@ -2732,7 +2732,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var barraAccionesPendientes = document.getElementById('barra-acciones-pendientes');
     var anioIdPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.anioId : '';
-    var bandejaPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.bandeja : '';
     var modoPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.modo : '';
 
     var botonPendientesVer = document.getElementById('boton-pendientes-ver');
@@ -2834,7 +2833,6 @@ document.addEventListener('DOMContentLoaded', function () {
         agregarCampo('accion', accion);
         agregarCampo('vista', 'pendientes');
         agregarCampo('anio_id', anioIdPendientes || '');
-        agregarCampo('bandeja', bandejaPendientes || '');
         if (modoPendientes === 'jerarquia') {
             agregarCampo('modo', 'jerarquia');
         }
@@ -3074,7 +3072,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var barraAccionesConsolidado = document.getElementById('barra-acciones-consolidado');
     var anioIdConsolidado = barraAccionesConsolidado ? barraAccionesConsolidado.dataset.anioId : '';
-    var bandejaConsolidado = barraAccionesConsolidado ? barraAccionesConsolidado.dataset.bandeja : '';
 
     var modalVerConsolidado = document.getElementById('modal-ver-consolidado');
     var modalEditarConsolidado = document.getElementById('modal-editar-consolidado');
@@ -3177,15 +3174,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // En la tabla "Consolidado por tipo" cada checkbox representa un tipo completo (puede
             // traer cientos de ítems): en vez de amontonarlos en un popup, "Ver" lleva directo a la
-            // landing de Consolidado detallado, que ya tiene búsqueda, orden por columna y las
-            // acciones reales (editar, redireccionar, duplicar, exportar).
+            // tabla real de ese origen (peticiones-tipo-detalle), con búsqueda/filtro/orden reales.
+            // Si se seleccionó más de un tipo a la vez, se abre el primero (esta tabla es por un
+            // solo origen a la vez, igual que el resto de "Ver" en Peticiones).
             if (seleccionados.length > 0 && seleccionados[0].dataset.vistaAgrupada === '1') {
-                var tiposAgrupados = tiposDeSeleccion(seleccionados);
-                var destinoAgrupado = 'index.php?ruta=consolidado-detalle&anio_id=' + encodeURIComponent(seleccionados[0].dataset.anioId || '');
-                if (tiposAgrupados.length === 1) {
-                    destinoAgrupado += '&tipo=' + encodeURIComponent(tiposAgrupados[0]);
+                var itemsAgrupados = itemsDeSeleccion(seleccionados);
+                var origenAgrupado = itemsAgrupados.length > 0 ? itemsAgrupados[0].origen : '';
+                if (origenAgrupado) {
+                    window.location.href = 'index.php?ruta=peticiones-tipo-detalle&estado=aprobada&origen=' + encodeURIComponent(origenAgrupado)
+                        + '&anio_id=' + encodeURIComponent(seleccionados[0].dataset.anioId || '') + '&resaltar_id=0';
                 }
-                window.location.href = destinoAgrupado;
                 return;
             }
 
@@ -3196,10 +3194,10 @@ document.addEventListener('DOMContentLoaded', function () {
             cuerpoVerConsolidado.innerHTML = '';
 
             if (enlaceVerConsolidadoCompleto) {
-                if (tipos.length === 1) {
+                if (tipos.length === 1 && items.length > 0) {
                     enlaceVerConsolidadoCompleto.style.display = '';
-                    enlaceVerConsolidadoCompleto.href = 'index.php?ruta=consolidado-detalle&tipo=' + encodeURIComponent(tipos[0])
-                        + '&anio_id=' + encodeURIComponent(seleccionados[0].dataset.anioId || '');
+                    enlaceVerConsolidadoCompleto.href = 'index.php?ruta=peticiones-tipo-detalle&estado=aprobada&origen=' + encodeURIComponent(items[0].origen || '')
+                        + '&anio_id=' + encodeURIComponent(seleccionados[0].dataset.anioId || '') + '&resaltar_id=0';
                 } else {
                     enlaceVerConsolidadoCompleto.style.display = 'none';
                 }
@@ -3236,8 +3234,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 var celdaAccion = document.createElement('td');
                 var enlace = document.createElement('a');
-                enlace.href = 'index.php?ruta=consolidado-detalle&tipo=' + encodeURIComponent(item.tipo || '')
-                    + '&anio_id=' + encodeURIComponent(seleccionados[0] ? seleccionados[0].dataset.anioId || '' : '');
+                enlace.href = 'index.php?ruta=peticiones-tipo-detalle&estado=aprobada&origen=' + encodeURIComponent(item.origen || '')
+                    + '&anio_id=' + encodeURIComponent(seleccionados[0] ? seleccionados[0].dataset.anioId || '' : '') + '&resaltar_id=' + encodeURIComponent(item.origen_id || '0');
                 enlace.className = 'boton-accion boton-accion-ver';
                 enlace.textContent = 'Ver';
                 celdaAccion.appendChild(enlace);
@@ -3493,7 +3491,6 @@ document.addEventListener('DOMContentLoaded', function () {
             agregarCampo('accion', 'archivar_consolidado');
             agregarCampo('vista', 'consolidado');
             agregarCampo('anio_id', anioIdConsolidado || '');
-            agregarCampo('bandeja', bandejaConsolidado || '');
 
             items.forEach(function (item) {
                 agregarCampo('item_origen[]', item.origen || '');
@@ -3536,7 +3533,6 @@ document.addEventListener('DOMContentLoaded', function () {
             agregarCampo('accion', 'desconsolidar_grupo');
             agregarCampo('vista', 'pendientes');
             agregarCampo('anio_id', anioIdConsolidado || '');
-            agregarCampo('bandeja', bandejaConsolidado || '');
 
             items.forEach(function (item) {
                 agregarCampo('item_origen[]', item.origen || '');
@@ -3570,14 +3566,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var barraAccionesArchivar = document.getElementById('barra-acciones-archivar');
     var anioIdArchivado = barraAccionesArchivar ? barraAccionesArchivar.dataset.anioId : '';
-    var bandejaArchivado = barraAccionesArchivar ? barraAccionesArchivar.dataset.bandeja : '';
 
     var botonArchivadoVer = document.getElementById('boton-archivado-ver');
     var botonArchivadoDuplicar = document.getElementById('boton-archivado-duplicar');
     var botonArchivadoConsolidar = document.getElementById('boton-archivado-consolidar');
     var botonArchivadoEnviar = document.getElementById('boton-archivado-enviar');
 
-    var modalVerArchivado = document.getElementById('modal-ver-archivado');
     var modalEnviarArchivado = document.getElementById('modal-enviar-archivado');
 
     function obtenerSeleccionadosArchivado() {
@@ -3591,7 +3585,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var hay = seleccionados.length > 0;
 
         if (botonArchivadoVer) {
-            botonArchivadoVer.disabled = !hay;
+            botonArchivadoVer.disabled = seleccionados.length !== 1;
         }
         if (botonArchivadoDuplicar) {
             botonArchivadoDuplicar.disabled = !hay;
@@ -3623,81 +3617,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
     actualizarBotonesArchivado();
 
-    // ---- Ver (uno o varios ítems a la vez): igual que el Ver de Consolidado, pero sin JSON
-    // agrupado — cada checkbox ya trae sus propios datos planos. ----
-    if (botonArchivadoVer && modalVerArchivado) {
-        var botonCerrarVerArchivado = document.getElementById('boton-cerrar-modal-ver-archivado');
-        var cuerpoVerArchivado = document.getElementById('ver-archivado-cuerpo');
-
-        var cerrarVerArchivado = function () {
-            modalVerArchivado.classList.remove('abierto');
-        };
-
+    // ---- Ver: exige exactamente un ítem seleccionado y navega directo a su tabla real
+    // (peticiones-tipo-detalle), sin popup intermedio — igual que ya hace Pendientes. ----
+    if (botonArchivadoVer) {
         botonArchivadoVer.addEventListener('click', function () {
             if (botonArchivadoVer.disabled) {
                 return;
             }
 
             var seleccionados = obtenerSeleccionadosArchivado();
-            cuerpoVerArchivado.innerHTML = '';
 
-            seleccionados.forEach(function (casilla) {
-                var fila = document.createElement('tr');
-
-                var celdaTipo = document.createElement('td');
-                celdaTipo.textContent = casilla.dataset.tipo || '—';
-                fila.appendChild(celdaTipo);
-
-                var celdaDetalle = document.createElement('td');
-                celdaDetalle.textContent = casilla.dataset.detalle || '—';
-                fila.appendChild(celdaDetalle);
-
-                var celdaCantidad = document.createElement('td');
-                celdaCantidad.textContent = casilla.dataset.cantidad || '—';
-                celdaCantidad.dataset.orden = casilla.dataset.cantidad ? parseFloat(casilla.dataset.cantidad) || 0 : 0;
-                fila.appendChild(celdaCantidad);
-
-                var celdaValor = document.createElement('td');
-                celdaValor.textContent = casilla.dataset.valor
-                    ? '$ ' + Number(casilla.dataset.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : '—';
-                celdaValor.dataset.orden = casilla.dataset.valor ? Number(casilla.dataset.valor) : 0;
-                fila.appendChild(celdaValor);
-
-                var celdaAccion = document.createElement('td');
-                if (casilla.dataset.rutaVer) {
-                    var enlace = document.createElement('a');
-                    enlace.href = casilla.dataset.rutaVer;
-                    enlace.className = 'boton-accion boton-accion-ver';
-                    enlace.textContent = 'Ver';
-                    celdaAccion.appendChild(enlace);
-                }
-                fila.appendChild(celdaAccion);
-
-                cuerpoVerArchivado.appendChild(fila);
-            });
-
-            var thDetalleArchivado = cuerpoVerArchivado.closest('table').querySelector('th[data-orden-defecto]');
-            if (thDetalleArchivado) {
-                window.ordenarPorEncabezado(thDetalleArchivado);
-            }
-
-            modalVerArchivado.classList.add('abierto');
-        });
-
-        if (botonCerrarVerArchivado) {
-            botonCerrarVerArchivado.addEventListener('click', cerrarVerArchivado);
-        }
-
-        modalVerArchivado.addEventListener('click', function (evento) {
-            if (evento.target === modalVerArchivado) {
-                cerrarVerArchivado();
-            }
-        });
-
-        document.addEventListener('keydown', function (evento) {
-            if (evento.key === 'Escape') {
-                cerrarVerArchivado();
+            if (seleccionados.length === 1 && seleccionados[0].dataset.rutaVer) {
+                window.location.href = seleccionados[0].dataset.rutaVer;
             }
         });
     }
@@ -3719,7 +3650,6 @@ document.addEventListener('DOMContentLoaded', function () {
         agregarCampo('accion', accion);
         agregarCampo('vista', 'archivar');
         agregarCampo('anio_id', anioIdArchivado || '');
-        agregarCampo('bandeja', bandejaArchivado || '');
 
         seleccionados.forEach(function (casilla) {
             agregarCampo('item_origen[]', casilla.dataset.origen || '');
@@ -3835,14 +3765,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var barraAccionesEnviadas = document.getElementById('barra-acciones-enviadas');
     var anioIdEnviado = barraAccionesEnviadas ? barraAccionesEnviadas.dataset.anioId : '';
-    var bandejaEnviado = barraAccionesEnviadas ? barraAccionesEnviadas.dataset.bandeja : '';
 
     var botonEnviadoVer = document.getElementById('boton-enviado-ver');
     var botonEnviadoDuplicar = document.getElementById('boton-enviado-duplicar');
     var botonEnviadoConsolidar = document.getElementById('boton-enviado-consolidar');
     var botonEnviadoEnviar = document.getElementById('boton-enviado-enviar');
 
-    var modalVerEnviado = document.getElementById('modal-ver-enviado');
     var modalEnviarEnviado = document.getElementById('modal-enviar-enviado');
 
     function obtenerSeleccionadosEnviado() {
@@ -3856,7 +3784,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var hay = seleccionados.length > 0;
 
         if (botonEnviadoVer) {
-            botonEnviadoVer.disabled = !hay;
+            botonEnviadoVer.disabled = seleccionados.length !== 1;
         }
         if (botonEnviadoDuplicar) {
             botonEnviadoDuplicar.disabled = !hay;
@@ -3888,80 +3816,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
     actualizarBotonesEnviado();
 
-    // ---- Ver (uno o varios ítems a la vez) ----
-    if (botonEnviadoVer && modalVerEnviado) {
-        var botonCerrarVerEnviado = document.getElementById('boton-cerrar-modal-ver-enviado');
-        var cuerpoVerEnviado = document.getElementById('ver-enviado-cuerpo');
-
-        var cerrarVerEnviado = function () {
-            modalVerEnviado.classList.remove('abierto');
-        };
-
+    // ---- Ver: exige exactamente un ítem seleccionado y navega directo a su tabla real
+    // (peticiones-tipo-detalle), sin popup intermedio — igual que ya hace Pendientes. ----
+    if (botonEnviadoVer) {
         botonEnviadoVer.addEventListener('click', function () {
             if (botonEnviadoVer.disabled) {
                 return;
             }
 
             var seleccionados = obtenerSeleccionadosEnviado();
-            cuerpoVerEnviado.innerHTML = '';
 
-            seleccionados.forEach(function (casilla) {
-                var fila = document.createElement('tr');
-
-                var celdaTipo = document.createElement('td');
-                celdaTipo.textContent = casilla.dataset.tipo || '—';
-                fila.appendChild(celdaTipo);
-
-                var celdaDetalle = document.createElement('td');
-                celdaDetalle.textContent = casilla.dataset.detalle || '—';
-                fila.appendChild(celdaDetalle);
-
-                var celdaCantidad = document.createElement('td');
-                celdaCantidad.textContent = casilla.dataset.cantidad || '—';
-                celdaCantidad.dataset.orden = casilla.dataset.cantidad ? parseFloat(casilla.dataset.cantidad) || 0 : 0;
-                fila.appendChild(celdaCantidad);
-
-                var celdaValor = document.createElement('td');
-                celdaValor.textContent = casilla.dataset.valor
-                    ? '$ ' + Number(casilla.dataset.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : '—';
-                celdaValor.dataset.orden = casilla.dataset.valor ? Number(casilla.dataset.valor) : 0;
-                fila.appendChild(celdaValor);
-
-                var celdaAccion = document.createElement('td');
-                if (casilla.dataset.rutaVer) {
-                    var enlace = document.createElement('a');
-                    enlace.href = casilla.dataset.rutaVer;
-                    enlace.className = 'boton-accion boton-accion-ver';
-                    enlace.textContent = 'Ver';
-                    celdaAccion.appendChild(enlace);
-                }
-                fila.appendChild(celdaAccion);
-
-                cuerpoVerEnviado.appendChild(fila);
-            });
-
-            var thDetalleEnviado = cuerpoVerEnviado.closest('table').querySelector('th[data-orden-defecto]');
-            if (thDetalleEnviado) {
-                window.ordenarPorEncabezado(thDetalleEnviado);
-            }
-
-            modalVerEnviado.classList.add('abierto');
-        });
-
-        if (botonCerrarVerEnviado) {
-            botonCerrarVerEnviado.addEventListener('click', cerrarVerEnviado);
-        }
-
-        modalVerEnviado.addEventListener('click', function (evento) {
-            if (evento.target === modalVerEnviado) {
-                cerrarVerEnviado();
-            }
-        });
-
-        document.addEventListener('keydown', function (evento) {
-            if (evento.key === 'Escape') {
-                cerrarVerEnviado();
+            if (seleccionados.length === 1 && seleccionados[0].dataset.rutaVer) {
+                window.location.href = seleccionados[0].dataset.rutaVer;
             }
         });
     }
@@ -3983,7 +3849,6 @@ document.addEventListener('DOMContentLoaded', function () {
         agregarCampo('accion', accion);
         agregarCampo('vista', 'enviadas');
         agregarCampo('anio_id', anioIdEnviado || '');
-        agregarCampo('bandeja', bandejaEnviado || '');
 
         seleccionados.forEach(function (casilla) {
             agregarCampo('item_origen[]', casilla.dataset.origen || '');

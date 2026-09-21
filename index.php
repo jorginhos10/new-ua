@@ -33,8 +33,6 @@ require_once __DIR__ . '/controlador/UnisaludControlador.php';
 require_once __DIR__ . '/controlador/SinExcedentesControlador.php';
 require_once __DIR__ . '/controlador/PerfilProyectosControlador.php';
 require_once __DIR__ . '/controlador/SolicitudControlador.php';
-require_once __DIR__ . '/controlador/SolicitudDetalleControlador.php';
-require_once __DIR__ . '/controlador/GastoDetalleControlador.php';
 require_once __DIR__ . '/controlador/PeticionesControlador.php';
 require_once __DIR__ . '/controlador/JerarquiaControlador.php';
 require_once __DIR__ . '/controlador/VariableMacroeconomicaControlador.php';
@@ -50,7 +48,7 @@ $ruta = $_GET['ruta'] ?? 'login';
 
 $rutaAMenuKey = [
     'peticiones' => 'peticiones',
-    'consolidado-detalle' => 'peticiones',
+    'peticiones-tipo-detalle' => 'peticiones',
     'consolidado-autogestion' => 'peticiones',
     'peticiones-historial-item' => 'peticiones',
     'extension' => 'extension',
@@ -297,20 +295,12 @@ switch ($ruta) {
         (new SolicitudControlador())->index();
         break;
 
-    case 'solicitud-detalle':
-        (new SolicitudDetalleControlador())->index();
-        break;
-
-    case 'gasto-detalle':
-        (new GastoDetalleControlador())->index();
+    case 'peticiones-tipo-detalle':
+        (new PeticionesControlador())->tipoDetalle();
         break;
 
     case 'peticiones':
         (new PeticionesControlador())->index();
-        break;
-
-    case 'consolidado-detalle':
-        (new PeticionesControlador())->detalle();
         break;
 
     case 'consolidado-autogestion':
@@ -319,10 +309,6 @@ switch ($ruta) {
 
     case 'peticiones-historial-item':
         (new PeticionesControlador())->historialItem();
-        break;
-
-    case 'peticiones-pendientes-grupo':
-        (new PeticionesControlador())->pendientesGrupo();
         break;
 
     case 'jerarquias':

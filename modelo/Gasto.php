@@ -316,7 +316,7 @@ class Gasto
     /**
      * Igual que obtenerPorId(), pero con los códigos/nombres de sede, línea, motor, proyecto y
      * rubro ya resueltos — la forma que necesita la vista de detalle de solo lectura en Peticiones
-     * (GastoDetalleControlador), igual que GastoExtension::obtenerDetallePorId() y homólogos.
+     * (PeticionDetalleControlador), igual que GastoExtension::obtenerDetallePorId() y homólogos.
      */
     public function obtenerDetallePorId(int $id): ?array
     {

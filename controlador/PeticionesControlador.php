@@ -65,22 +65,6 @@ class PeticionesControlador
 
     private const VISTAS = ['pendientes', 'consolidado', 'archivar', 'enviadas'];
 
-    /**
-     * Agrupación de los 13 "origen" en bandejas por módulo (spec: navegación por bandejas en
-     * Peticiones). "gasto_sin_excedentes"/"ingreso_sin_excedentes" NO tienen bandeja propia — se
-     * reparten dinámicamente entre "extension" ("Convenios y Asesorías") y "postgrado" ("Convenios
-     * Postgrados") según la categoría elegida al enviar (ver `categoria_peticion`, columna nueva en
-     * esas 2 tablas); ese reparto lo resuelve `filtrarPorOrigenes()`, no esta lista estática.
-     */
-    private const BANDEJAS = [
-        'gastos' => ['etiqueta' => 'Gastos', 'origenes' => ['gasto_principal']],
-        'extension' => ['etiqueta' => 'Extensión', 'origenes' => ['gasto_extension', 'ingreso_extension']],
-        'postgrado' => ['etiqueta' => 'Postgrado', 'origenes' => ['gasto_postgrado', 'ingreso_postgrado']],
-        'unisalud' => ['etiqueta' => 'Unidad de Salud', 'origenes' => ['gasto_unisalud', 'ingreso_unisalud']],
-        'perfil-proyectos' => ['etiqueta' => 'Perfil de Proyectos', 'origenes' => ['necesidad', 'necesidad_grupo']],
-        'solicitudes' => ['etiqueta' => 'Solicitudes', 'origenes' => ['arl', 'monitores', 'ops', 'otros']],
-    ];
-
     private const ORIGENES_GASTO = ['gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes'];
 
     private const ORIGENES_AUTOGESTION = ['gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes', 'necesidad'];
@@ -250,9 +234,6 @@ class PeticionesControlador
 
             $vistaDestino = $_POST['vista'] ?? 'pendientes';
             $destino = 'index.php?ruta=peticiones&vista=' . urlencode($vistaDestino);
-            if (!empty($_POST['bandeja']) && isset(self::BANDEJAS[$_POST['bandeja']])) {
-                $destino .= '&bandeja=' . urlencode($_POST['bandeja']);
-            }
             if (!empty($_POST['anio_id'])) {
                 $destino .= '&anio_id=' . (int) $_POST['anio_id'];
             }
@@ -269,9 +250,6 @@ class PeticionesControlador
 
         $vistaSolicitada = $_GET['vista'] ?? 'pendientes';
         $vista = in_array($vistaSolicitada, self::VISTAS, true) ? $vistaSolicitada : 'pendientes';
-
-        $bandejaSolicitada = $_GET['bandeja'] ?? null;
-        $bandeja = isset(self::BANDEJAS[$bandejaSolicitada]) ? $bandejaSolicitada : null;
 
         $aniosActivos = $this->modeloAnio->obtenerActivos();
 
@@ -299,26 +277,23 @@ class PeticionesControlador
             $pendientes = $this->construirPendientes($anioSeleccionadoId, $dependenciasPermitidas);
         }
 
-        $conteosBandejas = [];
-        if ($bandeja === null) {
-            foreach (self::BANDEJAS as $claveBandeja => $infoBandeja) {
-                $conteosBandejas[$claveBandeja] = count($this->filtrarPorOrigenes($pendientes, $infoBandeja['origenes'], $claveBandeja));
-            }
-        } else {
-            $pendientes = $this->filtrarPorOrigenes($pendientes, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
-
-            if ($bandeja === 'gastos' && !$modoJerarquia) {
-                $pendientes = $this->agruparPendientesPorDependencia($pendientes, $anioSeleccionadoId, $bandeja);
-            }
+        if (!$modoJerarquia) {
+            // Gastos puede tener cientos de ítems pendientes a la vez: se agrupan por dependencia de
+            // origen (ver agruparPendientesPorDependencia()) para no inundar la tabla; el resto de
+            // orígenes (Perfil de proyectos, Solicitudes, redirigidos) se deja individual, como ya
+            // se veía antes de unificar las bandejas.
+            $pendientesGasto = array_values(array_filter($pendientes, static fn (array $item): bool => $item['origen'] === 'gasto_principal'));
+            $pendientesResto = array_values(array_filter($pendientes, static fn (array $item): bool => $item['origen'] !== 'gasto_principal'));
+            $pendientes = array_merge(
+                $this->agruparPendientesPorDependencia($pendientesGasto),
+                $pendientesResto
+            );
         }
 
-        $aprobados = ($bandeja !== null && $vista === 'consolidado') ? $this->modeloArchivada->obtenerPorAccion('aprobada') : [];
+        $aprobados = $vista === 'consolidado' ? $this->modeloArchivada->obtenerPorAccion('aprobada') : [];
         $aprobados = $this->filtrarPorDependencia($aprobados, $dependenciasPermitidas);
-        if ($bandeja !== null) {
-            $aprobados = $this->filtrarPorOrigenes($aprobados, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
-        }
 
-        $filasDetalladasConsolidado = ($bandeja !== null && $vista === 'consolidado') ? $this->construirFilasDetalleCompleto($aprobados, $anioSeleccionadoId) : [];
+        $filasDetalladasConsolidado = $vista === 'consolidado' ? $this->construirFilasDetalleCompleto($aprobados, $anioSeleccionadoId) : [];
 
         $consolidado = [];
         foreach ($aprobados as $indice => $item) {
@@ -342,7 +317,7 @@ class PeticionesControlador
                 'detalle' => $item['detalle'],
                 'cantidad' => $item['cantidad'],
                 'valor' => $item['valor'],
-                'ruta_ver' => $item['ruta_ver'],
+                'ruta_ver' => $this->construirRutaVer($item['origen'], (int) $item['origen_id'], 'aprobada'),
                 'ruta_origen' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones',
                 'puede_editar' => $filaDetalle['puede_editar'] ?? false,
                 'dependencia' => $filaDetalle['dependencia'] ?? $item['detalle'],
@@ -361,39 +336,139 @@ class PeticionesControlador
         }
         $consolidado = array_values($consolidado);
 
-        $consolidadoUnificado = ($bandeja !== null && $vista === 'consolidado' && $modoJerarquia)
+        $consolidadoUnificado = ($vista === 'consolidado' && $modoJerarquia)
             ? $this->construirConsolidadoUnificado($aprobados, $anioSeleccionadoId)
             : [];
 
-        $archivados = ($bandeja !== null && $vista === 'archivar') ? $this->modeloArchivada->obtenerPorAccion('archivada') : [];
+        $archivados = $vista === 'archivar' ? $this->modeloArchivada->obtenerPorAccion('archivada') : [];
         $archivados = $this->filtrarPorDependencia($archivados, $dependenciasPermitidas);
-        if ($bandeja !== null) {
-            $archivados = $this->filtrarPorOrigenes($archivados, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
+        foreach ($archivados as &$itemArchivado) {
+            $itemArchivado['ruta_ver'] = $this->construirRutaVer($itemArchivado['origen'], (int) $itemArchivado['origen_id'], 'archivada');
         }
+        unset($itemArchivado);
 
-        $enviadas = ($bandeja !== null && $vista === 'enviadas' && $anioSeleccionadoId > 0)
+        $enviadas = ($vista === 'enviadas' && $anioSeleccionadoId > 0)
             ? $this->construirEnviadas($anioSeleccionadoId, $dependenciasPermitidas)
             : [];
-        if ($bandeja !== null) {
-            $enviadas = $this->filtrarPorOrigenes($enviadas, self::BANDEJAS[$bandeja]['origenes'], $bandeja);
-        }
 
         $dependenciasSugeridas = $this->modeloDependencia->obtenerActivasParaEnvio();
         $roles = $this->modeloRol->obtenerTodos();
         $rolesPorTipo = $this->modeloTipoDependenciaRol->obtenerMapaCompleto();
         $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
-        $bandejas = self::BANDEJAS;
 
         require __DIR__ . '/../vista/peticiones/index.php';
     }
 
     /**
-     * Landing de detalle: muestra (y permite exportar a Excel) todo lo consolidado/aprobado,
-     * en filas individuales con el mismo nivel de detalle que la tabla de Gastos — dependencia,
-     * sede, línea, motor, proyecto, rubro, actividad, insumo, costo unitario, valor total, meses
-     * y el techo presupuestal de cada dependencia — opcionalmente filtrado por tipo.
+     * Metadata de campos realmente editables in-place (texto/número, sin selects de FK) para el
+     * landing de "Ver" (tabla real idéntica a Dev > Tabla). Solo puede haber Editar sobre una
+     * columna que la propia tabla ya muestra (ver $columnas/$clavesFila en tipoDetalle()) — hoy esas
+     * columnas son las de Gasto (dependencia/sede/línea/motor/proyecto/rubro/actividad/insumo/
+     * cantidad/costo/valor/meses/techo), así que solo gasto_principal tiene edición in-place por
+     * ahora; el resto de orígenes (incluida Necesidad, cuyos campos propios como nombre/descripción/
+     * justificación no forman parte de ese set de columnas) queda de solo lectura aquí.
      */
-    public function detalle(): void
+    private const CAMPOS_EDITABLES = [
+        'gasto_principal' => [
+            ['clave' => 'insumo', 'etiqueta' => 'Insumo', 'tipo' => 'text', 'requerido' => true],
+            ['clave' => 'actividad', 'etiqueta' => 'Actividad', 'tipo' => 'text', 'requerido' => true],
+            ['clave' => 'objeto_proyecto_paa', 'etiqueta' => 'Contratos comunes', 'tipo' => 'text', 'requerido' => false],
+            ['clave' => 'cantidad', 'etiqueta' => 'Cantidad', 'tipo' => 'number', 'requerido' => true],
+            ['clave' => 'costo_unitario', 'etiqueta' => 'Costo unitario', 'tipo' => 'number', 'requerido' => true],
+            ['clave' => 'meses', 'etiqueta' => 'Meses (separados por coma, 1-12)', 'tipo' => 'text', 'requerido' => false],
+        ],
+    ];
+
+    /**
+     * Devuelve el modelo de origen (ya instanciado en el constructor) correspondiente, para las
+     * acciones genéricas de Editar/Eliminar del landing de "Ver".
+     */
+    private function obtenerModeloPorOrigen(string $origen): ?object
+    {
+        return match ($origen) {
+            'arl' => $this->modeloSolicitud,
+            'monitores' => $this->modeloMonitor,
+            'ops' => $this->modeloOps,
+            'otros' => $this->modeloPeticion,
+            'necesidad' => $this->modeloNecesidad,
+            'gasto_principal' => $this->modeloGasto,
+            'gasto_extension' => $this->modeloGastoExtension,
+            'gasto_postgrado' => $this->modeloGastoPostgrado,
+            'gasto_unisalud' => $this->modeloGastoUnisalud,
+            'gasto_sin_excedentes' => $this->modeloGastoSinExcedentes,
+            'ingreso_extension' => $this->modeloIngresoExtension,
+            'ingreso_postgrado' => $this->modeloIngresoPostgrado,
+            'ingreso_unisalud' => $this->modeloIngresoUnisalud,
+            'ingreso_sin_excedentes' => $this->modeloIngresoSinExcedentes,
+            default => null,
+        };
+    }
+
+    /**
+     * Ítems individuales de un origen puntual, en el mismo estado/bandeja en la que se encontraba
+     * el ítem sobre el que se pulsó "Ver" (pendiente/aprobada/archivada/enviada), con forma
+     * compatible con construirFilasDetalleCompleto() (origen, origen_id, tipo, detalle, cantidad,
+     * valor, ruta_ver, ruta_origen).
+     */
+    private function obtenerItemsCrudosPorEstado(string $estado, string $origen, int $anioPresupuestalId, array $dependenciasPermitidas): array
+    {
+        if ($estado === 'aprobada' || $estado === 'archivada') {
+            $items = $this->modeloArchivada->obtenerPorAccion($estado);
+            $items = $this->filtrarPorDependencia($items, $dependenciasPermitidas);
+
+            return array_values(array_filter($items, static fn (array $item): bool => $item['origen'] === $origen));
+        }
+
+        if ($estado === 'enviada') {
+            $items = $this->construirEnviadas($anioPresupuestalId, $dependenciasPermitidas);
+
+            return array_values(array_filter($items, static fn (array $item): bool => $item['origen'] === $origen));
+        }
+
+        // El superadmin puede pulsar "Ver" en modo jerarquía sobre un ítem pendiente que no le fue
+        // dirigido a él (es el caso que originó este rediseño): ni construirPendientes() ni
+        // obtenerNecesidadesVisibles() sirven ahí, porque ambos exigen ser el destinatario exacto
+        // (visibilidadSolicitud()). construirVistaJerarquica() sí puede verlo (solo exige estar en
+        // la rama de dependencias del superadmin), así que se reutiliza para 'pendiente' en ese caso.
+        if ($this->esSuperAdminRaiz()) {
+            $items = $this->construirVistaJerarquica($anioPresupuestalId, $dependenciasPermitidas);
+
+            return array_values(array_filter(
+                $items,
+                static fn (array $item): bool => $item['origen'] === $origen && ($item['estado_item'] ?? 'pendiente') === 'pendiente'
+            ));
+        }
+
+        // 'pendiente': Perfil de proyectos no pasa por construirPendientes() con una fila por ítem
+        // cuando hay más de uno visible (se resume en una sola fila "N proyectos pendientes" para
+        // esa vista) — aquí sí interesa cada ítem individual, así que se arma directo desde
+        // obtenerNecesidadesVisibles().
+        if ($origen === 'necesidad') {
+            return array_map(static function (array $fila): array {
+                return [
+                    'origen' => 'necesidad',
+                    'origen_id' => (int) $fila['id'],
+                    'tipo' => 'Perfil de proyectos',
+                    'detalle' => $fila['dependencia_destino'] ?? $fila['dependencia'],
+                    'cantidad' => null,
+                    'valor' => (float) $fila['valor'],
+                    'ruta_origen' => 'index.php?ruta=perfil-proyectos',
+                ];
+            }, $this->obtenerNecesidadesVisibles());
+        }
+
+        $items = $this->construirPendientes($anioPresupuestalId, $dependenciasPermitidas);
+
+        return array_values(array_filter($items, static fn (array $item): bool => $item['origen'] === $origen));
+    }
+
+    /**
+     * Landing único de "Ver": la tabla real de ese origen (idéntica, estructura y funciones, a
+     * Dev > Tabla — vista/dev/pruebas/tabla.php), filtrada al mismo estado/bandeja en la que
+     * estaba el ítem clicado, con esa fila resaltada. Editar/Eliminar (in-place, sin modal aparte)
+     * reutilizan el modelo real de cada origen — nunca mutan un array en memoria como el prototipo.
+     */
+    public function tipoDetalle(): void
     {
         if (empty($_SESSION['usuario_id'])) {
             header('Location: index.php?ruta=login');
@@ -405,85 +480,270 @@ class PeticionesControlador
             exit;
         }
 
+        $estado = $_GET['estado'] ?? '';
+        $origen = $_GET['origen'] ?? '';
+        $resaltarId = (int) ($_GET['resaltar_id'] ?? 0);
+
+        if (!in_array($estado, ['pendiente', 'aprobada', 'archivada', 'enviada'], true) || !isset(self::TABLAS_ORIGEN[$origen])) {
+            header('Location: index.php?ruta=peticiones');
+            exit;
+        }
+
+        $aniosActivos = $this->modeloAnio->obtenerActivos();
+        $anioSeleccionadoId = (int) ($_GET['anio_id'] ?? ($aniosActivos[0]['id'] ?? 0));
+        $dependenciasPermitidas = $this->obtenerDependenciasPermitidas();
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $accion = $_POST['accion'] ?? '';
-
-            if ($accion === 'redireccionar_consolidado') {
-                [$_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']] = $this->redireccionarConsolidado();
-            } elseif ($accion === 'duplicar_consolidado') {
-                [$_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']] = $this->duplicarConsolidadoGrupo();
-            }
-
-            $destino = 'index.php?ruta=consolidado-detalle';
-            if (!empty($_POST['anio_id'])) {
-                $destino .= '&anio_id=' . (int) $_POST['anio_id'];
-            }
-            if (!empty($_POST['tipo_filtro'])) {
-                $destino .= '&tipo=' . urlencode($_POST['tipo_filtro']);
+            $error = $this->procesarAccionCeldaTipoDetalle($origen);
+            $destino = 'index.php?ruta=peticiones-tipo-detalle&estado=' . urlencode($estado) . '&origen=' . urlencode($origen)
+                . '&anio_id=' . $anioSeleccionadoId . '&resaltar_id=' . $resaltarId;
+            if ($error !== '') {
+                $_SESSION['peticiones_flash_error'] = $error;
             }
             header('Location: ' . $destino);
             exit;
         }
 
         $error = $_SESSION['peticiones_flash_error'] ?? '';
-        $exito = $_SESSION['peticiones_flash_exito'] ?? '';
-        unset($_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']);
+        unset($_SESSION['peticiones_flash_error']);
 
-        $anioSeleccionadoId = (int) ($_GET['anio_id'] ?? 0);
-        $tipoFiltro = trim($_GET['tipo'] ?? '');
-
-        $dependenciasPermitidas = $this->obtenerDependenciasPermitidas();
-
-        $aprobados = $this->modeloArchivada->obtenerPorAccion('aprobada');
-        $aprobados = $this->filtrarPorDependencia($aprobados, $dependenciasPermitidas);
-
-        if ($tipoFiltro !== '') {
-            $aprobados = array_values(array_filter($aprobados, static function (array $item) use ($tipoFiltro): bool {
-                return $item['tipo'] === $tipoFiltro;
-            }));
-        }
-
-        $filas = $this->construirFilasDetalleCompleto($aprobados, $anioSeleccionadoId);
+        $itemsCrudos = $this->obtenerItemsCrudosPorEstado($estado, $origen, $anioSeleccionadoId, $dependenciasPermitidas);
+        $resultado = $this->construirFilasPorOrigen($origen, $itemsCrudos, $anioSeleccionadoId, $estado);
+        $columnas = $resultado['columnas'];
+        $clavesFila = $resultado['claves'];
+        $filasCompletas = $resultado['filas'];
 
         if (($_GET['exportar'] ?? '') === 'xlsx') {
-            $encabezados = [
-                'Tipo', 'Dependencia', 'Sede', 'Línea estratégica', 'Motor de desarrollo', 'Proyecto PDI',
-                'Objeto/Proyecto (PAA)', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario',
-                'Valor total', 'Meses', 'Techo presupuestal',
-            ];
+            $filasExportar = array_map(static function (array $fila) use ($clavesFila): array {
+                return array_map(static function (string $clave) use ($fila) {
+                    $valor = $fila[$clave] ?? '—';
 
-            $filasExportar = array_map(static function (array $fila): array {
-                return [
-                    $fila['tipo'],
-                    $fila['dependencia'] ?? '—',
-                    $fila['sede'],
-                    $fila['linea'],
-                    $fila['motor'],
-                    $fila['proyecto'],
-                    $fila['objeto_proyecto_paa'],
-                    $fila['actividad'],
-                    $fila['rubro'],
-                    $fila['insumo'],
-                    $fila['cantidad'] ?? '—',
-                    $fila['costo_unitario'] ?? '',
-                    $fila['valor_total'] ?? '',
-                    $fila['meses'],
-                    $fila['techo'] ?? '',
-                ];
-            }, $filas);
+                    return is_float($valor) ? number_format($valor, 2, ',', '.') : $valor;
+                }, $clavesFila);
+            }, $filasCompletas);
 
-            $nombreTipo = $tipoFiltro !== '' ? '-' . preg_replace('/[^A-Za-z0-9]+/', '-', $tipoFiltro) : '';
-            ExportadorExcel::descargar('consolidado' . $nombreTipo . '-' . date('Y-m-d') . '.xlsx', $encabezados, $filasExportar);
+            ExportadorExcel::descargar($origen . '-' . $estado . '-' . date('Y-m-d') . '.xlsx', $columnas, $filasExportar);
 
             return;
         }
 
-        $anio = $anioSeleccionadoId > 0 ? $this->modeloAnio->obtenerPorId($anioSeleccionadoId) : null;
-        $roles = $this->modeloRol->obtenerTodos();
-        $dependenciasSugeridas = $this->modeloDependencia->obtenerActivasParaEnvio();
-        $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+        $etiquetasEstado = ['pendiente' => 'Pendientes', 'aprobada' => 'Consolidado', 'archivada' => 'Archivados', 'enviada' => 'Enviadas'];
+        $etiquetasOrigen = [
+            'arl' => 'ARL', 'monitores' => 'Monitores', 'ops' => 'OPS', 'otros' => 'Petición',
+            'necesidad' => 'Perfil de proyectos', 'gasto_principal' => 'Gasto', 'gasto_extension' => 'Extensión',
+            'gasto_postgrado' => 'Postgrado', 'gasto_unisalud' => 'Unisalud', 'gasto_sin_excedentes' => 'Convenios',
+            'ingreso_extension' => 'Ingreso Extensión', 'ingreso_postgrado' => 'Ingreso Postgrado',
+            'ingreso_unisalud' => 'Ingreso Unisalud', 'ingreso_sin_excedentes' => 'Ingreso Convenios',
+        ];
+        $tituloPagina = ($filasCompletas[0]['tipo'] ?? $etiquetasOrigen[$origen] ?? $origen) . ' — ' . ($etiquetasEstado[$estado] ?? $estado);
 
-        require __DIR__ . '/../vista/peticiones/consolidado-detalle.php';
+        $camposEditables = self::CAMPOS_EDITABLES[$origen] ?? [];
+        $rutaVolver = 'index.php?ruta=peticiones&vista=' . ($estado === 'pendiente' ? 'pendientes' : ($estado === 'aprobada' ? 'consolidado' : ($estado === 'archivada' ? 'archivar' : 'enviadas')));
+
+        require __DIR__ . '/../vista/peticiones/tipo-detalle.php';
+    }
+
+    /**
+     * Columnas + filas para el landing de "Ver" (peticiones-tipo-detalle), a la medida del origen
+     * pedido — no el set fijo de columnas de Gasto para todo. Cada familia de origen tiene sus
+     * propios campos reales (ARL: niveles de riesgo; Monitores: semestres; OPS: perfil/valor;
+     * Otros: concepto/semestres; Necesidad: sus propios campos), consultados con el modelo real de
+     * cada uno (obtenerModeloPorOrigen()) — nunca se fuerza un origen a las columnas de otro.
+     */
+    private function construirFilasPorOrigen(string $origen, array $itemsCrudos, int $anioPresupuestalId, string $estado): array
+    {
+        if (in_array($origen, self::ORIGENES_GASTO, true)) {
+            return [
+                'columnas' => ['Dependencia', 'Sede', 'Línea estratégica', 'Motor de desarrollo', 'Proyecto PDI', 'Objeto/Proyecto (PAA)', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Meses', 'Techo presupuestal'],
+                'claves' => ['dependencia', 'sede', 'linea', 'motor', 'proyecto', 'objeto_proyecto_paa', 'actividad', 'rubro', 'insumo', 'cantidad', 'costo_unitario', 'valor_total', 'meses', 'techo'],
+                'filas' => $this->construirFilasDetalleCompleto($itemsCrudos, $anioPresupuestalId, $estado),
+            ];
+        }
+
+        $modelo = $this->obtenerModeloPorOrigen($origen);
+        $filas = [];
+
+        foreach ($itemsCrudos as $item) {
+            // OPS solo trae los códigos/nombres de sede/línea/motor/proyecto/rubro (columnas
+            // reales que se muestran aquí) con obtenerDetallePorId(); obtenerPorId() no los une.
+            $metodoObtener = ($origen === 'ops' && method_exists($modelo, 'obtenerDetallePorId')) ? 'obtenerDetallePorId' : 'obtenerPorId';
+            $registro = $modelo !== null ? $modelo->$metodoObtener((int) $item['origen_id']) : null;
+            if ($registro === null) {
+                continue;
+            }
+
+            $fila = [
+                'origen' => $origen,
+                'origen_id' => (int) $item['origen_id'],
+                'tipo' => $item['tipo'] ?? $registro['tipo'] ?? '',
+                'ruta_ver' => $this->construirRutaVer($origen, (int) $item['origen_id'], $estado),
+                'ruta_origen' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones',
+                'puede_editar' => $this->esPropietarioActualDeItem($item) || $this->esSuperAdminRaiz(),
+            ];
+
+            if (in_array($origen, ['ingreso_extension', 'ingreso_postgrado', 'ingreso_unisalud', 'ingreso_sin_excedentes'], true)) {
+                $fila['dependencia'] = $registro['dependencia'] ?? '—';
+                $fila['concepto_adicional'] = $registro['concepto_adicional'] !== '' ? ($registro['concepto_adicional'] ?? '—') : '—';
+                $fila['valor_adicional'] = isset($registro['valor_adicional']) ? (float) $registro['valor_adicional'] : null;
+                $fila['valor_total'] = isset($registro['valor_total']) ? (float) $registro['valor_total'] : null;
+            } elseif ($origen === 'arl') {
+                $fila['facultad'] = $registro['facultad'] ?? '—';
+                $totalEstudiantes = 0;
+                $totalValor = 0.0;
+                for ($nivel = 1; $nivel <= 5; $nivel++) {
+                    $estudiantes = (int) ($registro['riesgo' . $nivel . '_estudiantes'] ?? 0);
+                    $valor = (float) ($registro['riesgo' . $nivel . '_valor'] ?? 0);
+                    $fila['riesgo' . $nivel . '_estudiantes'] = $estudiantes;
+                    $fila['riesgo' . $nivel . '_valor'] = $valor;
+                    $totalEstudiantes += $estudiantes;
+                    $totalValor += $valor;
+                }
+                $fila['total_estudiantes'] = $totalEstudiantes;
+                $fila['total_valor'] = $totalValor;
+            } elseif ($origen === 'monitores') {
+                $fila['dependencia'] = $registro['dependencia'] ?? '—';
+                $fila['tipo_monitor'] = $registro['tipo'] ?? '—';
+                $fila['monitores_semestre1'] = (int) ($registro['monitores_semestre1'] ?? 0);
+                $fila['monitores_semestre2'] = (int) ($registro['monitores_semestre2'] ?? 0);
+                $fila['monitores_total'] = $fila['monitores_semestre1'] + $fila['monitores_semestre2'];
+            } elseif ($origen === 'ops') {
+                $fila['sede'] = trim(($registro['sede_codigo'] ?? '') . ' - ' . ($registro['sede_nombre'] ?? ''), ' -');
+                $fila['dependencia'] = $registro['dependencia'] ?? '—';
+                $fila['linea'] = trim(($registro['linea_codigo'] ?? '') . ' - ' . ($registro['linea_nombre'] ?? ''), ' -');
+                $fila['motor'] = trim(($registro['motor_codigo'] ?? '') . ' - ' . ($registro['motor_nombre'] ?? ''), ' -');
+                $fila['proyecto'] = trim(($registro['proyecto_codigo'] ?? '') . ' - ' . ($registro['proyecto_nombre'] ?? ''), ' -');
+                $fila['rubro'] = trim(($registro['rubro_codigo'] ?? '') . ' - ' . ($registro['rubro_descripcion'] ?? ''), ' -');
+                $fila['perfil'] = $registro['perfil'] ?? '—';
+                $fila['valor_unitario'] = isset($registro['valor']) ? (float) $registro['valor'] : null;
+                $fila['cantidad'] = (int) ($registro['cantidad'] ?? 0);
+                $fila['ops_total'] = (float) ($registro['valor'] ?? 0) * (int) ($registro['cantidad'] ?? 0);
+            } elseif ($origen === 'otros') {
+                $fila['concepto'] = $registro['concepto'] ?? '—';
+                $fila['semestre1'] = (int) ($registro['semestre1'] ?? 0);
+                $fila['semestre2'] = (int) ($registro['semestre2'] ?? 0);
+                $fila['valor_s1'] = isset($registro['valor_s1']) ? (float) $registro['valor_s1'] : null;
+                $fila['valor_s2'] = isset($registro['valor_s2']) ? (float) $registro['valor_s2'] : null;
+                $fila['otros_total'] = (float) ($registro['valor_s1'] ?? 0) + (float) ($registro['valor_s2'] ?? 0);
+            } elseif ($origen === 'necesidad') {
+                $fila['vigencia'] = $registro['vigencia'] !== null ? (int) $registro['vigencia'] : null;
+                $fila['nombre_necesidad'] = $registro['nombre_necesidad'] ?? '—';
+                $fila['estamento_solicitante_nombre'] = $registro['estamento_solicitante_nombre'] ?? '—';
+                $fila['beneficiarios_cantidad'] = $registro['beneficiarios_cantidad'] !== null ? (int) $registro['beneficiarios_cantidad'] : null;
+                $fila['sede_nombre'] = $registro['sede_nombre'] ?? '—';
+                $fila['dependencia'] = $registro['dependencia'] ?? '—';
+                $fila['programa_academico'] = $registro['programa_academico'] ?? '—';
+                $fila['linea_inversion_nombre'] = $registro['linea_inversion_nombre'] ?? $registro['linea_inversion'] ?? '—';
+                $fila['proyecto_nombre'] = $registro['proyecto_nombre'] ?? '—';
+                $fila['valor'] = isset($registro['valor']) ? (float) $registro['valor'] : null;
+                $fila['fuente_financiacion'] = $registro['fuente_financiacion'] ?? '—';
+            }
+
+            $filas[] = $fila;
+        }
+
+        $definiciones = [
+            'ingreso' => [
+                'columnas' => ['Dependencia', 'Concepto adicional', 'Valor adicional', 'Valor total'],
+                'claves' => ['dependencia', 'concepto_adicional', 'valor_adicional', 'valor_total'],
+            ],
+            'arl' => [
+                'columnas' => ['Facultad', 'Riesgo I (est.)', 'Riesgo I (valor)', 'Riesgo II (est.)', 'Riesgo II (valor)', 'Riesgo III (est.)', 'Riesgo III (valor)', 'Riesgo IV (est.)', 'Riesgo IV (valor)', 'Riesgo V (est.)', 'Riesgo V (valor)', 'Total estudiantes', 'Total valor'],
+                'claves' => ['facultad', 'riesgo1_estudiantes', 'riesgo1_valor', 'riesgo2_estudiantes', 'riesgo2_valor', 'riesgo3_estudiantes', 'riesgo3_valor', 'riesgo4_estudiantes', 'riesgo4_valor', 'riesgo5_estudiantes', 'riesgo5_valor', 'total_estudiantes', 'total_valor'],
+            ],
+            'monitores' => [
+                'columnas' => ['Dependencia', 'Tipo', 'Semestre I', 'Semestre II', 'Total'],
+                'claves' => ['dependencia', 'tipo_monitor', 'monitores_semestre1', 'monitores_semestre2', 'monitores_total'],
+            ],
+            'ops' => [
+                'columnas' => ['Sede', 'Dependencia', 'Línea', 'Motor', 'Proyecto', 'Rubro', 'Perfil', 'Valor unitario', 'Cantidad', 'Total'],
+                'claves' => ['sede', 'dependencia', 'linea', 'motor', 'proyecto', 'rubro', 'perfil', 'valor_unitario', 'cantidad', 'ops_total'],
+            ],
+            'otros' => [
+                'columnas' => ['Concepto', 'Semestre I (cant.)', 'Semestre II (cant.)', 'Valor semestre I', 'Valor semestre II', 'Total'],
+                'claves' => ['concepto', 'semestre1', 'semestre2', 'valor_s1', 'valor_s2', 'otros_total'],
+            ],
+            'necesidad' => [
+                'columnas' => ['Vigencia', 'Nombre de la necesidad', 'Estamento solicitante', 'Beneficiarios', 'Sede', 'Dependencia', 'Programa académico', 'Línea de inversión', 'Proyecto PDI', 'Valor', 'Fuente de financiación'],
+                'claves' => ['vigencia', 'nombre_necesidad', 'estamento_solicitante_nombre', 'beneficiarios_cantidad', 'sede_nombre', 'dependencia', 'programa_academico', 'linea_inversion_nombre', 'proyecto_nombre', 'valor', 'fuente_financiacion'],
+            ],
+        ];
+
+        $familia = in_array($origen, ['ingreso_extension', 'ingreso_postgrado', 'ingreso_unisalud', 'ingreso_sin_excedentes'], true) ? 'ingreso' : $origen;
+        $definicion = $definiciones[$familia] ?? ['columnas' => [], 'claves' => []];
+
+        return [
+            'columnas' => $definicion['columnas'],
+            'claves' => $definicion['claves'],
+            'filas' => $filas,
+        ];
+    }
+
+    /**
+     * Guarda o elimina, de verdad, el ítem editado in-place en el landing de "Ver" — solo si quien
+     * actúa es su propio dueño (mismo criterio que ya usa Perfil de proyectos: usuario_id de la
+     * sesión igual al usuario_id del registro), o el superadministrador. Reutiliza el modelo real
+     * de cada origen (Gasto::actualizar()/eliminar(), Necesidad::actualizar()/eliminar()), nunca
+     * reescribe esa lógica.
+     */
+    private function procesarAccionCeldaTipoDetalle(string $origen): string
+    {
+        $id = (int) ($_POST['origen_id'] ?? 0);
+        $modelo = $this->obtenerModeloPorOrigen($origen);
+
+        if ($id <= 0 || $modelo === null || !method_exists($modelo, 'obtenerPorId')) {
+            return 'Ítem inválido.';
+        }
+
+        $registro = $modelo->obtenerPorId($id);
+
+        if ($registro === null) {
+            return 'El ítem ya no existe.';
+        }
+
+        $esDueno = isset($registro['usuario_id']) && (int) $registro['usuario_id'] === (int) $_SESSION['usuario_id'];
+        if (!$esDueno && empty($_SESSION['usuario_super_admin'])) {
+            return 'No tienes permiso para modificar este ítem.';
+        }
+
+        if (($_POST['accion'] ?? '') === 'eliminar_celda') {
+            if (!method_exists($modelo, 'eliminar')) {
+                return 'Este origen no admite eliminar desde aquí.';
+            }
+            $modelo->eliminar($id);
+
+            return '';
+        }
+
+        $definicion = self::CAMPOS_EDITABLES[$origen] ?? [];
+        if (empty($definicion) || !method_exists($modelo, 'actualizar')) {
+            return 'Este origen no admite edición desde aquí.';
+        }
+
+        // Se parte del registro real completo (todos sus campos, incluidos los FK/fijos que
+        // actualizar() exige pero que este landing no edita) y solo se sobrescriben los campos
+        // realmente editables — evita reconstruir a mano cada campo fijo por origen.
+        $datos = $registro;
+
+        foreach ($definicion as $campo) {
+            $valor = trim((string) ($_POST[$campo['clave']] ?? ''));
+            if ($campo['requerido'] && $valor === '') {
+                return 'El campo "' . $campo['etiqueta'] . '" es obligatorio.';
+            }
+            $datos[$campo['clave']] = $campo['tipo'] === 'number' ? (float) str_replace(',', '.', $valor) : $valor;
+        }
+
+        if (isset($datos['cantidad'], $datos['costo_unitario']) && $origen === 'gasto_principal') {
+            $datos['valor_total'] = $datos['cantidad'] * $datos['costo_unitario'];
+        }
+
+        if (($datos['rubro_id'] ?? null) === '' || ($datos['rubro_id'] ?? null) === 0) {
+            $datos['rubro_id'] = null;
+        }
+
+        $modelo->actualizar($id, $datos);
+
+        return '';
     }
 
     /**
@@ -665,8 +925,13 @@ class PeticionesControlador
         return $fila[$campo] ?? null;
     }
 
-    private function construirFilasDetalleCompleto(array $aprobados, int $anioPresupuestalId): array
+    private function construirFilasDetalleCompleto(array $aprobados, int $anioPresupuestalId, string $estado = 'aprobada'): array
     {
+        // El PAC (línea de "Meses" en la vista de gráfica del landing) agrupa por nombre de mes,
+        // no por el número crudo que guarda la tabla — sin esta conversión "1,2,3" nunca calzaría
+        // con las etiquetas Ene/Feb/Mar y el panel quedaría siempre en cero.
+        $nombresMeses = [1 => 'Ene', 2 => 'Feb', 3 => 'Mar', 4 => 'Abr', 5 => 'May', 6 => 'Jun', 7 => 'Jul', 8 => 'Ago', 9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dic'];
+
         $sedesPorId = [];
         foreach ($this->modeloSede->obtenerTodas() as $sede) {
             $sedesPorId[(int) $sede['id']] = $sede['codigo'] . ' - ' . $sede['nombre'];
@@ -741,7 +1006,7 @@ class PeticionesControlador
                 'valor_total' => $item['valor'] !== null ? (float) $item['valor'] : null,
                 'meses' => '—',
                 'techo' => $techo !== null ? (float) $techo : null,
-                'ruta_ver' => $item['ruta_ver'],
+                'ruta_ver' => $this->construirRutaVer($item['origen'], (int) $item['origen_id'], $estado),
                 'ruta_origen' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones',
                 'puede_editar' => $this->esPropietarioActualDeItem($item) || $this->esSuperAdminRaiz(),
             ];
@@ -754,8 +1019,16 @@ class PeticionesControlador
                 $fila['objeto_proyecto_paa'] = $gastoOriginal['objeto_proyecto_paa'] ?? '—';
                 $fila['actividad'] = $gastoOriginal['actividad'] ?? '—';
                 $fila['insumo'] = $gastoOriginal['insumo'] ?? '—';
+                $fila['cantidad'] = isset($gastoOriginal['cantidad']) ? (float) $gastoOriginal['cantidad'] : $fila['cantidad'];
                 $fila['costo_unitario'] = isset($gastoOriginal['costo_unitario']) ? (float) $gastoOriginal['costo_unitario'] : null;
-                $fila['meses'] = $gastoOriginal['meses'] !== '' ? $gastoOriginal['meses'] : '—';
+                // 'meses_crudo' (los números tal cual los guarda la BD, ej. "1,2,3") es lo que
+                // necesita el formulario de edición in-place; 'meses' (Ene, Feb, Mar) es solo para
+                // mostrar en la tabla y para que el PAC de la vista de gráfica pueda agrupar por
+                // nombre de mes.
+                $fila['meses_crudo'] = $gastoOriginal['meses'] ?? '';
+                $fila['meses'] = $gastoOriginal['meses'] !== ''
+                    ? implode(', ', array_map(static fn ($mes) => $nombresMeses[(int) $mes] ?? $mes, explode(',', $gastoOriginal['meses'])))
+                    : '—';
 
                 if (!empty($gastoOriginal['rubro_id']) && isset($rubrosPorId[(int) $gastoOriginal['rubro_id']])) {
                     $fila['rubro'] = $rubrosPorId[(int) $gastoOriginal['rubro_id']];
@@ -797,9 +1070,10 @@ class PeticionesControlador
         $acciones = $this->modeloArchivada->obtenerAccionesPorClave();
         $items = [];
 
-        $filaJerarquia = function (string $origen, int $origenId, string $tipo, string $detalle, ?string $cantidad, ?float $valor, string $rutaVer, string $rutaOrigen) use ($acciones): array {
+        $filaJerarquia = function (string $origen, int $origenId, string $tipo, string $detalle, ?string $cantidad, ?float $valor, string $rutaOrigen) use ($acciones): array {
             $clave = $origen . ':' . $origenId;
             $accion = $acciones[$clave] ?? null;
+            $estadoItem = $accion ?? 'pendiente';
 
             return [
                 'origen' => $origen,
@@ -808,9 +1082,9 @@ class PeticionesControlador
                 'detalle' => $detalle,
                 'cantidad' => $cantidad,
                 'valor' => $valor,
-                'ruta_ver' => $rutaVer,
+                'ruta_ver' => $this->construirRutaVer($origen, $origenId, $estadoItem),
                 'ruta_origen' => $rutaOrigen,
-                'estado_item' => $accion ?? 'pendiente',
+                'estado_item' => $estadoItem,
             ];
         };
 
@@ -819,26 +1093,26 @@ class PeticionesControlador
                 + (int) $fila['riesgo3_estudiantes'] + (int) $fila['riesgo4_estudiantes'] + (int) $fila['riesgo5_estudiantes'];
             $totalValor = (float) $fila['riesgo1_valor'] + (float) $fila['riesgo2_valor']
                 + (float) $fila['riesgo3_valor'] + (float) $fila['riesgo4_valor'] + (float) $fila['riesgo5_valor'];
-            $items[] = ['origen' => 'arl', 'facultad' => $fila['facultad']] + $filaJerarquia('arl', (int) $fila['id'], 'ARL', $fila['facultad'], $totalPracticantes . ' practicantes', $totalValor, 'index.php?ruta=solicitud-detalle&tipo=arl&id=' . (int) $fila['id'], 'index.php?ruta=solicitudes&tab=arl');
+            $items[] = ['origen' => 'arl', 'facultad' => $fila['facultad']] + $filaJerarquia('arl', (int) $fila['id'], 'ARL', $fila['facultad'], $totalPracticantes . ' practicantes', $totalValor, 'index.php?ruta=solicitudes&tab=arl');
         }
 
         foreach ($this->modeloMonitor->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             $totalMonitores = (int) $fila['monitores_semestre1'] + (int) $fila['monitores_semestre2'];
-            $items[] = ['origen' => 'monitores', 'facultad' => $fila['dependencia']] + $filaJerarquia('monitores', (int) $fila['id'], 'Monitores', $fila['dependencia'], $totalMonitores . ' monitores', null, 'index.php?ruta=solicitud-detalle&tipo=monitores&id=' . (int) $fila['id'], 'index.php?ruta=solicitudes&tab=monitores');
+            $items[] = ['origen' => 'monitores', 'facultad' => $fila['dependencia']] + $filaJerarquia('monitores', (int) $fila['id'], 'Monitores', $fila['dependencia'], $totalMonitores . ' monitores', null, 'index.php?ruta=solicitudes&tab=monitores');
         }
 
         foreach ($this->modeloOps->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             $totalOps = (float) $fila['valor'] * (int) $fila['cantidad'];
-            $items[] = ['origen' => 'ops', 'facultad' => $fila['dependencia']] + $filaJerarquia('ops', (int) $fila['id'], 'OPS', $fila['dependencia'], $fila['cantidad'] . ' und.', $totalOps, 'index.php?ruta=solicitud-detalle&tipo=ops&id=' . (int) $fila['id'], 'index.php?ruta=solicitudes&tab=ops');
+            $items[] = ['origen' => 'ops', 'facultad' => $fila['dependencia']] + $filaJerarquia('ops', (int) $fila['id'], 'OPS', $fila['dependencia'], $fila['cantidad'] . ' und.', $totalOps, 'index.php?ruta=solicitudes&tab=ops');
         }
 
         foreach ($this->modeloPeticion->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             $totalValor = (float) $fila['valor_s1'] + (float) $fila['valor_s2'];
-            $items[] = ['origen' => 'otros', 'facultad' => null] + $filaJerarquia('otros', (int) $fila['id'], 'Petición', $fila['concepto'], null, $totalValor, 'index.php?ruta=solicitud-detalle&tipo=otros&id=' . (int) $fila['id'], 'index.php?ruta=solicitudes&tab=otros');
+            $items[] = ['origen' => 'otros', 'facultad' => null] + $filaJerarquia('otros', (int) $fila['id'], 'Petición', $fila['concepto'], null, $totalValor, 'index.php?ruta=solicitudes&tab=otros');
         }
 
         foreach ($this->modeloNecesidad->obtenerEnviadas() as $fila) {
-            $items[] = ['origen' => 'necesidad', 'facultad' => $fila['dependencia']] + $filaJerarquia('necesidad', (int) $fila['id'], 'Perfil de proyectos', $fila['dependencia'], null, (float) $fila['valor'], 'index.php?ruta=perfil-proyectos', 'index.php?ruta=perfil-proyectos');
+            $items[] = ['origen' => 'necesidad', 'facultad' => $fila['dependencia']] + $filaJerarquia('necesidad', (int) $fila['id'], 'Perfil de proyectos', $fila['dependencia'], null, (float) $fila['valor'], 'index.php?ruta=perfil-proyectos');
         }
 
         $mapaGastos = [
@@ -864,8 +1138,7 @@ class PeticionesControlador
                 }
 
                 $tipo = ($fuente['origen'] === 'gasto_extension' && !empty($fila['autogestion_nombre'])) ? ucfirst($fila['autogestion_nombre']) : $fuente['tipo'];
-                $rutaVerItem = 'index.php?ruta=gasto-detalle&origen=' . $fuente['origen'] . '&id=' . (int) $fila['id'];
-                $items[] = ['origen' => $fuente['origen'], 'facultad' => $fila['dependencia']] + $filaJerarquia($fuente['origen'], (int) $fila['id'], $tipo, $fila['dependencia'], $fila['cantidad'] . ' und.', (float) $fila['valor_total'], $rutaVerItem, $fuente['ruta']);
+                $items[] = ['origen' => $fuente['origen'], 'facultad' => $fila['dependencia']] + $filaJerarquia($fuente['origen'], (int) $fila['id'], $tipo, $fila['dependencia'], $fila['cantidad'] . ' und.', (float) $fila['valor_total'], $fuente['ruta']);
             }
         }
 
@@ -883,8 +1156,7 @@ class PeticionesControlador
                 }
 
                 $tipo = ($fuente['origen'] === 'ingreso_extension' && !empty($fila['autogestion_nombre'])) ? ucfirst($fila['autogestion_nombre']) . ' (ingreso)' : $fuente['tipo'];
-                $rutaVerItem = 'index.php?ruta=gasto-detalle&origen=' . $fuente['origen'] . '&id=' . (int) $fila['id'];
-                $items[] = ['origen' => $fuente['origen'], 'facultad' => $fila['dependencia']] + $filaJerarquia($fuente['origen'], (int) $fila['id'], $tipo, $fila['dependencia'], null, (float) $fila['valor_total'], $rutaVerItem, $fuente['ruta']);
+                $items[] = ['origen' => $fuente['origen'], 'facultad' => $fila['dependencia']] + $filaJerarquia($fuente['origen'], (int) $fila['id'], $tipo, $fila['dependencia'], null, (float) $fila['valor_total'], $fuente['ruta']);
             }
         }
 
@@ -1850,19 +2122,9 @@ class PeticionesControlador
         }
     }
 
-    private function construirRutaVer(string $origen, int $origenId): string
+    private function construirRutaVer(string $origen, int $origenId, string $estado): string
     {
-        $mapaSolicitud = ['arl' => 'arl', 'monitores' => 'monitores', 'ops' => 'ops', 'otros' => 'otros'];
-
-        if (isset($mapaSolicitud[$origen])) {
-            return 'index.php?ruta=solicitud-detalle&tipo=' . $mapaSolicitud[$origen] . '&id=' . $origenId;
-        }
-
-        if ($origen === 'necesidad') {
-            return 'index.php?ruta=perfil-proyectos';
-        }
-
-        return 'index.php?ruta=gasto-detalle&origen=' . $origen . '&id=' . $origenId;
+        return 'index.php?ruta=peticiones-tipo-detalle&estado=' . $estado . '&origen=' . $origen . '&resaltar_id=' . $origenId;
     }
 
     private function construirRutaOrigen(string $origen): string
@@ -2049,39 +2311,6 @@ class PeticionesControlador
     }
 
     /**
-     * Filtra una lista de items (pendientes/aprobados/archivados/enviadas) a solo los que
-     * pertenecen a la bandeja seleccionada, según su campo 'origen' (cada fila ya lo trae).
-     *
-     * Caso especial: "gasto_sin_excedentes"/"ingreso_sin_excedentes" no tienen bandeja propia en
-     * `self::BANDEJAS` — pertenecen dinámicamente a "extension" o "postgrado" según la categoría
-     * elegida al enviar (columna `categoria_peticion`, no una dependencia real). Se resuelve
-     * consultando el registro vivo; `NULL` (ítems enviados antes de que existiera esta categoría)
-     * se trata como "extension" para que no desaparezcan de Peticiones.
-     */
-    private function filtrarPorOrigenes(array $items, array $origenesPermitidos, ?string $bandeja = null): array
-    {
-        $modelosSinExcedentes = [
-            'gasto_sin_excedentes' => $this->modeloGastoSinExcedentes,
-            'ingreso_sin_excedentes' => $this->modeloIngresoSinExcedentes,
-        ];
-
-        return array_values(array_filter($items, function (array $item) use ($origenesPermitidos, $bandeja, $modelosSinExcedentes): bool {
-            if (in_array($item['origen'], $origenesPermitidos, true)) {
-                return true;
-            }
-
-            if ($bandeja === null || !in_array($bandeja, ['extension', 'postgrado'], true) || !isset($modelosSinExcedentes[$item['origen']])) {
-                return false;
-            }
-
-            $registro = $modelosSinExcedentes[$item['origen']]->obtenerPorId((int) $item['origen_id']);
-            $categoria = $registro['categoria_peticion'] ?? 'extension';
-
-            return $categoria === $bandeja;
-        }));
-    }
-
-    /**
      * Necesidades (Perfil de proyectos) enviadas, visibles solo para quien coincide exactamente
      * con el rol y la dependencia a los que fueron enviadas — igual que ARL/Monitores/OPS — y que
      * todavía no fueron archivadas/aprobadas.
@@ -2126,7 +2355,7 @@ class PeticionesControlador
                 'detalle' => $fila['dependencia'],
                 'cantidad' => null,
                 'valor' => (float) $fila['valor'],
-                'ruta_ver' => 'index.php?ruta=perfil-proyectos',
+                'ruta_ver' => $this->construirRutaVer('necesidad', (int) $fila['id'], $accionArchivada),
                 'ruta_origen' => 'index.php?ruta=perfil-proyectos',
             ]);
             $this->modeloHistorial->registrar(
@@ -2272,28 +2501,28 @@ class PeticionesControlador
                 + (float) $fila['riesgo3_valor'] + (float) $fila['riesgo4_valor'] + (float) $fila['riesgo5_valor'];
 
             if ($this->visibilidadSolicitud($fila['facultad'], $fila['rol_destinatario_id'], $fila['usuario_destinatario_id'] ?? null)) {
-                $pendientesSolicitudes[] = $this->fila('arl', (int) $fila['id'], 'ARL', $fila['facultad'], $totalPracticantes . ' practicantes', $totalValor, 'solicitud', 'index.php?ruta=solicitudes&tab=arl', 'index.php?ruta=solicitud-detalle&tipo=arl&id=' . (int) $fila['id'] . $volver);
+                $pendientesSolicitudes[] = $this->fila('arl', (int) $fila['id'], 'ARL', $fila['facultad'], $totalPracticantes . ' practicantes', $totalValor, 'solicitud', 'index.php?ruta=solicitudes&tab=arl', $this->construirRutaVer('arl', (int) $fila['id'], 'pendiente') . $volver);
             }
         }
 
         foreach ($this->modeloMonitor->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             $totalMonitores = (int) $fila['monitores_semestre1'] + (int) $fila['monitores_semestre2'];
             if ($this->visibilidadSolicitud($fila['dependencia'], $fila['rol_destinatario_id'], $fila['usuario_destinatario_id'] ?? null)) {
-                $pendientesSolicitudes[] = $this->fila('monitores', (int) $fila['id'], 'Monitores', $fila['dependencia'], $totalMonitores . ' monitores', null, 'solicitud', 'index.php?ruta=solicitudes&tab=monitores', 'index.php?ruta=solicitud-detalle&tipo=monitores&id=' . (int) $fila['id'] . $volver);
+                $pendientesSolicitudes[] = $this->fila('monitores', (int) $fila['id'], 'Monitores', $fila['dependencia'], $totalMonitores . ' monitores', null, 'solicitud', 'index.php?ruta=solicitudes&tab=monitores', $this->construirRutaVer('monitores', (int) $fila['id'], 'pendiente') . $volver);
             }
         }
 
         foreach ($this->modeloOps->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             $totalOps = (float) $fila['valor'] * (int) $fila['cantidad'];
             if ($this->visibilidadSolicitud($fila['dependencia'], $fila['rol_destinatario_id'], $fila['usuario_destinatario_id'] ?? null)) {
-                $pendientesSolicitudes[] = $this->fila('ops', (int) $fila['id'], 'OPS', $fila['dependencia'], $fila['cantidad'] . ' und.', $totalOps, 'solicitud', 'index.php?ruta=solicitudes&tab=ops', 'index.php?ruta=solicitud-detalle&tipo=ops&id=' . (int) $fila['id'] . $volver);
+                $pendientesSolicitudes[] = $this->fila('ops', (int) $fila['id'], 'OPS', $fila['dependencia'], $fila['cantidad'] . ' und.', $totalOps, 'solicitud', 'index.php?ruta=solicitudes&tab=ops', $this->construirRutaVer('ops', (int) $fila['id'], 'pendiente') . $volver);
             }
         }
 
         foreach ($this->modeloPeticion->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             $totalValor = (float) $fila['valor_s1'] + (float) $fila['valor_s2'];
             if ($this->visibilidadSolicitud(null, $fila['rol_destinatario_id'], $fila['usuario_destinatario_id'] ?? null)) {
-                $pendientesSolicitudes[] = $this->fila('otros', (int) $fila['id'], 'Petición', $fila['concepto'], null, $totalValor, 'solicitud', 'index.php?ruta=solicitudes&tab=otros', 'index.php?ruta=solicitud-detalle&tipo=otros&id=' . (int) $fila['id'] . $volver);
+                $pendientesSolicitudes[] = $this->fila('otros', (int) $fila['id'], 'Petición', $fila['concepto'], null, $totalValor, 'solicitud', 'index.php?ruta=solicitudes&tab=otros', $this->construirRutaVer('otros', (int) $fila['id'], 'pendiente') . $volver);
             }
         }
 
@@ -2321,7 +2550,7 @@ class PeticionesControlador
             ];
         } else {
             foreach ($necesidadesVisibles as $fila) {
-                $pendientes[] = $this->fila('necesidad', (int) $fila['id'], 'Perfil de proyectos', $fila['dependencia_destino'] ?? $fila['dependencia'], null, (float) $fila['valor'], 'gasto', 'index.php?ruta=perfil-proyectos', 'index.php?ruta=perfil-proyectos');
+                $pendientes[] = $this->fila('necesidad', (int) $fila['id'], 'Perfil de proyectos', $fila['dependencia_destino'] ?? $fila['dependencia'], null, (float) $fila['valor'], 'gasto', 'index.php?ruta=perfil-proyectos', $this->construirRutaVer('necesidad', (int) $fila['id'], 'pendiente'));
             }
         }
 
@@ -2341,7 +2570,7 @@ class PeticionesControlador
         $pendientesGasto = [];
 
         foreach ($this->modeloGasto->obtenerEnviadosPorAnio($anioPresupuestalId) as $fila) {
-            $filaGasto = $this->filaGasto('gasto_principal', $fila, 'Gasto', 'index.php?ruta=gastos', 'index.php?ruta=gasto-detalle&origen=gasto_principal&id=' . (int) $fila['id'] . $volver);
+            $filaGasto = $this->filaGasto('gasto_principal', $fila, 'Gasto', 'index.php?ruta=gastos', $this->construirRutaVer('gasto_principal', (int) $fila['id'], 'pendiente') . $volver);
             if ($filaGasto !== null) {
                 $pendientesGasto[] = $filaGasto;
             }
@@ -2349,28 +2578,28 @@ class PeticionesControlador
 
         foreach ($this->modeloGastoExtension->obtenerPorAnio($anioPresupuestalId) as $fila) {
             $tipo = !empty($fila['autogestion_nombre']) ? ucfirst($fila['autogestion_nombre']) : 'Extensión';
-            $filaGasto = $this->filaGasto('gasto_extension', $fila, $tipo, 'index.php?ruta=extension', 'index.php?ruta=gasto-detalle&origen=gasto_extension&id=' . (int) $fila['id'] . $volver);
+            $filaGasto = $this->filaGasto('gasto_extension', $fila, $tipo, 'index.php?ruta=extension', $this->construirRutaVer('gasto_extension', (int) $fila['id'], 'pendiente') . $volver);
             if ($filaGasto !== null) {
                 $pendientesGasto[] = $filaGasto;
             }
         }
 
         foreach ($this->modeloGastoPostgrado->obtenerPorAnio($anioPresupuestalId) as $fila) {
-            $filaGasto = $this->filaGasto('gasto_postgrado', $fila, 'Postgrado', 'index.php?ruta=postgrado', 'index.php?ruta=gasto-detalle&origen=gasto_postgrado&id=' . (int) $fila['id'] . $volver);
+            $filaGasto = $this->filaGasto('gasto_postgrado', $fila, 'Postgrado', 'index.php?ruta=postgrado', $this->construirRutaVer('gasto_postgrado', (int) $fila['id'], 'pendiente') . $volver);
             if ($filaGasto !== null) {
                 $pendientesGasto[] = $filaGasto;
             }
         }
 
         foreach ($this->modeloGastoUnisalud->obtenerPorAnio($anioPresupuestalId) as $fila) {
-            $filaGasto = $this->filaGasto('gasto_unisalud', $fila, 'Unisalud', 'index.php?ruta=unisalud', 'index.php?ruta=gasto-detalle&origen=gasto_unisalud&id=' . (int) $fila['id'] . $volver);
+            $filaGasto = $this->filaGasto('gasto_unisalud', $fila, 'Unisalud', 'index.php?ruta=unisalud', $this->construirRutaVer('gasto_unisalud', (int) $fila['id'], 'pendiente') . $volver);
             if ($filaGasto !== null) {
                 $pendientesGasto[] = $filaGasto;
             }
         }
 
         foreach ($this->modeloGastoSinExcedentes->obtenerPorAnio($anioPresupuestalId) as $fila) {
-            $filaGasto = $this->filaGasto('gasto_sin_excedentes', $fila, 'Convenios', 'index.php?ruta=sin-excedentes', 'index.php?ruta=gasto-detalle&origen=gasto_sin_excedentes&id=' . (int) $fila['id'] . $volver);
+            $filaGasto = $this->filaGasto('gasto_sin_excedentes', $fila, 'Convenios', 'index.php?ruta=sin-excedentes', $this->construirRutaVer('gasto_sin_excedentes', (int) $fila['id'], 'pendiente') . $volver);
             if ($filaGasto !== null) {
                 $pendientesGasto[] = $filaGasto;
             }
@@ -2378,28 +2607,28 @@ class PeticionesControlador
 
         foreach ($this->modeloIngresoExtension->obtenerPorAnio($anioPresupuestalId) as $fila) {
             $tipo = !empty($fila['autogestion_nombre']) ? ucfirst($fila['autogestion_nombre']) . ' (ingreso)' : 'Ingreso Extensión';
-            $filaIngreso = $this->filaIngreso('ingreso_extension', $fila, $tipo, 'index.php?ruta=extension', 'index.php?ruta=gasto-detalle&origen=ingreso_extension&id=' . (int) $fila['id'] . $volver);
+            $filaIngreso = $this->filaIngreso('ingreso_extension', $fila, $tipo, 'index.php?ruta=extension', $this->construirRutaVer('ingreso_extension', (int) $fila['id'], 'pendiente') . $volver);
             if ($filaIngreso !== null) {
                 $pendientesGasto[] = $filaIngreso;
             }
         }
 
         foreach ($this->modeloIngresoPostgrado->obtenerPorAnio($anioPresupuestalId) as $fila) {
-            $filaIngreso = $this->filaIngreso('ingreso_postgrado', $fila, 'Ingreso Postgrado', 'index.php?ruta=postgrado', 'index.php?ruta=gasto-detalle&origen=ingreso_postgrado&id=' . (int) $fila['id'] . $volver);
+            $filaIngreso = $this->filaIngreso('ingreso_postgrado', $fila, 'Ingreso Postgrado', 'index.php?ruta=postgrado', $this->construirRutaVer('ingreso_postgrado', (int) $fila['id'], 'pendiente') . $volver);
             if ($filaIngreso !== null) {
                 $pendientesGasto[] = $filaIngreso;
             }
         }
 
         foreach ($this->modeloIngresoUnisalud->obtenerPorAnio($anioPresupuestalId) as $fila) {
-            $filaIngreso = $this->filaIngreso('ingreso_unisalud', $fila, 'Ingreso Unisalud', 'index.php?ruta=unisalud', 'index.php?ruta=gasto-detalle&origen=ingreso_unisalud&id=' . (int) $fila['id'] . $volver);
+            $filaIngreso = $this->filaIngreso('ingreso_unisalud', $fila, 'Ingreso Unisalud', 'index.php?ruta=unisalud', $this->construirRutaVer('ingreso_unisalud', (int) $fila['id'], 'pendiente') . $volver);
             if ($filaIngreso !== null) {
                 $pendientesGasto[] = $filaIngreso;
             }
         }
 
         foreach ($this->modeloIngresoSinExcedentes->obtenerPorAnio($anioPresupuestalId) as $fila) {
-            $filaIngreso = $this->filaIngreso('ingreso_sin_excedentes', $fila, 'Ingreso Convenios', 'index.php?ruta=sin-excedentes', 'index.php?ruta=gasto-detalle&origen=ingreso_sin_excedentes&id=' . (int) $fila['id'] . $volver);
+            $filaIngreso = $this->filaIngreso('ingreso_sin_excedentes', $fila, 'Ingreso Convenios', 'index.php?ruta=sin-excedentes', $this->construirRutaVer('ingreso_sin_excedentes', (int) $fila['id'], 'pendiente') . $volver);
             if ($filaIngreso !== null) {
                 $pendientesGasto[] = $filaIngreso;
             }
@@ -2420,7 +2649,7 @@ class PeticionesControlador
      * (mismo patrón de "seleccionar todo" ya usado en Consolidado por tipo), y "Ver" lleva a una
      * página aparte con el detalle (actividad/insumo) de cada uno.
      */
-    private function agruparPendientesPorDependencia(array $pendientes, int $anioPresupuestalId, string $bandeja): array
+    private function agruparPendientesPorDependencia(array $pendientes): array
     {
         $grupos = [];
 
@@ -2442,8 +2671,7 @@ class PeticionesControlador
                     'accion_aprobar' => $item['accion_aprobar'],
                     'accion_rechazar' => $item['accion_rechazar'],
                     'ruta_origen' => $item['ruta_origen'],
-                    'ruta_ver' => 'index.php?ruta=peticiones-pendientes-grupo&bandeja=' . urlencode($bandeja)
-                        . '&anio_id=' . $anioPresupuestalId . '&dependencia=' . urlencode($clave),
+                    'ruta_ver' => $this->construirRutaVer($item['origen'], 0, 'pendiente'),
                     'redireccionado' => false,
                     'semaforo' => null,
                     'puede_actuar' => true,
@@ -2464,119 +2692,6 @@ class PeticionesControlador
     }
 
     /**
-     * Página de detalle de un grupo de pendientes (ver agruparPendientesPorDependencia()): lista
-     * cada gasto de la dependencia solicitada con su actividad, insumo, cantidad y valor, con un
-     * enlace "Ver" por ítem hacia el detalle completo (GastoDetalleControlador).
-     */
-    public function pendientesGrupo(): void
-    {
-        if (empty($_SESSION['usuario_id'])) {
-            header('Location: index.php?ruta=login');
-            exit;
-        }
-
-        if ($_SESSION['usuario_rol'] !== 'administrador') {
-            header('Location: index.php?ruta=dashboard');
-            exit;
-        }
-
-        $dependencia = trim($_GET['dependencia'] ?? '');
-        $anioPresupuestalId = (int) ($_GET['anio_id'] ?? 0);
-        $bandeja = ($_GET['bandeja'] ?? '') === 'gastos' ? 'gastos' : null;
-
-        if ($dependencia === '' || $anioPresupuestalId <= 0 || $bandeja === null) {
-            header('Location: index.php?ruta=peticiones');
-            exit;
-        }
-
-        $archivadas = $this->modeloArchivada->obtenerClavesProcesadas();
-        $items = [];
-
-        foreach ($this->modeloGasto->obtenerEnviadosPorAnio($anioPresupuestalId) as $fila) {
-            if (($fila['tipo_automatico'] ?? null) !== null) {
-                continue;
-            }
-
-            // El grupo se arma por dependencia de ORIGEN (ver agruparPendientesPorDependencia()),
-            // no por la de destino; la de destino solo se usa abajo para la visibilidad.
-            if ($fila['dependencia'] !== $dependencia) {
-                continue;
-            }
-
-            if (isset($archivadas['gasto_principal:' . $fila['id']])) {
-                continue;
-            }
-
-            $dependenciaDestino = $fila['dependencia_destino'] ?? $fila['dependencia'];
-            $rolDestinatarioId = !empty($fila['rol_destinatario_id']) ? (int) $fila['rol_destinatario_id'] : null;
-            $usuarioDestinatarioId = !empty($fila['usuario_destinatario_id']) ? (int) $fila['usuario_destinatario_id'] : null;
-
-            if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId, $usuarioDestinatarioId)) {
-                continue;
-            }
-
-            $items[] = [
-                'actividad' => $fila['actividad'],
-                'insumo' => $fila['insumo'],
-                'cantidad' => (int) $fila['cantidad'],
-                'valor_total' => (float) $fila['valor_total'],
-                'ruta_ver' => 'index.php?ruta=gasto-detalle&origen=gasto_principal&id=' . (int) $fila['id'],
-            ];
-        }
-
-        // Los ítems que llegaron por redirección (desde Consolidado por tipo, Archivados o
-        // Enviadas — ver redireccionarConsolidado()) no tienen su destinatario actual en la propia
-        // tabla gastos (esa sigue con los datos del envío original): el destino vigente vive en
-        // peticiones_archivadas. Sin este bloque, un grupo formado solo por ítems redirigidos
-        // aparecía vacío aquí aunque el listado principal de Pendientes sí los mostrara (ver
-        // filaRedireccionada()).
-        foreach ($this->modeloArchivada->obtenerRedireccionadas() as $redirigida) {
-            if ($redirigida['origen'] !== 'gasto_principal') {
-                continue;
-            }
-
-            $fila = $this->modeloGasto->obtenerPorId((int) $redirigida['origen_id']);
-
-            if ($fila === null || ($fila['tipo_automatico'] ?? null) !== null || $fila['dependencia'] !== $dependencia) {
-                continue;
-            }
-
-            $dependenciaDestino = $redirigida['redireccionado_a_dependencia'] ?? ($fila['dependencia_destino'] ?? $fila['dependencia']);
-            $rolDestinatarioId = !empty($redirigida['rol_destinatario_id']) ? (int) $redirigida['rol_destinatario_id'] : null;
-
-            if ($rolDestinatarioId !== null) {
-                $usuarioDestinatarioId = !empty($redirigida['usuario_destinatario_id']) ? (int) $redirigida['usuario_destinatario_id'] : null;
-
-                if (!$this->visibilidadSolicitud($dependenciaDestino, $rolDestinatarioId, $usuarioDestinatarioId)) {
-                    continue;
-                }
-            } else {
-                // Redirecciones hechas antes de guardar rol_destinatario_id: visibles por
-                // dependencia, sin filtrar rol (mismo criterio histórico de filaRedireccionada()).
-                $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
-                $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
-                $dependenciaUsuario = $dependenciaUsuarioId !== null ? $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId) : null;
-
-                if ($dependenciaUsuario === null || $dependenciaUsuario['nombre'] !== $dependenciaDestino) {
-                    continue;
-                }
-            }
-
-            $items[] = [
-                'actividad' => $fila['actividad'],
-                'insumo' => $fila['insumo'],
-                'cantidad' => (int) $fila['cantidad'],
-                'valor_total' => (float) $fila['valor_total'],
-                'ruta_ver' => 'index.php?ruta=gasto-detalle&origen=gasto_principal&id=' . (int) $fila['id'],
-            ];
-        }
-
-        $tituloPagina = 'Pendientes — ' . $dependencia;
-
-        require __DIR__ . '/../vista/peticiones/pendientes-grupo.php';
-    }
-
-    /**
      * Construye la vista "Peticiones Enviadas": todo lo que la dependencia del usuario actual (o
      * alguna de sus hijas) ya envió, sin importar el estado en el que se encuentre ahora (pendiente,
      * consolidado, archivado o redireccionado) — es de solo lectura para el emisor, complementaria a
@@ -2594,7 +2709,7 @@ class PeticionesControlador
         $usuarioActualId = (int) ($_SESSION['usuario_id'] ?? 0);
         $enviadas = [];
 
-        $agregar = function (string $origen, int $origenId, string $tipo, string $destino, ?string $cantidad, ?float $valor, string $rutaVer) use (&$enviadas, $acciones, $redireccionadas): void {
+        $agregar = function (string $origen, int $origenId, string $tipo, string $destino, ?string $cantidad, ?float $valor) use (&$enviadas, $acciones, $redireccionadas): void {
             $clave = $origen . ':' . $origenId;
             $accion = $acciones[$clave] ?? null;
 
@@ -2605,6 +2720,10 @@ class PeticionesControlador
                 default => 'Pendiente de revisión',
             };
 
+            // "Ver" abre la tabla real correspondiente al estado ACTUAL del ítem (aprobada/archivada
+            // si el destinatario ya actuó; si no, la de "enviada" — la vista propia de este listado).
+            $estadoTabla = in_array($accion, ['aprobada', 'archivada'], true) ? $accion : 'enviada';
+
             $enviadas[] = [
                 'origen' => $origen,
                 'origen_id' => $origenId,
@@ -2612,7 +2731,7 @@ class PeticionesControlador
                 'detalle' => $destino,
                 'cantidad' => $cantidad,
                 'valor' => $valor,
-                'ruta_ver' => $rutaVer,
+                'ruta_ver' => $this->construirRutaVer($origen, $origenId, $estadoTabla),
                 'estado_enviada' => $estado,
                 'accion_actual' => $accion,
             ];
@@ -2624,34 +2743,34 @@ class PeticionesControlador
                     + (int) $fila['riesgo3_estudiantes'] + (int) $fila['riesgo4_estudiantes'] + (int) $fila['riesgo5_estudiantes'];
                 $totalValor = (float) $fila['riesgo1_valor'] + (float) $fila['riesgo2_valor']
                     + (float) $fila['riesgo3_valor'] + (float) $fila['riesgo4_valor'] + (float) $fila['riesgo5_valor'];
-                $agregar('arl', (int) $fila['id'], 'ARL', $fila['enviada_a'] ?? $fila['facultad'], $totalPracticantes . ' practicantes', $totalValor, 'index.php?ruta=solicitud-detalle&tipo=arl&id=' . (int) $fila['id']);
+                $agregar('arl', (int) $fila['id'], 'ARL', $fila['enviada_a'] ?? $fila['facultad'], $totalPracticantes . ' practicantes', $totalValor);
             }
         }
 
         foreach ($this->modeloMonitor->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             if (!empty($fila['rol_destinatario_id']) && in_array($fila['dependencia'], $dependenciasPermitidas, true)) {
                 $totalMonitores = (int) $fila['monitores_semestre1'] + (int) $fila['monitores_semestre2'];
-                $agregar('monitores', (int) $fila['id'], 'Monitores', $fila['enviada_a'] ?? $fila['dependencia'], $totalMonitores . ' monitores', null, 'index.php?ruta=solicitud-detalle&tipo=monitores&id=' . (int) $fila['id']);
+                $agregar('monitores', (int) $fila['id'], 'Monitores', $fila['enviada_a'] ?? $fila['dependencia'], $totalMonitores . ' monitores', null);
             }
         }
 
         foreach ($this->modeloOps->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             if (!empty($fila['rol_destinatario_id']) && in_array($fila['dependencia'], $dependenciasPermitidas, true)) {
                 $totalOps = (float) $fila['valor'] * (int) $fila['cantidad'];
-                $agregar('ops', (int) $fila['id'], 'OPS', $fila['enviada_a'] ?? $fila['dependencia'], $fila['cantidad'] . ' und.', $totalOps, 'index.php?ruta=solicitud-detalle&tipo=ops&id=' . (int) $fila['id']);
+                $agregar('ops', (int) $fila['id'], 'OPS', $fila['enviada_a'] ?? $fila['dependencia'], $fila['cantidad'] . ' und.', $totalOps);
             }
         }
 
         foreach ($this->modeloPeticion->obtenerEnviadasPorAnio($anioPresupuestalId) as $fila) {
             if (!empty($fila['rol_destinatario_id']) && (int) ($fila['usuario_id'] ?? 0) === $usuarioActualId) {
                 $totalValor = (float) $fila['valor_s1'] + (float) $fila['valor_s2'];
-                $agregar('otros', (int) $fila['id'], 'Petición', $fila['enviada_a'] ?? '—', null, $totalValor, 'index.php?ruta=solicitud-detalle&tipo=otros&id=' . (int) $fila['id']);
+                $agregar('otros', (int) $fila['id'], 'Petición', $fila['enviada_a'] ?? '—', null, $totalValor);
             }
         }
 
         foreach ($this->modeloNecesidad->obtenerEnviadas() as $fila) {
             if (!empty($fila['rol_destinatario_id']) && in_array($fila['dependencia'], $dependenciasPermitidas, true)) {
-                $agregar('necesidad', (int) $fila['id'], 'Perfil de proyectos', $fila['dependencia_destino'] ?? $fila['dependencia'], null, (float) $fila['valor'], 'index.php?ruta=perfil-proyectos');
+                $agregar('necesidad', (int) $fila['id'], 'Perfil de proyectos', $fila['dependencia_destino'] ?? $fila['dependencia'], null, (float) $fila['valor']);
             }
         }
 
@@ -2673,9 +2792,8 @@ class PeticionesControlador
                     continue;
                 }
 
-                $rutaVer = 'index.php?ruta=gasto-detalle&origen=' . $fuente['origen'] . '&id=' . (int) $fila['id'];
                 $cantidad = isset($fila['cantidad']) ? $fila['cantidad'] . ' und.' : null;
-                $agregar($fuente['origen'], (int) $fila['id'], $fuente['tipo'], $fila['dependencia_destino'] ?? $fila['dependencia'], $cantidad, (float) $fila['valor_total'], $rutaVer);
+                $agregar($fuente['origen'], (int) $fila['id'], $fuente['tipo'], $fila['dependencia_destino'] ?? $fila['dependencia'], $cantidad, (float) $fila['valor_total']);
             }
         }
 
