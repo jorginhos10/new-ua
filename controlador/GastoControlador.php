@@ -176,22 +176,51 @@ class GastoControlador
         $menuPermitido = $usuarioActual !== null ? $this->modeloMenuPermiso->calcularPermitidoParaUsuario($usuarioActual) : null;
         $puedeVerTechos = $menuPermitido === null || in_array('techos', $menuPermitido, true);
 
+        // Se calcula siempre que haya año seleccionado (antes solo se calculaba para dependencias
+        // no-raíz) — hace falta también para el superadmin raíz, ya que ambos mapas alimentan el
+        // desglose propio/heredado de la barra de abajo.
+        $presupuestosDependencia = $anioSeleccionadoId > 0 ? $this->modeloPresupuestoDependencia->obtenerPorAnio($anioSeleccionadoId) : [];
+        $gastadoPorDependenciaMapa = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioSeleccionadoId) : [];
+        $propioYComprometidoPorDependencia = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesPropioYComprometidoPorDependencia($anioSeleccionadoId) : [];
+
         $techoDependencia = null;
         if ($dependenciaUsuarioId !== null && $anioSeleccionadoId > 0) {
             if ($dependenciaUsuarioEsRaiz) {
                 $techoDependencia = $anioSeleccionado !== null ? (float) $anioSeleccionado['presupuesto'] : null;
             } else {
-                $presupuestosDependencia = $this->modeloPresupuestoDependencia->obtenerPorAnio($anioSeleccionadoId);
                 $techoDependencia = $presupuestosDependencia[$dependenciaUsuarioId]['techo'] ?? null;
                 $techoDependencia = $techoDependencia !== null ? (float) $techoDependencia : null;
             }
         }
 
-        $totalGastado = ($dependenciaUsuario !== null && $anioSeleccionadoId > 0)
-            ? $this->modeloGasto->obtenerTotalEjecutadoPorAnioYDependencia($anioSeleccionadoId, $dependenciaUsuario['nombre'])
-            : 0.0;
+        // Lo que de verdad consume ESTE techo: lo propio + lo de hijas SIN techo propio (heredan el
+        // techo del padre — ver calcularGastadoConHerencia(), ya usado para validar el envío en
+        // enviarTodo()). Esto es lo que manda en $puedeEnviarTodo, sin cambios.
+        $arbolDescendientes = ($dependenciaUsuarioId !== null && $anioSeleccionadoId > 0)
+            ? $this->modeloDependencia->construirArbolDescendientes($dependenciaUsuarioId, true)
+            : [];
+
+        // $gastadoPorDependenciaMapa[nombre] (usado más abajo por sumarGastadoDescendientesSinTecho)
+        // ya incluye, mezclado, tanto lo propio como los espejos de techo (tipo_automatico=
+        // 'techo_hijo') de las hijas DIRECTAS con techo propio que ya empezaron a ejecutar — así
+        // evita el doble conteo la propia lógica de Techos (ver calcularAsignadoArbol()). Por eso NO
+        // se puede sumar aparte, como tercer segmento, el gasto de esas hijas: ya está adentro de
+        // este mismo número. Se usa obtenerTotalesPropioYComprometidoPorDependencia(), que separa esos
+        // dos componentes desde la consulta (mismo criterio de "la hija ya empezó a ejecutar"), para
+        // poder pintarlos como segmentos distintos sin que ninguno duplique al otro.
+        $propioYComprometido = $dependenciaUsuario !== null ? ($propioYComprometidoPorDependencia[$dependenciaUsuario['nombre']] ?? ['propio' => 0.0, 'comprometido' => 0.0]) : ['propio' => 0.0, 'comprometido' => 0.0];
+        $totalGastadoPropio = $propioYComprometido['propio'];
+        $totalGastadoHijasConTecho = $propioYComprometido['comprometido'];
+        $totalGastadoHeredado = $this->sumarGastadoDescendientesSinTecho($arbolDescendientes, $presupuestosDependencia, $gastadoPorDependenciaMapa);
+        $totalGastado = $totalGastadoPropio + $totalGastadoHijasConTecho + $totalGastadoHeredado;
+
         $presupuestoAnio = $techoDependencia ?? 0.0;
         $porcentajeGastado = $presupuestoAnio > 0 ? min(100, ($totalGastado / $presupuestoAnio) * 100) : 0.0;
+        $porcentajeGastadoPropio = $presupuestoAnio > 0 ? min(100, ($totalGastadoPropio / $presupuestoAnio) * 100) : 0.0;
+        $porcentajeGastadoHeredado = $presupuestoAnio > 0 ? max(0, min(100 - $porcentajeGastadoPropio, ($totalGastadoHeredado / $presupuestoAnio) * 100)) : 0.0;
+        $porcentajeGastadoConTecho = $presupuestoAnio > 0
+            ? max(0, min(100 - $porcentajeGastadoPropio - $porcentajeGastadoHeredado, ($totalGastadoHijasConTecho / $presupuestoAnio) * 100))
+            : 0.0;
         $puedeEnviarTodo = $presupuestoAnio > 0 && $totalGastado >= $presupuestoAnio;
 
         $roles = $this->modeloRol->obtenerTodos();

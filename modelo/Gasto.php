@@ -234,6 +234,46 @@ class Gasto
     }
 
     /**
+     * Igual que obtenerTotalesEjecutadosPorDependencia(), pero separando lo realmente propio de la
+     * dependencia (gastos que no son espejo de techo) de lo comprometido a hijas DIRECTAS con techo
+     * propio (los espejos tipo_automatico = 'techo_hijo', ya filtrados por "la hija empezó a
+     * ejecutar"). Ambos suman exactamente el mismo total que devuelve
+     * obtenerTotalesEjecutadosPorDependencia() para cada dependencia — esto solo lo desglosa, para
+     * poder mostrar en la barra de Gastos qué parte es ejecución propia y qué parte es techo ya
+     * comprometido a una hija, sin sumar ese segundo monto dos veces.
+     */
+    public function obtenerTotalesPropioYComprometidoPorDependencia(int $anioPresupuestalId): array
+    {
+        $consulta = $this->db->prepare(
+            "SELECT g.dependencia,
+                    COALESCE(SUM(CASE WHEN g.tipo_automatico IS NULL OR g.tipo_automatico != 'techo_hijo' THEN g.valor_total ELSE 0 END), 0) AS propio,
+                    COALESCE(SUM(CASE
+                            WHEN g.tipo_automatico = 'techo_hijo' AND EXISTS (
+                                SELECT 1 FROM gastos g2
+                                WHERE g2.anio_presupuestal_id = g.anio_presupuestal_id
+                                    AND g2.dependencia = dh.nombre
+                                    AND (g2.tipo_automatico IS NULL OR g2.tipo_automatico != 'techo_hijo')
+                            ) THEN g.valor_total ELSE 0 END
+                        ), 0) AS comprometido
+             FROM gastos g
+             LEFT JOIN dependencias dh ON dh.id = g.dependencia_hija_id
+             WHERE g.anio_presupuestal_id = :anio_presupuestal_id
+             GROUP BY g.dependencia"
+        );
+        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
+
+        $totales = [];
+        foreach ($consulta->fetchAll() as $fila) {
+            $totales[$fila['dependencia']] = [
+                'propio' => (float) $fila['propio'],
+                'comprometido' => (float) $fila['comprometido'],
+            ];
+        }
+
+        return $totales;
+    }
+
+    /**
      * Versión por dependencia única de obtenerTotalesEjecutadosPorDependencia(): un techo
      * asignado a una hija solo cuenta como ejecutado si esa hija ya tiene gastos reales.
      */

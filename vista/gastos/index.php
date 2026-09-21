@@ -143,13 +143,26 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </span>
                     <span class="progreso-presupuesto-dias">Día <?= $diaActual ?>/<?= $totalDiasAnio ?></span>
                 </div>
+                <?php
+                $segmentosBarraGastos = '<div class="barra-progreso-segmento gasto-propio" style="width: ' . number_format($porcentajeGastadoPropio, 2, '.', '') . '%;"></div>'
+                    . '<div class="barra-progreso-segmento gasto-heredado" style="width: ' . number_format($porcentajeGastadoHeredado, 2, '.', '') . '%;"></div>'
+                    . '<div class="barra-progreso-segmento gasto-con-techo" style="width: ' . number_format($porcentajeGastadoConTecho, 2, '.', '') . '%;"></div>';
+                ?>
+                <?php $claseTrackBarraGastos = 'barra-progreso barra-gastos' . ($totalGastado <= 0 ? ' sin-gastos' : ''); ?>
                 <?php if ($puedeVerTechos): ?>
-                <a href="index.php?ruta=techos" class="barra-progreso" title="Ir a Techos">
-                    <div class="barra-progreso-relleno" style="width: <?= number_format($porcentajeGastado, 2, '.', '') ?>%;"></div>
-                </a>
+                <a href="index.php?ruta=techos" class="<?= $claseTrackBarraGastos ?>" title="Ir a Techos"><?= $segmentosBarraGastos ?></a>
                 <?php else: ?>
-                <div class="barra-progreso" title="Techo presupuestal (solo informativo)">
-                    <div class="barra-progreso-relleno" style="width: <?= number_format($porcentajeGastado, 2, '.', '') ?>%;"></div>
+                <div class="<?= $claseTrackBarraGastos ?>" title="Techo presupuestal (solo informativo)"><?= $segmentosBarraGastos ?></div>
+                <?php endif; ?>
+                <?php if ($totalGastadoHeredado > 0 || $totalGastadoHijasConTecho > 0): ?>
+                <div class="progreso-presupuesto-leyenda">
+                    <span><span class="punto gasto-propio"></span>Propio: $<?= number_format($totalGastadoPropio, 2, ',', '.') ?></span>
+                    <?php if ($totalGastadoHeredado > 0): ?>
+                    <span><span class="punto gasto-heredado"></span>Heredado de hijas sin techo (cuenta contra este techo): $<?= number_format($totalGastadoHeredado, 2, ',', '.') ?></span>
+                    <?php endif; ?>
+                    <?php if ($totalGastadoHijasConTecho > 0): ?>
+                    <span><span class="punto gasto-con-techo"></span>Reasignado: $<?= number_format($totalGastadoHijasConTecho, 2, ',', '.') ?></span>
+                    <?php endif; ?>
                 </div>
                 <?php endif; ?>
             </div>

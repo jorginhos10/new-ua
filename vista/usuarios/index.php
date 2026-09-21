@@ -1,4 +1,20 @@
-<?php $tituloPagina = 'Usuarios'; require __DIR__ . '/../parciales/encabezado.php'; ?>
+<?php
+$tituloPagina = 'Usuarios';
+require __DIR__ . '/../parciales/encabezado.php';
+
+/**
+ * Celda de filtro por columna, siempre visible, con predicción de texto y tarjeta de valores
+ * únicos (mismo combobox de Dev > Tabla) — ver publico/js/filtros-tabla.js.
+ */
+function celdaFiltroUsuario(int $indice): string
+{
+    return '<th><div class="combo-envoltorio combo-filtro combo-filtro-siempre" data-indice="' . $indice . '">'
+        . '<div class="combo-fantasma" aria-hidden="true"></div>'
+        . '<input type="text" class="combo-input" placeholder="Filtrar…" autocomplete="off">'
+        . '<div class="combo-tarjeta"></div>'
+        . '</div></th>';
+}
+?>
 
     <div class="tarjeta">
         <div class="cabecera-modulo">
@@ -37,6 +53,16 @@
                             <th>Estamento</th>
                             <th>Creado</th>
                             <th>Último acceso</th>
+                            <th></th>
+                        </tr>
+                        <tr class="fila-filtros-siempre">
+                            <?= celdaFiltroUsuario(0) ?>
+                            <?= celdaFiltroUsuario(1) ?>
+                            <?= celdaFiltroUsuario(2) ?>
+                            <?= celdaFiltroUsuario(3) ?>
+                            <?= celdaFiltroUsuario(4) ?>
+                            <?= celdaFiltroUsuario(5) ?>
+                            <?= celdaFiltroUsuario(6) ?>
                             <th></th>
                         </tr>
                     </thead>
@@ -127,6 +153,14 @@
                             <th>Último acceso</th>
                             <th></th>
                         </tr>
+                        <tr class="fila-filtros-siempre">
+                            <?= celdaFiltroUsuario(0) ?>
+                            <?= celdaFiltroUsuario(1) ?>
+                            <?= celdaFiltroUsuario(2) ?>
+                            <?= celdaFiltroUsuario(3) ?>
+                            <?= celdaFiltroUsuario(4) ?>
+                            <th></th>
+                        </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($consejoSuperior as $miembro): ?>
@@ -209,6 +243,13 @@
                             <th>Correo</th>
                             <th>Rol</th>
                             <th>Creado</th>
+                            <th></th>
+                        </tr>
+                        <tr class="fila-filtros-siempre">
+                            <?= celdaFiltroUsuario(0) ?>
+                            <?= celdaFiltroUsuario(1) ?>
+                            <?= celdaFiltroUsuario(2) ?>
+                            <?= celdaFiltroUsuario(3) ?>
                             <th></th>
                         </tr>
                     </thead>
@@ -523,5 +564,7 @@
         </div>
     </div>
     <?php endif; ?>
+
+    <script src="publico/js/filtros-tabla.js"></script>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>
