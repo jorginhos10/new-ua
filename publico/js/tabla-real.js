@@ -846,10 +846,21 @@ document.addEventListener('DOMContentLoaded', function () {
         var filasDatos = filasVisiblesParaGrafica();
         var indiceValor = obtenerIndiceValorTdt();
 
-        var dimensiones = tdtColumnas
-            .map(function (nombre, indice) { return { nombre: nombre, indice: indice }; })
-            .filter(function (d) { return d.indice !== indiceValor && esDimensionCandidata(d.indice, filasDatos); })
-            .slice(0, 5);
+        // Estas son las dimensiones reales para tomar decisiones (Dependencia, Actividad, Rubro,
+        // Proyecto PDI, Sede) — cuando existen en esta tabla (Gasto/Ingreso), son siempre las que
+        // se usan, en este orden. Si el origen no las tiene (ARL, Monitores, OPS, Otros, Necesidad),
+        // se cae al detector genérico (cualquier columna de texto, no numérica).
+        var DIMENSIONES_PREFERIDAS = ['Dependencia', 'Actividad', 'Rubro', 'Proyecto PDI', 'Sede'];
+        var dimensiones = DIMENSIONES_PREFERIDAS
+            .map(function (nombre) { return { nombre: nombre, indice: indiceColumnaTdt(nombre) }; })
+            .filter(function (d) { return d.indice !== -1 && d.indice !== indiceValor; });
+
+        if (dimensiones.length === 0) {
+            dimensiones = tdtColumnas
+                .map(function (nombre, indice) { return { nombre: nombre, indice: indice }; })
+                .filter(function (d) { return d.indice !== indiceValor && esDimensionCandidata(d.indice, filasDatos); })
+                .slice(0, 5);
+        }
 
         contenedorKpis.innerHTML = '';
 

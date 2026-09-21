@@ -2305,6 +2305,36 @@ a.barra-progreso:hover {
     cursor: not-allowed;
 }
 
+.boton-auditar {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 34px;
+    padding: 0 0.85rem;
+    border: 1px solid var(--color-borde);
+    border-radius: 999px;
+    background: var(--color-superficie);
+    color: var(--color-texto-secundario);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background var(--transicion), border-color var(--transicion), color var(--transicion);
+}
+
+.boton-auditar:hover {
+    background: var(--color-fondo);
+    border-color: var(--color-borde-hover);
+    color: var(--color-texto);
+    text-decoration: none;
+}
+
+.boton-auditar.activo {
+    background: var(--color-primario-suave);
+    border-color: var(--color-primario);
+    color: var(--color-primario);
+}
+
 .menu-mensajes {
     position: relative;
 }

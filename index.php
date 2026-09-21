@@ -43,6 +43,7 @@ require_once __DIR__ . '/controlador/HistorialControlador.php';
 require_once __DIR__ . '/controlador/ActaControlador.php';
 require_once __DIR__ . '/controlador/ConsultaControlador.php';
 require_once __DIR__ . '/controlador/DevControlador.php';
+require_once __DIR__ . '/controlador/AuditoriaControlador.php';
 
 $ruta = $_GET['ruta'] ?? 'login';
 
@@ -141,6 +142,10 @@ switch ($ruta) {
 
     case 'dejar-de-impersonar':
         (new UsuarioControlador())->dejarDeImpersonar();
+        break;
+
+    case 'alternar-auditoria':
+        (new AuditoriaControlador())->alternar();
         break;
 
     case 'sedes':

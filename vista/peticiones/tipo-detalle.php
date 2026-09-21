@@ -8,7 +8,8 @@
  * PeticionesControlador::procesarAccionCeldaTipoDetalle().
  *
  * Variables esperadas del controlador: $columnas, $clavesFila, $filasCompletas, $resaltarId,
- * $origen, $estado, $anioSeleccionadoId, $tituloPagina, $rutaVolver, $camposEditables, $error.
+ * $origen, $estado, $anioSeleccionadoId, $tituloPagina, $rutaVolver, $camposEditables, $error,
+ * $dependenciaFiltro (si "Ver" vino de una fila-grupo de Pendientes, ej. Gastos por dependencia).
  */
 require __DIR__ . '/../parciales/encabezado.php';
 
@@ -68,7 +69,7 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
                 </button>
                 <?php if (!empty($filasCompletas)): ?>
                 <span class="separador-grupo-basico"></span>
-                <a href="index.php?ruta=peticiones-tipo-detalle&estado=<?= urlencode($estado) ?>&origen=<?= urlencode($origen) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&exportar=xlsx" class="icono-boton icono-exportar" title="Exportar a Excel">
+                <a href="index.php?ruta=peticiones-tipo-detalle&estado=<?= urlencode($estado) ?>&origen=<?= urlencode($origen) ?>&anio_id=<?= (int) $anioSeleccionadoId ?><?= $dependenciaFiltro !== '' ? '&dependencia=' . urlencode($dependenciaFiltro) : '' ?>&exportar=xlsx" class="icono-boton icono-exportar" title="Exportar a Excel">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                 </a>
                 <?php endif; ?>
@@ -154,7 +155,7 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
     <?php endif; ?>
 </div>
 
-<form method="POST" id="tdt-form-accion" action="index.php?ruta=peticiones-tipo-detalle&estado=<?= urlencode($estado) ?>&origen=<?= urlencode($origen) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&resaltar_id=<?= (int) $resaltarId ?>" style="display:none;">
+<form method="POST" id="tdt-form-accion" action="index.php?ruta=peticiones-tipo-detalle&estado=<?= urlencode($estado) ?>&origen=<?= urlencode($origen) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&resaltar_id=<?= (int) $resaltarId ?><?= $dependenciaFiltro !== '' ? '&dependencia=' . urlencode($dependenciaFiltro) : '' ?>" style="display:none;">
     <input type="hidden" name="accion" id="tdt-form-accion-valor" value="">
     <input type="hidden" name="origen_id" id="tdt-form-origen-id" value="">
     <?php foreach ($camposEditables as $campo): ?>

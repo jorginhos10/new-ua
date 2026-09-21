@@ -29,7 +29,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <a href="index.php?ruta=peticiones&vista=enviadas" class="pestana<?= $vista === 'enviadas' ? ' activa' : '' ?>">Enviadas</a>
             </div>
             <?php if ($vista === 'pendientes'): ?>
-            <div class="grupo-acciones-encabezado" id="barra-acciones-pendientes" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-modo="<?= $modoJerarquia ? 'jerarquia' : '' ?>">
+            <div class="grupo-acciones-encabezado" id="barra-acciones-pendientes" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
                 <button type="button" id="boton-pendientes-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
                 <button type="button" id="boton-pendientes-aprobar" class="boton-accion boton-accion-enviar" disabled>Aceptar seleccionados</button>
                 <button type="button" id="boton-pendientes-archivar" class="boton-accion boton-accion-editar" disabled>Archivar seleccionados</button>
@@ -64,14 +64,8 @@ require __DIR__ . '/../parciales/encabezado.php';
             <?php endif; ?>
         </div>
 
-        <?php if ($esSuperAdminRaiz && ($vista === 'pendientes' || $vista === 'consolidado')): ?>
-        <div class="enlace-modo-jerarquia">
-            <?php if ($modoJerarquia): ?>
-            <a href="index.php?ruta=peticiones&vista=<?= htmlspecialchars($vista) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>">← Volver a mis pendientes por aceptar (por defecto)</a>
-            <?php else: ?>
-            <a href="index.php?ruta=peticiones&vista=<?= htmlspecialchars($vista) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&modo=jerarquia">Ver todo lo que tienes por debajo</a>
-            <?php endif; ?>
-        </div>
+        <?php if ($modoJerarquia && ($vista === 'pendientes' || $vista === 'consolidado')): ?>
+        <p class="texto-atenuado">Auditando: viendo todo lo pendiente de tu árbol de dependencias (activado en el interruptor "Auditar" del encabezado), no solo lo dirigido a ti.</p>
         <?php endif; ?>
 
         <?php if (empty($aniosActivos)): ?>
@@ -149,7 +143,6 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     <input type="hidden" name="accion" value="aprobar">
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                                    <input type="hidden" name="modo" value="jerarquia">
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
                                     <input type="hidden" name="tipo" value="<?= htmlspecialchars($item['tipo']) ?>">
@@ -164,7 +157,6 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     <input type="hidden" name="accion" value="archivar">
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                                    <input type="hidden" name="modo" value="jerarquia">
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
                                     <input type="hidden" name="tipo" value="<?= htmlspecialchars($item['tipo']) ?>">

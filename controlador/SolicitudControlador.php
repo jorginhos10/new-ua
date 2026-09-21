@@ -174,10 +174,19 @@ class SolicitudControlador
         $dependenciasPermitidas = $this->obtenerDependenciasPermitidas();
         $usuarioActualId = (int) ($_SESSION['usuario_id'] ?? 0);
 
+        // "Auditar" (toggle global de la headerbar, solo para la dependencia raíz): en vez de solo
+        // lo propio o sin dueño, se ve todo lo que cae en el árbol de dependencias.
+        $usuarioActualParaAuditoria = $this->modeloUsuario->obtenerPorId($usuarioActualId);
+        $dependenciaParaAuditoria = !empty($usuarioActualParaAuditoria['dependencia_id'])
+            ? $this->modeloDependencia->obtenerPorId((int) $usuarioActualParaAuditoria['dependencia_id'])
+            : null;
+        $auditando = !empty($_SESSION['modo_auditoria']) && $dependenciaParaAuditoria !== null && !empty($dependenciaParaAuditoria['es_raiz_superadmin']);
+
         $solicitudes = $anioSeleccionadoId > 0 ? $this->modeloSolicitud->obtenerPorAnio($anioSeleccionadoId) : [];
         $solicitudes = array_values(array_filter(
             $solicitudes,
             static fn (array $fila): bool => (int) ($fila['usuario_id'] ?? 0) === $usuarioActualId
+                || ($auditando && in_array($fila['facultad'], $dependenciasPermitidas, true))
                 || ($fila['usuario_id'] === null && in_array($fila['facultad'], $dependenciasPermitidas, true))
         ));
 
@@ -185,6 +194,7 @@ class SolicitudControlador
         $solicitudesMonitores = array_values(array_filter(
             $solicitudesMonitores,
             static fn (array $fila): bool => (int) ($fila['usuario_id'] ?? 0) === $usuarioActualId
+                || ($auditando && in_array($fila['dependencia'], $dependenciasPermitidas, true))
                 || ($fila['usuario_id'] === null && in_array($fila['dependencia'], $dependenciasPermitidas, true))
         ));
 
@@ -192,13 +202,14 @@ class SolicitudControlador
         $solicitudesOps = array_values(array_filter(
             $solicitudesOps,
             static fn (array $fila): bool => (int) ($fila['usuario_id'] ?? 0) === $usuarioActualId
+                || ($auditando && in_array($fila['dependencia'], $dependenciasPermitidas, true))
                 || ($fila['usuario_id'] === null && in_array($fila['dependencia'], $dependenciasPermitidas, true))
         ));
 
         $solicitudesPeticiones = $anioSeleccionadoId > 0 ? $this->modeloPeticion->obtenerPorAnio($anioSeleccionadoId) : [];
         $solicitudesPeticiones = array_values(array_filter(
             $solicitudesPeticiones,
-            static fn (array $fila): bool => (int) ($fila['usuario_id'] ?? 0) === $usuarioActualId || $fila['usuario_id'] === null
+            static fn (array $fila): bool => (int) ($fila['usuario_id'] ?? 0) === $usuarioActualId || $fila['usuario_id'] === null || $auditando
         ));
         $smlvPorAnio = $this->modeloVariable->obtenerValoresPorNombre(self::NOMBRE_VARIABLE_SMLV);
         $porcentajesRiesgo = self::PORCENTAJES_RIESGO;

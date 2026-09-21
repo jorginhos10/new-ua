@@ -2732,7 +2732,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var barraAccionesPendientes = document.getElementById('barra-acciones-pendientes');
     var anioIdPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.anioId : '';
-    var modoPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.modo : '';
 
     var botonPendientesVer = document.getElementById('boton-pendientes-ver');
     var botonPendientesAprobar = document.getElementById('boton-pendientes-aprobar');
@@ -2833,9 +2832,6 @@ document.addEventListener('DOMContentLoaded', function () {
         agregarCampo('accion', accion);
         agregarCampo('vista', 'pendientes');
         agregarCampo('anio_id', anioIdPendientes || '');
-        if (modoPendientes === 'jerarquia') {
-            agregarCampo('modo', 'jerarquia');
-        }
 
         // Un solo campo JSON en vez de 8 inputs ocultos por ítem: con selecciones grandes (un
         // grupo de Pendientes puede traer cientos de gastos) los inputs paralelos superaban el

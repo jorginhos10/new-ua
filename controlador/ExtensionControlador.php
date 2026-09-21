@@ -1478,10 +1478,20 @@ class ExtensionControlador
     {
         $usuarioActualId = (int) ($usuarioActual['id'] ?? 0);
         $dependenciaUsuarioNombre = null;
+        $dependenciaFila = null;
 
         if (!empty($usuarioActual['dependencia_id'])) {
             $dependenciaFila = $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id']);
             $dependenciaUsuarioNombre = $dependenciaFila['nombre'] ?? null;
+        }
+
+        // "Auditar" (toggle global de la headerbar, solo para la dependencia raíz): en vez de
+        // exigir ser dueño o destinatario exacto de cada ítem, se ve todo lo que cae en el árbol
+        // de dependencias — mismo bypass que ya usa Peticiones en modo jerarquía.
+        if (!empty($_SESSION['modo_auditoria']) && $dependenciaFila !== null && !empty($dependenciaFila['es_raiz_superadmin'])) {
+            return array_values(array_filter($items, static fn (array $item): bool =>
+                in_array($item['dependencia'] ?? $item['dependencia_destino'] ?? null, $dependenciasPermitidas, true)
+            ));
         }
 
         $rolUsuarioId = !empty($usuarioActual['rol_id']) ? (int) $usuarioActual['rol_id'] : null;

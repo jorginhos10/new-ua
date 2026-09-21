@@ -237,9 +237,6 @@ class PeticionesControlador
             if (!empty($_POST['anio_id'])) {
                 $destino .= '&anio_id=' . (int) $_POST['anio_id'];
             }
-            if (($_POST['modo'] ?? '') === 'jerarquia') {
-                $destino .= '&modo=jerarquia';
-            }
             header('Location: ' . $destino);
             exit;
         }
@@ -267,7 +264,9 @@ class PeticionesControlador
         $dependenciasPermitidas = $this->obtenerDependenciasPermitidas();
 
         $esSuperAdminRaiz = $this->esSuperAdminRaiz();
-        $modoJerarquia = $esSuperAdminRaiz && ($_GET['modo'] ?? '') === 'jerarquia';
+        // "Auditar" es ahora un toggle global en la headerbar (ver AuditoriaControlador), no un
+        // parámetro de esta página — persiste al navegar entre módulos.
+        $modoJerarquia = $esSuperAdminRaiz && !empty($_SESSION['modo_auditoria']);
 
         if ($anioSeleccionadoId <= 0) {
             $pendientes = [];
@@ -278,14 +277,17 @@ class PeticionesControlador
         }
 
         if (!$modoJerarquia) {
-            // Gastos puede tener cientos de ítems pendientes a la vez: se agrupan por dependencia de
-            // origen (ver agruparPendientesPorDependencia()) para no inundar la tabla; el resto de
-            // orígenes (Perfil de proyectos, Solicitudes, redirigidos) se deja individual, como ya
-            // se veía antes de unificar las bandejas.
-            $pendientesGasto = array_values(array_filter($pendientes, static fn (array $item): bool => $item['origen'] === 'gasto_principal'));
-            $pendientesResto = array_values(array_filter($pendientes, static fn (array $item): bool => $item['origen'] !== 'gasto_principal'));
+            // Gasto y Perfil de proyectos (necesidad) son los orígenes con volumen suficiente para
+            // que verlos uno por uno inunde la tabla — se agrupan en una fila por dependencia de
+            // origen (ver agruparPendientesPorDependencia()), separados por dependencia Y por tipo
+            // (nunca se mezcla un Gasto con una Necesidad de la misma dependencia en un solo grupo).
+            // El resto de orígenes (Solicitudes, Ingresos, redirigidos) se queda siempre individual
+            // — no se mezclan entre sí hasta que se envían a Consolidado por tipo.
+            $origenesAgrupables = ['gasto_principal', 'necesidad'];
+            $pendientesAgrupables = array_values(array_filter($pendientes, static fn (array $item): bool => in_array($item['origen'], $origenesAgrupables, true)));
+            $pendientesResto = array_values(array_filter($pendientes, static fn (array $item): bool => !in_array($item['origen'], $origenesAgrupables, true)));
             $pendientes = array_merge(
-                $this->agruparPendientesPorDependencia($pendientesGasto),
+                $this->agruparPendientesPorDependencia($pendientesAgrupables),
                 $pendientesResto
             );
         }
@@ -483,6 +485,10 @@ class PeticionesControlador
         $estado = $_GET['estado'] ?? '';
         $origen = $_GET['origen'] ?? '';
         $resaltarId = (int) ($_GET['resaltar_id'] ?? 0);
+        // Cuando "Ver" viene de una fila-grupo (ej. "Gasto — DEPARTAMENTO X — 29 ítem(s)" en
+        // Pendientes, ver agruparPendientesPorDependencia()), solo debe cargar los ítems de ESE
+        // grupo — no todos los pendientes del origen mezclados con los de otras dependencias.
+        $dependenciaFiltro = trim($_GET['dependencia'] ?? '');
 
         if (!in_array($estado, ['pendiente', 'aprobada', 'archivada', 'enviada'], true) || !isset(self::TABLAS_ORIGEN[$origen])) {
             header('Location: index.php?ruta=peticiones');
@@ -497,6 +503,9 @@ class PeticionesControlador
             $error = $this->procesarAccionCeldaTipoDetalle($origen);
             $destino = 'index.php?ruta=peticiones-tipo-detalle&estado=' . urlencode($estado) . '&origen=' . urlencode($origen)
                 . '&anio_id=' . $anioSeleccionadoId . '&resaltar_id=' . $resaltarId;
+            if ($dependenciaFiltro !== '') {
+                $destino .= '&dependencia=' . urlencode($dependenciaFiltro);
+            }
             if ($error !== '') {
                 $_SESSION['peticiones_flash_error'] = $error;
             }
@@ -508,6 +517,13 @@ class PeticionesControlador
         unset($_SESSION['peticiones_flash_error']);
 
         $itemsCrudos = $this->obtenerItemsCrudosPorEstado($estado, $origen, $anioSeleccionadoId, $dependenciasPermitidas);
+
+        if ($dependenciaFiltro !== '') {
+            $itemsCrudos = array_values(array_filter(
+                $itemsCrudos,
+                static fn (array $item): bool => ($item['dependencia_origen'] ?? $item['detalle'] ?? null) === $dependenciaFiltro
+            ));
+        }
         $resultado = $this->construirFilasPorOrigen($origen, $itemsCrudos, $anioSeleccionadoId, $estado);
         $columnas = $resultado['columnas'];
         $clavesFila = $resultado['claves'];
@@ -537,6 +553,9 @@ class PeticionesControlador
             'ingreso_unisalud' => 'Ingreso Unisalud', 'ingreso_sin_excedentes' => 'Ingreso Convenios',
         ];
         $tituloPagina = ($filasCompletas[0]['tipo'] ?? $etiquetasOrigen[$origen] ?? $origen) . ' — ' . ($etiquetasEstado[$estado] ?? $estado);
+        if ($dependenciaFiltro !== '') {
+            $tituloPagina .= ' — ' . $dependenciaFiltro;
+        }
 
         $camposEditables = self::CAMPOS_EDITABLES[$origen] ?? [];
         $rutaVolver = 'index.php?ruta=peticiones&vista=' . ($estado === 'pendiente' ? 'pendientes' : ($estado === 'aprobada' ? 'consolidado' : ($estado === 'archivada' ? 'archivar' : 'enviadas')));
@@ -1226,7 +1245,7 @@ class PeticionesControlador
                 'techo' => $techo !== null ? (float) $techo : null,
                 'cantidad' => $item['cantidad'],
                 'valor' => $item['valor'] !== null ? (float) $item['valor'] : null,
-                'ruta_ver' => $item['ruta_ver'],
+                'ruta_ver' => $this->construirRutaVer($item['origen'], (int) $item['origen_id'], 'aprobada'),
             ];
         }
 
@@ -2530,28 +2549,15 @@ class PeticionesControlador
             return !isset($archivadas[$item['origen'] . ':' . $item['origen_id']]);
         }));
 
-        $necesidadesVisibles = $this->obtenerNecesidadesVisibles();
-
-        if (count($necesidadesVisibles) > 1) {
-            $totalValorNecesidades = array_sum(array_map(static fn (array $f): float => (float) $f['valor'], $necesidadesVisibles));
-            $pendientes[] = [
-                'origen' => 'necesidad_grupo',
-                'origen_id' => 0,
-                'tipo' => 'Perfil de proyectos',
-                'detalle' => count($necesidadesVisibles) . ' proyectos pendientes',
-                'cantidad' => (string) count($necesidadesVisibles),
-                'valor' => $totalValorNecesidades,
-                'accion_aprobar' => 'Aceptar todos',
-                'accion_rechazar' => 'Archivar todos',
-                'ruta_origen' => 'index.php?ruta=perfil-proyectos',
-                'ruta_ver' => 'index.php?ruta=perfil-proyectos',
-                'semaforo' => null,
-                'puede_actuar' => true,
-            ];
-        } else {
-            foreach ($necesidadesVisibles as $fila) {
-                $pendientes[] = $this->fila('necesidad', (int) $fila['id'], 'Perfil de proyectos', $fila['dependencia_destino'] ?? $fila['dependencia'], null, (float) $fila['valor'], 'gasto', 'index.php?ruta=perfil-proyectos', $this->construirRutaVer('necesidad', (int) $fila['id'], 'pendiente'));
-            }
+        // Perfil de proyectos ya no se resume en una sola fila "N proyectos pendientes" que abría
+        // el landing viejo (index.php?ruta=perfil-proyectos) sin distinguir dependencia — cada
+        // necesidad es su propia fila (como el resto de orígenes), y agruparPendientesPorDependencia()
+        // (ver más abajo) las agrupa por dependencia de origen igual que ya hace con Gasto, con
+        // "Ver" llevando a la tabla real (peticiones-tipo-detalle), filtrada a esa dependencia.
+        foreach ($this->obtenerNecesidadesVisibles() as $fila) {
+            $itemNecesidad = $this->fila('necesidad', (int) $fila['id'], 'Perfil de proyectos', $fila['dependencia_destino'] ?? $fila['dependencia'], null, (float) $fila['valor'], 'gasto', 'index.php?ruta=perfil-proyectos', $this->construirRutaVer('necesidad', (int) $fila['id'], 'pendiente'));
+            $itemNecesidad['dependencia_origen'] = $fila['dependencia'];
+            $pendientes[] = $itemNecesidad;
         }
 
         $pendientes = array_values(array_filter($pendientes, static function (array $item) use ($archivadas): bool {
@@ -2654,24 +2660,28 @@ class PeticionesControlador
         $grupos = [];
 
         foreach ($pendientes as $item) {
-            // Se agrupa por la dependencia de ORIGEN del gasto (dependencia_origen), no por la
-            // dependencia DESTINO a la que se envió (detalle): varios gastos de programas distintos
+            // Se agrupa por la dependencia de ORIGEN (dependencia_origen si el origen la trae, ej.
+            // Gasto/Ingreso; si no, "detalle" — la dependencia/facultad remitente en Solicitudes),
+            // no por la dependencia DESTINO a la que se envió: varios ítems de programas distintos
             // (ej. "INGENIERÍA QUÍMICA", "INGENIERÍA MECÁNICA") pueden llegar al mismo destinatario
-            // en un solo envío, y deben verse como grupos separados, no fusionados en uno solo.
-            $clave = $item['dependencia_origen'] ?? $item['detalle'];
+            // en un solo envío, y deben verse como grupos separados, no fusionados en uno solo. La
+            // clave incluye el origen para no mezclar, por ejemplo, un Gasto y un ARL de la misma
+            // dependencia en un solo grupo.
+            $nombreDependencia = $item['dependencia_origen'] ?? $item['detalle'];
+            $clave = $item['origen'] . '|' . $nombreDependencia;
 
             if (!isset($grupos[$clave])) {
                 $grupos[$clave] = [
                     'origen' => $item['origen'],
                     'origen_id' => 0,
                     'tipo' => $item['tipo'],
-                    'detalle' => $clave,
+                    'detalle' => $nombreDependencia,
                     'cantidad' => 0,
                     'valor' => 0.0,
                     'accion_aprobar' => $item['accion_aprobar'],
                     'accion_rechazar' => $item['accion_rechazar'],
                     'ruta_origen' => $item['ruta_origen'],
-                    'ruta_ver' => $this->construirRutaVer($item['origen'], 0, 'pendiente'),
+                    'ruta_ver' => $this->construirRutaVer($item['origen'], 0, 'pendiente') . '&dependencia=' . urlencode($nombreDependencia),
                     'redireccionado' => false,
                     'semaforo' => null,
                     'puede_actuar' => true,
