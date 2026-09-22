@@ -8,6 +8,26 @@ allá, en orden, para no perder ningún ajuste antes de un despliegue real.
 Cada entrada indica: fecha, qué cambia, qué archivo(s) de `sql/` lo implementan, y el estado
 (`Pendiente` hasta que alguien confirme que ya se aplicó también en producción).
 
+## Para aplicar todo de una sola vez en producción
+
+**`sql/produccion_pendientes_consolidado.sql`** junta las **5 entradas de abajo** (color de icono
+por rol, Consulta/Formulador + su corrección de dependencia por Facultad, % por ítem de Extensión,
+ítems propios de Postgrado, y tope único por módulo) en un solo archivo, en el orden correcto, para
+poder correr todo de una sola vez en vez de ejecutar los archivos sueltos uno por uno.
+
+Cada `ALTER` usa `IF [NOT] EXISTS` (o el equivalente con SQL dinámico, para los `FOREIGN KEY`, que
+MariaDB no soporta con `IF NOT EXISTS`) y cada `INSERT`/`UPDATE` valida antes si hace falta, sin
+pisar datos que ya se hayan corregido a mano en producción (color de un rol ya personalizado,
+dependencia de un Invitado ya corregida a mano, ítems de Autogestión ya configurados, etc. — ver el
+comentario de cada paso dentro del archivo). Es seguro volver a correrlo si una corrida anterior se
+cortó a la mitad. Probado localmente corriéndolo dos veces seguidas sobre una base ya migrada: sin
+errores, sin duplicados, y de hecho terminó de poner al día un par de usuarios Invitados que se
+habían quedado sin `rol_id`/dependencia asignados de una corrida manual anterior.
+
+No trae `USE <basededatos>;` a propósito: conéctate primero a la base de datos de producción
+correcta y corre el archivo completo tal cual, en una sola sesión. Se recomienda respaldar la base
+de datos antes de correrlo.
+
 ---
 
 ## 2026-09-20 — Color de icono por rol
@@ -101,6 +121,27 @@ Cada entrada indica: fecha, qué cambia, qué archivo(s) de `sql/` lo implementa
   local se llama `again` — se aplicó saltándose esa línea. La fila `autogestion_porcentajes` de
   `modulo='postgrado'` queda congelada/sin usar desde Configuraciones (igual que pasó con
   `extension`), reemplazada por el % del ítem "General".
+
+---
+
+## 2026-09-21 — Tope único por módulo (Extensión/Postgrado), ya no por ítem
+
+- **Archivo:** `sql/autogestion_tope_por_modulo.sql`
+- **Cambio:** `autogestion_porcentajes` gana la columna `tope DECIMAL(15,2) NULL`; se siembra con
+  la suma de los topes que tuvieran los ítems activos de `extension`/`postgrado` en ese momento
+  (normalmente 0/NULL, si nadie había configurado nada); luego se elimina la columna `tope` de
+  `autogestion_items` (deja de existir por ítem).
+- **Motivo:** El tope debe ser UN SOLO número por módulo (el denominador de las tarjetas de
+  Autogestión/Postgrado en Inicio, ver `DashboardControlador::obtenerResumenIngresos()`), no una
+  suma de topes sueltos configurados ítem por ítem — así lo pidió el usuario explícitamente después
+  de ver que la tabla de ítems seguía mostrando una columna "Tope" por fila.
+- **Aplicado en local:** Sí (2026-09-21).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Ejecutar **después** de `sql/autogestion_items_porcentajes.sql` y
+  `sql/postgrado_autogestion_items.sql` (ambos ya crean/usan `autogestion_items`/
+  `autogestion_porcentajes`). El archivo trae `USE new_ua;` pero la BD local se llama `again` — se
+  aplicó saltándose esa línea. En Configuraciones > Autogestión, el tope de Extensión/Postgrado
+  ahora se edita en un solo campo arriba de la tabla de ítems (acción `guardar_tope`), no por fila.
 
 <!--
 Plantilla para la próxima entrada:
