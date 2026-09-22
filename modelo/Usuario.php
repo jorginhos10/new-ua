@@ -154,7 +154,7 @@ class Usuario
     public function obtenerPorRol(string $rol): array
     {
         $consulta = $this->db->prepare(
-            'SELECT u.id, u.nombre, u.correo, u.rol, u.rol_id, u.dependencia_id, u.estamento_id, u.menu_personalizado, u.es_super_admin, u.creado_en, u.ultimo_acceso, r.nombre AS rol_catalogo, d.nombre AS dependencia_nombre, d.tipo AS dependencia_tipo, e.nombre AS estamento_nombre
+            'SELECT u.id, u.nombre, u.correo, u.rol, u.rol_id, u.dependencia_id, u.estamento_id, u.menu_personalizado, u.es_super_admin, u.creado_en, u.ultimo_acceso, r.nombre AS rol_catalogo, r.color AS rol_color, d.nombre AS dependencia_nombre, d.tipo AS dependencia_tipo, e.nombre AS estamento_nombre
              FROM usuarios u
              LEFT JOIN roles r ON r.id = u.rol_id
              LEFT JOIN dependencias d ON d.id = u.dependencia_id
@@ -239,9 +239,17 @@ class Usuario
 
         $marcadores = implode(',', array_fill(0, count($dependenciaIds), '?'));
         $consulta = $this->db->prepare(
-            "SELECT id, nombre, correo, rol, creado_en FROM usuarios
-             WHERE dependencia_id IN ($marcadores)
-             ORDER BY creado_en DESC LIMIT $limite"
+            "SELECT u.id, u.nombre, u.correo,
+                    CASE
+                        WHEN u.es_super_admin = 1 THEN 'Superadmin'
+                        WHEN u.rol_id IS NOT NULL THEN r.nombre
+                        ELSE u.rol
+                    END AS rol,
+                    u.creado_en
+             FROM usuarios u
+             LEFT JOIN roles r ON r.id = u.rol_id
+             WHERE u.dependencia_id IN ($marcadores)
+             ORDER BY u.creado_en DESC LIMIT $limite"
         );
         $consulta->execute(array_map('intval', $dependenciaIds));
 

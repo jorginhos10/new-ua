@@ -37,11 +37,6 @@
         <p class="enlace-secundario">
             <a href="#" id="enlace-recuperar-password">Recuperar contraseña</a>
         </p>
-        <p class="enlace-secundario">
-            <a href="publico/documentos/ficha-tecnica.docx">Ficha técnica</a>
-            &nbsp;·&nbsp;
-            <a href="publico/documentos/esencia-del-software.docx">¿Para qué sirve?</a>
-        </p>
     </div>
 
     <div id="modal-recuperar-password" class="modal-fondo">

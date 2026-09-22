@@ -8,6 +8,7 @@ require_once __DIR__ . '/../modelo/Rol.php';
 require_once __DIR__ . '/../modelo/Mensaje.php';
 require_once __DIR__ . '/../modelo/Gasto.php';
 require_once __DIR__ . '/../modelo/PresupuestoVersion.php';
+require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 
 class TechosControlador
 {
@@ -93,7 +94,133 @@ class TechosControlador
 
         $totalRestante = $totalTecho - $totalAsignado;
 
+        if ($esSuperAdmin) {
+            $anioSeleccionado = null;
+            foreach ($aniosActivos as $anioFila) {
+                if ((int) $anioFila['id'] === $anioSeleccionadoId) {
+                    $anioSeleccionado = $anioFila;
+                    break;
+                }
+            }
+            $techoAsignadoPadre = $anioSeleccionado !== null ? (float) $anioSeleccionado['presupuesto'] : null;
+        } else {
+            $techoAsignadoPadre = $dependenciaUsuarioId !== null && isset($presupuestosActuales[$dependenciaUsuarioId]['techo'])
+                ? (float) $presupuestosActuales[$dependenciaUsuarioId]['techo']
+                : null;
+        }
+
         require __DIR__ . '/../vista/techos/index.php';
+    }
+
+    public function exportar(): void
+    {
+        if (empty($_SESSION['usuario_id']) || $_SESSION['usuario_rol'] !== 'administrador') {
+            header('Location: index.php?ruta=login');
+            exit;
+        }
+
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+        $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
+        $esSuperAdmin = $usuarioActual !== null && (int) ($usuarioActual['es_super_admin'] ?? 0) === 1;
+
+        $aniosActivos = $this->modeloAnio->obtenerActivos();
+        $anioSeleccionadoId = isset($_GET['anio_id']) ? (int) $_GET['anio_id'] : (int) ($aniosActivos[0]['id'] ?? 0);
+
+        $anioTexto = (string) $anioSeleccionadoId;
+        foreach ($aniosActivos as $anioFila) {
+            if ((int) $anioFila['id'] === $anioSeleccionadoId) {
+                $anioTexto = (string) $anioFila['anio'];
+                break;
+            }
+        }
+
+        $arbolHijas = $dependenciaUsuarioId !== null ? $this->modeloDependencia->construirArbolDescendientes($dependenciaUsuarioId) : [];
+        $presupuestosActuales = $anioSeleccionadoId > 0 ? $this->modeloPresupuestoDependencia->obtenerPorAnio($anioSeleccionadoId) : [];
+        $gastadoPorDependencia = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioSeleccionadoId) : [];
+
+        $asignadoPorId = [];
+        foreach ($arbolHijas as $nodoRaiz) {
+            $this->calcularAsignadoArbol($nodoRaiz, $presupuestosActuales, $gastadoPorDependencia, $asignadoPorId);
+        }
+
+        $ocultarProgramas = !empty($_GET['ocultar_programas']);
+        $tiposOcultos = ['pregrado', 'postgrado'];
+
+        $filas = [];
+
+        $aplanar = function (array $nodos, int $nivel) use (&$aplanar, &$filas, $presupuestosActuales, $asignadoPorId, $esSuperAdmin, $ocultarProgramas, $tiposOcultos): void {
+            foreach ($nodos as $nodo) {
+                $dependencia = $nodo['dependencia'];
+
+                if ($ocultarProgramas && in_array($dependencia['tipo'] ?? null, $tiposOcultos, true)) {
+                    continue;
+                }
+
+                $valores = $presupuestosActuales[$dependencia['id']] ?? ['minimo' => null, 'techo' => null];
+                $gastado = $asignadoPorId[(int) $dependencia['id']] ?? 0.0;
+                $techo = $valores['techo'] !== null ? (float) $valores['techo'] : null;
+                $restante = $techo !== null ? $techo - $gastado : null;
+
+                $fila = [
+                    str_repeat('— ', $nivel) . $dependencia['nombre'],
+                ];
+
+                if ($esSuperAdmin) {
+                    $fila[] = $valores['minimo'] !== null ? number_format((float) $valores['minimo'], 2, ',', '.') : '';
+                }
+
+                $fila[] = $techo !== null ? number_format($techo, 2, ',', '.') : '';
+                $fila[] = number_format($gastado, 2, ',', '.');
+                $fila[] = $restante !== null ? number_format($restante, 2, ',', '.') : '';
+
+                $filas[] = $fila;
+
+                $aplanar($nodo['hijos'], $nivel + 1);
+            }
+        };
+
+        $aplanar($arbolHijas, 0);
+
+        $encabezados = ['Dependencia'];
+        if ($esSuperAdmin) {
+            $encabezados[] = 'Mínimo presupuestal';
+        }
+        $encabezados[] = 'Techo presupuestal';
+        $encabezados[] = 'Asignado';
+        $encabezados[] = 'Restante';
+
+        $nombreDependencia = '';
+        if ($dependenciaUsuarioId !== null) {
+            $dependenciaUsuario = $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId);
+            $nombreDependencia = $dependenciaUsuario['nombre'] ?? '';
+        }
+
+        if ($esSuperAdmin) {
+            $anioSeleccionado = null;
+            foreach ($aniosActivos as $anioFila) {
+                if ((int) $anioFila['id'] === $anioSeleccionadoId) {
+                    $anioSeleccionado = $anioFila;
+                    break;
+                }
+            }
+            $techoAsignadoPadre = $anioSeleccionado !== null ? (float) $anioSeleccionado['presupuesto'] : 0.0;
+        } else {
+            $techoAsignadoPadre = $dependenciaUsuarioId !== null && isset($presupuestosActuales[$dependenciaUsuarioId]['techo'])
+                ? (float) $presupuestosActuales[$dependenciaUsuarioId]['techo']
+                : 0.0;
+        }
+
+        $filasPrevias = [
+            ['Dependencia', $nombreDependencia],
+            [$esSuperAdmin ? 'Presupuesto total del año' : 'Techo asignado', '$' . number_format($techoAsignadoPadre, 2, ',', '.')],
+        ];
+
+        $hojas = [
+            ['nombre' => 'Techos', 'filasPrevias' => $filasPrevias, 'encabezados' => $encabezados, 'filas' => $filas],
+        ];
+
+        GeneradorXlsx::descargarHojas('techos_' . $anioTexto . '.xlsx', $hojas);
+        exit;
     }
 
     private const COLORES_GRAFICA = [

@@ -23,6 +23,10 @@
     --color-costos: #0071e3;
     --color-inversion: #ff9500;
     --color-excedentes: #34c759;
+    --color-gasto-propio: #0071e3;
+    --color-gasto-heredado: #ff9500;
+    --color-gasto-con-techo: #ffcc00;
+    --color-gasto-pista: #48484a;
     --radio: 10px;
     --radio-chico: 6px;
     --sombra: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 6px rgba(0, 0, 0, 0.05);
@@ -643,11 +647,15 @@ input[type="file"]::-webkit-file-upload-button:hover {
     gap: 0.75rem;
     align-items: center;
     padding: 0.6rem 0;
-    margin-top: 0.3rem;
-    border-top: 2px solid var(--color-borde);
+    margin-bottom: 0.3rem;
     font-size: 0.85rem;
     font-weight: 700;
     color: var(--color-texto);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--color-superficie);
+    border-bottom: 1px solid var(--color-borde);
 }
 
 .fila-presupuesto-total.sin-minimo {
@@ -789,6 +797,10 @@ input[type="file"]::-webkit-file-upload-button:hover {
 }
 
 .subarbol-presupuesto.oculto {
+    display: none;
+}
+
+.nodo-arbol-presupuesto.oculto {
     display: none;
 }
 
@@ -1063,6 +1075,22 @@ input[type="file"]::-webkit-file-upload-button:hover {
 
 .tabla-usuarios tbody tr:hover {
     background: #fafafa;
+}
+
+/* Fila de filtro por columna, siempre visible (a diferencia de Dev > Tabla, que la oculta tras un
+   botón "Filtrar") — reutiliza el mismo combobox (.combo-envoltorio/.combo-filtro) con predicción
+   de texto y tarjeta de valores únicos, así que solo hace falta anular el estilo de encabezado
+   (mayúsculas/negrita) que .tabla-usuarios th le heredaría al texto escrito. */
+.fila-filtros-siempre th {
+    padding: 0.35rem 0.5rem;
+    background: var(--color-superficie);
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+}
+
+.fila-filtros-siempre .combo-input {
+    font-size: 0.78rem;
 }
 
 .tabla-usuarios tbody tr:last-child td {
@@ -1888,6 +1916,42 @@ a.barra-progreso:hover {
     background: var(--color-excedentes);
 }
 
+/* Barra de presupuesto de Gastos: paleta propia (azul/naranja/amarillo sobre pista gris) para no
+   compartir significado visual con costos/inversion/excedentes (Extensión, Postgrado, etc.). La
+   pista es gris oscura solo cuando hay algo que mostrar; si la dependencia no registra gasto
+   todavía, se deja en el mismo gris claro que el resto de las barras vacías de la app. */
+.barra-progreso.barra-gastos {
+    background: var(--color-gasto-pista);
+}
+
+.barra-progreso.barra-gastos.sin-gastos {
+    background: var(--color-borde);
+}
+
+.barra-progreso-segmento.gasto-propio {
+    background: var(--color-gasto-propio);
+}
+
+.barra-progreso-segmento.gasto-heredado {
+    background: var(--color-gasto-heredado);
+}
+
+.barra-progreso-segmento.gasto-con-techo {
+    background: var(--color-gasto-con-techo);
+}
+
+.progreso-presupuesto-leyenda .punto.gasto-propio {
+    background: var(--color-gasto-propio);
+}
+
+.progreso-presupuesto-leyenda .punto.gasto-heredado {
+    background: var(--color-gasto-heredado);
+}
+
+.progreso-presupuesto-leyenda .punto.gasto-con-techo {
+    background: var(--color-gasto-con-techo);
+}
+
 .progreso-presupuesto-leyenda {
     display: flex;
     flex-wrap: wrap;
@@ -2191,8 +2255,10 @@ a.barra-progreso:hover {
     margin-top: 0;
 }
 
-.menu-lateral a {
+.menu-lateral a,
+.menu-lateral .enlace-lateral-toggle {
     display: block;
+    width: 100%;
     color: #d2d2d7;
     padding: 0.55rem 0.6rem 0.55rem 1.15rem;
     border-radius: var(--radio-chico);
@@ -2200,19 +2266,36 @@ a.barra-progreso:hover {
     transition: background var(--transicion), color var(--transicion);
 }
 
-.menu-lateral a:hover {
+.menu-lateral a:hover,
+.menu-lateral .enlace-lateral-toggle:hover {
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
     text-decoration: none;
 }
 
-.menu-lateral a.activo {
+.menu-lateral a.activo,
+.menu-lateral .enlace-lateral-toggle.activo {
     background: rgba(10, 132, 255, 0.55);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
     color: #fff;
     font-weight: 600;
+}
+
+/* Botón que reemplaza al <a> normal cuando el enlace del sidebar necesita desplegar opciones
+   antes de navegar (ver .menu-autogestion-item) — mismo look que .menu-lateral a, pero sin los
+   estilos por defecto de <button>. */
+.enlace-lateral-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    border: none;
+    background: none;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
 }
 
 .contenido-principal {
@@ -2295,6 +2378,36 @@ a.barra-progreso:hover {
 .grupo-acciones-encabezado > .boton-agregar:disabled {
     opacity: 0.45;
     cursor: not-allowed;
+}
+
+.boton-auditar {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 34px;
+    padding: 0 0.85rem;
+    border: 1px solid var(--color-borde);
+    border-radius: 999px;
+    background: var(--color-superficie);
+    color: var(--color-texto-secundario);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background var(--transicion), border-color var(--transicion), color var(--transicion);
+}
+
+.boton-auditar:hover {
+    background: var(--color-fondo);
+    border-color: var(--color-borde-hover);
+    color: var(--color-texto);
+    text-decoration: none;
+}
+
+.boton-auditar.activo {
+    background: var(--color-primario-suave);
+    border-color: var(--color-primario);
+    color: var(--color-primario);
 }
 
 .menu-mensajes {
@@ -2474,6 +2587,58 @@ a.barra-progreso:hover {
     font-weight: 700;
     font-size: 0.85rem;
     flex-shrink: 0;
+}
+
+/* Icono de rol (Roles): mismo tamaño/forma que .avatar-usuario, pero con color configurable
+   por rol (inline style), para distinguir de un vistazo Gestor/Avalador/etc. cuando una persona
+   con ese rol comparte nombre con otra en listas y selectores. */
+.icono-rol {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.celda-rol-nombre {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+/* Separa "Consulta" (rol de tipo de cuenta) de la cadena Gestor/Avalador/Formulador en la tabla
+   de Roles — puramente visual, la posición real la sigue dando la columna Orden. */
+.fila-rol-frontera td {
+    border-bottom: 2px solid var(--color-borde-hover);
+}
+
+.campo-color-icono {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 0 0 auto;
+}
+
+.campo-color-icono input[type="color"] {
+    width: 42px;
+    height: 38px;
+    padding: 2px;
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-chico);
+    cursor: pointer;
+    flex: 0 0 auto;
+    min-width: 0;
+}
+
+.campo-color-icono input[type="text"] {
+    width: 110px;
+    min-width: 0;
+    flex: 0 0 auto;
 }
 
 .nombre-usuario {
@@ -2961,6 +3126,19 @@ a.barra-progreso:hover {
     margin: 0;
 }
 
+.etiqueta-techo-padre {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 0.6rem;
+    padding: 0.15rem 0.65rem;
+    border-radius: 999px;
+    background: var(--color-primario-suave);
+    color: var(--color-primario);
+    font-size: 0.8rem;
+    font-weight: 700;
+    vertical-align: middle;
+}
+
 .cabecera-modulo-titulo {
     display: flex;
     align-items: center;
@@ -3048,29 +3226,47 @@ a.barra-progreso:hover {
     color: var(--color-texto);
 }
 
-.selector-autogestion-item {
-    min-width: 220px;
-    padding: 0.5rem 2.2rem 0.5rem 0.9rem;
-    border: 1px solid var(--color-borde);
-    border-radius: var(--radio-chico);
-    font-family: inherit;
-    font-size: 0.88rem;
-    font-weight: 600;
-    color: var(--color-texto);
-    background-color: #fff;
-    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2386868b'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.65rem center;
-    background-size: 1.1rem;
-    appearance: none;
-    -webkit-appearance: none;
-    cursor: pointer;
+/* Ítem de Autogestión (Extensión) en el sidebar (ver parciales/sidebar.php): "Extensión" deja de
+   ser un enlace directo y pasa a ser un acordeón — un clic despliega la lista de ítems ahí mismo,
+   en el flujo normal del menú (empuja hacia abajo el resto de enlaces, no flota encima); solo al
+   elegir un ítem de esa lista se navega a la página. Menos riesgo de terminar en el ítem
+   equivocado que si la elección viviera dentro de la tabla/formularios de la página. */
+.menu-autogestion-item-dropdown {
+    display: none;
+    flex-direction: column;
+    gap: 0.05rem;
+    padding: 0.15rem 0 0.3rem;
 }
 
-.selector-autogestion-item:focus {
-    outline: none;
-    border-color: var(--color-primario);
-    box-shadow: 0 0 0 3px var(--color-primario-suave);
+.menu-autogestion-item-dropdown.abierto {
+    display: flex;
+}
+
+.menu-autogestion-item-dropdown a {
+    display: block;
+    padding: 0.45rem 0.6rem 0.45rem 2.05rem;
+    border-radius: var(--radio-chico);
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 0.8rem;
+    transition: background var(--transicion), color var(--transicion);
+}
+
+.menu-autogestion-item-dropdown a:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    text-decoration: none;
+}
+
+.menu-autogestion-item-dropdown a.activo {
+    background: rgba(10, 132, 255, 0.4);
+    color: #fff;
+    font-weight: 600;
+}
+
+.menu-autogestion-item-flecha {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.7rem;
+    flex-shrink: 0;
 }
 
 .boton-agregar {
@@ -3742,6 +3938,13 @@ a.barra-progreso:hover {
     padding: 1rem 0;
 }
 
+/* Separa las 3 secciones del Mapa (Consejo Superior / estructura actual / Formuladores) — son
+   posiciones puramente visuales, no cambian nada del árbol real de jerarquías. */
+.organigrama-separador {
+    border-top: 2px solid var(--color-borde-hover);
+    margin: 0.25rem 2rem 1rem;
+}
+
 .organigrama {
     display: table;
     margin: 0 auto;
@@ -3954,6 +4157,800 @@ a.barra-progreso:hover {
     text-decoration: none;
     cursor: pointer;
     transition: background var(--transicion), border-color var(--transicion);
+}
+
+/* ============================================================================================
+   Landing único de "Ver" en Peticiones (peticiones-tipo-detalle): puerto real, no una
+   reinterpretación, de vista/dev/pruebas/tabla.php ("Dev > Tabla") — mismo topbar de íconos en
+   píldora, buscador/filtro por combobox, ordenar, ocultar/redimensionar columnas y vista de
+   gráfica. Ver publico/js/tabla-real.js para la mecánica correspondiente.
+   ============================================================================================ */
+
+.tarjeta-tabla {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding: 0.5rem;
+}
+
+.tabla-topbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.6rem;
+    flex-wrap: wrap;
+}
+
+.tabla-boton-volver {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    border-radius: 999px;
+    border: 1px solid var(--color-borde);
+    background: var(--color-superficie);
+    color: var(--color-texto);
+    cursor: pointer;
+    text-decoration: none;
+    transition: background var(--transicion), border-color var(--transicion);
+}
+
+.tabla-boton-volver:hover {
+    background: var(--color-fondo);
+    border-color: var(--color-borde-hover);
+}
+
+.tabla-nombre {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--color-texto);
+    white-space: nowrap;
+}
+
+.tabla-acciones {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-left: auto;
+    flex-wrap: wrap;
+}
+
+.grupo-iconos {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.2rem;
+    background: var(--color-fondo);
+    border-radius: 999px;
+}
+
+.grupo-iconos:empty {
+    display: none;
+}
+
+.icono-boton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--color-texto-secundario);
+    cursor: pointer;
+    text-decoration: none;
+    transition: background var(--transicion), color var(--transicion);
+}
+
+.icono-boton:hover {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+.icono-boton.activo {
+    background: var(--color-primario-suave);
+    color: var(--color-primario);
+}
+
+.icono-boton:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.icono-boton:disabled:hover {
+    background: transparent;
+}
+
+.separador-grupo-basico {
+    width: 1px;
+    height: 18px;
+    background: var(--color-borde);
+    margin: 0 0.15rem;
+    flex-shrink: 0;
+}
+
+.tabla-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-chico);
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+
+.tabla-scroll:hover {
+    scrollbar-color: var(--color-borde-hover) transparent;
+}
+
+.tabla-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.tabla-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.tabla-scroll::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+.tabla-scroll:hover::-webkit-scrollbar-thumb {
+    background-color: var(--color-borde-hover);
+    background-clip: content-box;
+}
+
+.tabla-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-texto-tenue);
+    background-clip: content-box;
+}
+
+.tabla-dev-datos {
+    border-collapse: collapse;
+    table-layout: fixed;
+    width: max-content;
+    font-size: 0.82rem;
+}
+
+.tabla-dev-datos th,
+.tabla-dev-datos td {
+    min-width: 0;
+    padding: 0.5rem 0.6rem;
+    border-bottom: 1px solid var(--color-borde);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+}
+
+.redimensionador-columna {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 3;
+    touch-action: none;
+}
+
+.redimensionador-columna::after {
+    content: '';
+    position: absolute;
+    top: 15%;
+    bottom: 15%;
+    right: 0;
+    width: 1px;
+    background: var(--color-borde);
+}
+
+.redimensionador-columna:hover,
+.redimensionador-columna.redimensionando {
+    background: var(--color-primario);
+    opacity: 0.5;
+}
+
+.redimensionador-columna:hover::after,
+.redimensionador-columna.redimensionando::after {
+    background: transparent;
+}
+
+body.tabla-redimensionando-cursor,
+body.tabla-redimensionando-cursor * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+.tabla-dev-datos thead th {
+    position: sticky;
+    background: var(--color-superficie);
+    z-index: 2;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--color-texto-tenue);
+}
+
+.tabla-dev-datos thead tr.fila-encabezados th {
+    top: 0;
+}
+
+.tabla-dev-datos thead tr.fila-filtros th {
+    padding: 0.3rem 0.5rem;
+}
+
+.tabla-dev-datos thead tr.fila-filtros {
+    display: none;
+}
+
+.tabla-dev-datos thead tr.fila-filtros.visible {
+    display: table-row;
+}
+
+.col-seleccion {
+    width: 34px;
+    text-align: center !important;
+}
+
+.encabezado-columna {
+    position: relative;
+    z-index: 4;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.boton-ordenar {
+    border: none;
+    background: transparent;
+    color: var(--color-texto-tenue);
+    cursor: pointer;
+    padding: 0;
+    display: inline-flex;
+}
+
+.encabezado-columna.orden-asc .boton-ordenar,
+.encabezado-columna.orden-desc .boton-ordenar {
+    color: var(--color-primario);
+}
+
+.tabla-dev-datos tbody tr.fila-oculta-filtro {
+    display: none;
+}
+
+.tabla-dev-datos tbody tr:hover {
+    background: var(--color-fondo);
+}
+
+.tabla-dev-datos tbody tr.fila-seleccionada {
+    background: var(--color-primario-suave);
+}
+
+.tabla-dev-datos tbody tr.fila-resaltada {
+    background: var(--color-primario-suave);
+    outline: 2px solid var(--color-primario);
+    outline-offset: -2px;
+}
+
+.tabla-dev-datos td[data-editable] {
+    cursor: default;
+}
+
+.tabla-dev-datos td.celda-editando input {
+    width: 100%;
+    padding: 0.2rem 0.35rem;
+    border: 1px solid var(--color-primario);
+    border-radius: 4px;
+    font-size: inherit;
+    font-family: inherit;
+}
+
+/* --- Combobox propio (buscar/filtrar): predicción en gris dentro del mismo input, y tarjeta
+   desplegable con los valores únicos solo para Filtrar --- */
+.combo-envoltorio {
+    position: relative;
+    font-size: 0.78rem;
+}
+
+.combo-envoltorio.combo-filtro {
+    width: 100%;
+    min-width: 90px;
+}
+
+.combo-fantasma {
+    box-sizing: border-box;
+    height: 32px;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-chico);
+    background: var(--color-superficie);
+    white-space: pre;
+    line-height: 1.4;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.combo-fantasma-tecleado {
+    color: transparent;
+}
+
+.combo-fantasma-sugerencia {
+    color: var(--color-texto-tenue);
+}
+
+.combo-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid transparent;
+    border-radius: var(--radio-chico);
+    background: transparent;
+    font-size: inherit;
+    font-family: inherit;
+    color: var(--color-texto);
+    box-sizing: border-box;
+}
+
+.combo-input:focus {
+    outline: none;
+}
+
+.combo-envoltorio:focus-within .combo-fantasma {
+    border-color: var(--color-primario);
+}
+
+.combo-tarjeta {
+    position: absolute;
+    top: calc(100% + 0.3rem);
+    left: 0;
+    right: 0;
+    display: none;
+    flex-direction: column;
+    max-height: 220px;
+    overflow-y: auto;
+    background: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-chico);
+    box-shadow: var(--sombra);
+    padding: 0.3rem;
+    z-index: 8;
+}
+
+.combo-tarjeta.abierta {
+    display: flex;
+}
+
+.combo-tarjeta-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 0.5rem;
+    margin: 0;
+    border: none;
+    background: transparent;
+    border-radius: var(--radio-chico);
+    font-size: 0.8rem;
+    line-height: 1.3;
+    color: var(--color-texto);
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 0;
+}
+
+.combo-tarjeta-item:hover {
+    background: var(--color-fondo);
+}
+
+.combo-tarjeta-vacio {
+    padding: 0.4rem 0.5rem;
+    font-size: 0.78rem;
+    color: var(--color-texto-tenue);
+}
+
+.columnas-envoltorio {
+    position: relative;
+}
+
+.columnas-tarjeta {
+    left: 0;
+    right: auto;
+    min-width: 210px;
+}
+
+.columnas-tarjeta-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: var(--radio-chico);
+    font-size: 0.8rem;
+    color: var(--color-texto);
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.columnas-tarjeta-item:hover {
+    background: var(--color-fondo);
+}
+
+.buscar-envoltorio {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.combo-envoltorio.combo-buscar {
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: width 0.2s ease, opacity 0.15s ease, margin-left 0.2s ease;
+}
+
+.combo-envoltorio.combo-buscar .combo-fantasma {
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.buscar-envoltorio.desplegado .combo-envoltorio.combo-buscar {
+    width: 190px;
+    opacity: 1;
+    margin-left: 0.3rem;
+}
+
+/* --- Vista de gráfica: mismo dashboard de decisión del prototipo Dev (Actividad/Rubro/
+   Dependencia/Proyecto PDI), calculado sobre las filas que pasan los filtros de arriba. --- */
+.tabla-grafica {
+    --serie-1: #2a78d6;
+    --serie-2: #eb6834;
+    --serie-3: #1baf7a;
+    --serie-4: #eda100;
+    --serie-5: #e87ba4;
+    --serie-6: #008300;
+    --serie-7: #4a3aa7;
+    --serie-8: #e34948;
+    display: none;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0.75rem 0.25rem 0.5rem;
+}
+
+.tabla-dev-datos.modo-grafica {
+    display: none;
+}
+
+.tabla-dev-datos.modo-grafica ~ .tabla-grafica {
+    display: flex;
+}
+
+.tabla-grafica-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+    flex-shrink: 0;
+}
+
+.grafica-stat {
+    background: var(--color-fondo);
+    border-radius: var(--radio-chico);
+    padding: 0.45rem 0.65rem;
+}
+
+.grafica-stat-etiqueta {
+    margin: 0 0 0.15rem;
+    font-size: 0.7rem;
+    color: var(--color-texto-tenue);
+}
+
+.grafica-stat-valor {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-texto);
+}
+
+.tabla-grafica-paneles {
+    flex: 1;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 0.75rem;
+}
+
+.grafica-panel {
+    background: var(--color-fondo);
+    border-radius: var(--radio-chico);
+    padding: 0.8rem 1rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    cursor: zoom-in;
+}
+
+.grafica-panel-cabecera {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.grafica-panel-titulo {
+    margin: 0 0.1rem 0.15rem;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-texto);
+}
+
+.grafica-panel-subtitulo {
+    margin: 0 0.1rem 0.6rem;
+    font-size: 0.76rem;
+    color: var(--color-texto-tenue);
+    flex-shrink: 0;
+}
+
+.grafica-panel-vacio {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--color-texto-tenue);
+}
+
+.grafica-tipo-toggle {
+    display: inline-flex;
+    border-radius: 999px;
+    background: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    flex-shrink: 0;
+}
+
+.grafica-tipo-boton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    background: transparent;
+    border-radius: 999px;
+    color: var(--color-texto-secundario);
+    cursor: pointer;
+}
+
+.grafica-tipo-boton.activo {
+    background: var(--color-primario);
+    color: #fff;
+}
+
+.grafica-panel-cuerpo {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.grafica-fila-barra {
+    display: grid;
+    grid-template-columns: minmax(70px, 120px) 1fr auto;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.25rem 0.1rem;
+    border-radius: 4px;
+}
+
+.grafica-barra-etiqueta {
+    font-size: 0.8rem;
+    color: var(--color-texto-secundario);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.grafica-barra-pista {
+    height: 18px;
+    border-radius: 0 4px 4px 0;
+    overflow: hidden;
+}
+
+.grafica-barra-relleno {
+    height: 100%;
+    min-width: 3px;
+    background: var(--color-primario);
+    border-radius: 0 4px 4px 0;
+    transition: filter var(--transicion);
+}
+
+.grafica-fila-barra:hover .grafica-barra-relleno,
+.grafica-fila-barra:focus-visible .grafica-barra-relleno {
+    filter: brightness(0.85);
+}
+
+.grafica-fila-barra:focus-visible {
+    outline: 2px solid var(--color-primario);
+    outline-offset: 1px;
+}
+
+.grafica-barra-valor {
+    font-size: 0.78rem;
+    color: var(--color-texto-secundario);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.grafica-torta-cuerpo {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    height: 100%;
+}
+
+.grafica-torta-svg {
+    flex-shrink: 0;
+}
+
+.grafica-torta-porcion {
+    cursor: pointer;
+    transition: filter var(--transicion), opacity var(--transicion);
+    stroke: var(--color-fondo);
+    stroke-width: 1.5;
+}
+
+.grafica-torta-porcion:hover,
+.grafica-torta-porcion.resaltada {
+    filter: brightness(0.88);
+}
+
+.grafica-torta-leyenda {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.grafica-torta-leyenda-fila {
+    display: grid;
+    grid-template-columns: 10px 1fr auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.2rem 0.3rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.grafica-torta-leyenda-fila:hover,
+.grafica-torta-leyenda-fila.resaltada {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.grafica-torta-leyenda-punto {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.grafica-torta-leyenda-etiqueta {
+    font-size: 0.78rem;
+    color: var(--color-texto-secundario);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.grafica-torta-leyenda-valor {
+    font-size: 0.76rem;
+    color: var(--color-texto-tenue);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* --- Línea (PAC estimado por mes): faltaba en el primer copiado del bloque de gráfica —
+   sin esto el panel de "Meses" se veía solo como puntos sueltos, sin trazo ni etiquetas
+   separadas, y "Ampliar" no tenía dónde aplicar su único-panel porque .un-panel tampoco
+   estaba. --- */
+.grafica-linea-cuerpo {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.grafica-linea-svg {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+}
+
+.grafica-linea-base {
+    stroke: var(--color-borde);
+    stroke-width: 1;
+}
+
+.grafica-linea-trazo {
+    stroke: var(--color-primario);
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.grafica-linea-punto {
+    fill: var(--color-primario);
+    stroke: var(--color-fondo);
+    stroke-width: 1.5;
+    cursor: pointer;
+    transition: r var(--transicion);
+}
+
+.grafica-linea-punto:hover,
+.grafica-linea-punto:focus {
+    r: 6;
+    outline: none;
+}
+
+.grafica-linea-meses-etiquetas {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.2rem 8px 0;
+    flex-shrink: 0;
+}
+
+.grafica-linea-mes-etiqueta {
+    font-size: 0.66rem;
+    color: var(--color-texto-tenue);
+}
+
+/* --- Panel ampliado en el propio lugar: doble clic (o el ícono de ampliar) oculta los otros
+   3 paneles y este ocupa toda la cuadrícula. --- */
+.tabla-grafica-paneles.un-panel {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+}
+
+.grafica-panel.expandido .grafica-torta-svg {
+    width: 260px;
+    height: 260px;
+}
+
+.grafica-panel.expandido .grafica-fila-barra {
+    grid-template-columns: minmax(120px, 220px) 1fr auto;
+    padding: 0.4rem 0.2rem;
+}
+
+.grafica-panel.expandido .grafica-barra-pista {
+    height: 22px;
+}
+
+.grafica-tooltip {
+    position: fixed;
+    display: none;
+    max-width: 260px;
+    padding: 0.45rem 0.65rem;
+    border-radius: 6px;
+    background: var(--color-texto);
+    color: #fff;
+    font-size: 0.78rem;
+    line-height: 1.4;
+    pointer-events: none;
+    z-index: 90;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+}
+
+.grafica-tooltip strong {
+    font-variant-numeric: tabular-nums;
 }
 
 .boton-tipo-solicitud:hover {

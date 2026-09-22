@@ -176,22 +176,51 @@ class GastoControlador
         $menuPermitido = $usuarioActual !== null ? $this->modeloMenuPermiso->calcularPermitidoParaUsuario($usuarioActual) : null;
         $puedeVerTechos = $menuPermitido === null || in_array('techos', $menuPermitido, true);
 
+        // Se calcula siempre que haya año seleccionado (antes solo se calculaba para dependencias
+        // no-raíz) — hace falta también para el superadmin raíz, ya que ambos mapas alimentan el
+        // desglose propio/heredado de la barra de abajo.
+        $presupuestosDependencia = $anioSeleccionadoId > 0 ? $this->modeloPresupuestoDependencia->obtenerPorAnio($anioSeleccionadoId) : [];
+        $gastadoPorDependenciaMapa = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioSeleccionadoId) : [];
+        $propioYComprometidoPorDependencia = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesPropioYComprometidoPorDependencia($anioSeleccionadoId) : [];
+
         $techoDependencia = null;
         if ($dependenciaUsuarioId !== null && $anioSeleccionadoId > 0) {
             if ($dependenciaUsuarioEsRaiz) {
                 $techoDependencia = $anioSeleccionado !== null ? (float) $anioSeleccionado['presupuesto'] : null;
             } else {
-                $presupuestosDependencia = $this->modeloPresupuestoDependencia->obtenerPorAnio($anioSeleccionadoId);
                 $techoDependencia = $presupuestosDependencia[$dependenciaUsuarioId]['techo'] ?? null;
                 $techoDependencia = $techoDependencia !== null ? (float) $techoDependencia : null;
             }
         }
 
-        $totalGastado = ($dependenciaUsuario !== null && $anioSeleccionadoId > 0)
-            ? $this->modeloGasto->obtenerTotalEjecutadoPorAnioYDependencia($anioSeleccionadoId, $dependenciaUsuario['nombre'])
-            : 0.0;
+        // Lo que de verdad consume ESTE techo: lo propio + lo de hijas SIN techo propio (heredan el
+        // techo del padre — ver calcularGastadoConHerencia(), ya usado para validar el envío en
+        // enviarTodo()). Esto es lo que manda en $puedeEnviarTodo, sin cambios.
+        $arbolDescendientes = ($dependenciaUsuarioId !== null && $anioSeleccionadoId > 0)
+            ? $this->modeloDependencia->construirArbolDescendientes($dependenciaUsuarioId, true)
+            : [];
+
+        // $gastadoPorDependenciaMapa[nombre] (usado más abajo por sumarGastadoDescendientesSinTecho)
+        // ya incluye, mezclado, tanto lo propio como los espejos de techo (tipo_automatico=
+        // 'techo_hijo') de las hijas DIRECTAS con techo propio que ya empezaron a ejecutar — así
+        // evita el doble conteo la propia lógica de Techos (ver calcularAsignadoArbol()). Por eso NO
+        // se puede sumar aparte, como tercer segmento, el gasto de esas hijas: ya está adentro de
+        // este mismo número. Se usa obtenerTotalesPropioYComprometidoPorDependencia(), que separa esos
+        // dos componentes desde la consulta (mismo criterio de "la hija ya empezó a ejecutar"), para
+        // poder pintarlos como segmentos distintos sin que ninguno duplique al otro.
+        $propioYComprometido = $dependenciaUsuario !== null ? ($propioYComprometidoPorDependencia[$dependenciaUsuario['nombre']] ?? ['propio' => 0.0, 'comprometido' => 0.0]) : ['propio' => 0.0, 'comprometido' => 0.0];
+        $totalGastadoPropio = $propioYComprometido['propio'];
+        $totalGastadoHijasConTecho = $propioYComprometido['comprometido'];
+        $totalGastadoHeredado = $this->sumarGastadoDescendientesSinTecho($arbolDescendientes, $presupuestosDependencia, $gastadoPorDependenciaMapa);
+        $totalGastado = $totalGastadoPropio + $totalGastadoHijasConTecho + $totalGastadoHeredado;
+
         $presupuestoAnio = $techoDependencia ?? 0.0;
         $porcentajeGastado = $presupuestoAnio > 0 ? min(100, ($totalGastado / $presupuestoAnio) * 100) : 0.0;
+        $porcentajeGastadoPropio = $presupuestoAnio > 0 ? min(100, ($totalGastadoPropio / $presupuestoAnio) * 100) : 0.0;
+        $porcentajeGastadoHeredado = $presupuestoAnio > 0 ? max(0, min(100 - $porcentajeGastadoPropio, ($totalGastadoHeredado / $presupuestoAnio) * 100)) : 0.0;
+        $porcentajeGastadoConTecho = $presupuestoAnio > 0
+            ? max(0, min(100 - $porcentajeGastadoPropio - $porcentajeGastadoHeredado, ($totalGastadoHijasConTecho / $presupuestoAnio) * 100))
+            : 0.0;
         $puedeEnviarTodo = $presupuestoAnio > 0 && $totalGastado >= $presupuestoAnio;
 
         $roles = $this->modeloRol->obtenerTodos();
@@ -213,9 +242,34 @@ class GastoControlador
 
         $catalogos = $this->construirCatalogos();
 
+        $dependenciaUsuarioId = !empty($catalogos['usuarioActual']['dependencia_id']) ? (int) $catalogos['usuarioActual']['dependencia_id'] : null;
+        $dependenciaUsuario = $dependenciaUsuarioId !== null ? $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId) : null;
+        $dependenciaUsuarioEsRaiz = $dependenciaUsuario !== null && !empty($dependenciaUsuario['es_raiz_superadmin']);
+
+        $anioSeleccionadoId = isset($_GET['anio_id']) ? (int) $_GET['anio_id'] : (int) ($catalogos['aniosActivos'][0]['id'] ?? 0);
+        $anioSeleccionado = null;
+        foreach ($catalogos['aniosActivos'] as $anioFila) {
+            if ((int) $anioFila['id'] === $anioSeleccionadoId) {
+                $anioSeleccionado = $anioFila;
+                break;
+            }
+        }
+
+        $techoDependencia = null;
+        if ($dependenciaUsuarioId !== null && $anioSeleccionadoId > 0) {
+            if ($dependenciaUsuarioEsRaiz) {
+                $techoDependencia = $anioSeleccionado !== null ? (float) $anioSeleccionado['presupuesto'] : null;
+            } else {
+                $presupuestosDependencia = $this->modeloPresupuestoDependencia->obtenerPorAnio($anioSeleccionadoId);
+                $techoDependencia = $presupuestosDependencia[$dependenciaUsuarioId]['techo'] ?? null;
+                $techoDependencia = $techoDependencia !== null ? (float) $techoDependencia : null;
+            }
+        }
+
         $encabezados = [
             'Año presupuestal *', 'Sede *', 'Dependencia *', 'Proyecto PDI *', 'Contratos comunes',
-            'Actividad *', 'Rubro *', 'Insumo *', 'Cantidad *', 'Costo unitario *', 'Meses de ejecución * (ej: 1,3,5)',
+            'Actividad *', 'Rubro *', 'Insumo *', 'Cantidad *', 'Costo unitario *', 'Valor total',
+            'Meses de ejecución * (ej: 1,3,5)',
         ];
 
         $listas = [
@@ -247,6 +301,7 @@ class GastoControlador
             'Ejemplo: computadores portátiles',
             '1',
             '1000000',
+            '',
             '1,2,3',
         ];
 
@@ -256,7 +311,16 @@ class GastoControlador
             'usuario_nombre' => $catalogos['usuarioActual']['nombre'] ?? '',
         ];
 
-        GeneradorXlsx::descargar('plantilla_gastos.xlsx', $encabezados, $columnasConLista, $listas, $filaEjemplo, $metadatos);
+        // Siempre se incluye (con 0.00 si no hay techo asignado) para que la plantilla tenga
+        // siempre la misma forma: fila 1 = techo, fila 2 = encabezados, datos desde la fila 3.
+        $validacionTecho = [
+            'techo' => $techoDependencia ?? 0.0,
+            'columnaCantidad' => 8,
+            'columnaValorUnitario' => 9,
+            'columnaValorTotal' => 10,
+        ];
+
+        GeneradorXlsx::descargar('plantilla_gastos.xlsx', $encabezados, $columnasConLista, $listas, $filaEjemplo, $metadatos, $validacionTecho);
         exit;
     }
 
@@ -395,15 +459,14 @@ class GastoControlador
             return ['No se pudo leer el archivo: ' . $excepcion->getMessage(), '', []];
         }
 
+        // Se descartan las 2 filas de encabezado (1: validación de techo, 2: nombres de columna).
+        // No se filtran filas "vacías" aquí por su texto concatenado: la columna Valor total trae
+        // fórmula en las 200 filas de la plantilla, así que una fila realmente vacía igual puede
+        // traer un "0" residual ahí. Cada fila se evalúa más abajo contando cuántos de sus campos
+        // obligatorios (*) están vacíos (ver validarFilaImportacion()).
         array_shift($filas);
-        $filas = array_values(array_filter(
-            $filas,
-            static fn (array $fila): bool => trim(implode('', $fila)) !== ''
-        ));
-
-        if (empty($filas)) {
-            return ['El archivo no contiene filas para importar.', '', []];
-        }
+        array_shift($filas);
+        $filas = array_values($filas);
 
         $catalogos = $this->construirCatalogos();
         $dependenciasPermitidas = $catalogos['dependenciasSugeridas'];
@@ -447,8 +510,10 @@ class GastoControlador
                 $mapaRubros
             );
 
-            if ($errorFila !== '') {
-                $errores[] = "Fila $numeroFilaExcel: $errorFila";
+            if ($datos === null) {
+                if ($errorFila !== '') {
+                    $errores[] = "Fila $numeroFilaExcel: $errorFila";
+                }
                 continue;
             }
 
@@ -507,7 +572,11 @@ class GastoControlador
     }
 
     /**
-     * @return array{0: array|null, 1: string} [datos listos para Gasto::crear(), mensaje de error]
+     * @return array{0: array|null, 1: string} [datos listos para Gasto::crear(), mensaje de error].
+     *         Cuando datos es null y el error es '', la fila se ignora en silencio (más de 4 de
+     *         sus campos obligatorios en blanco: sobra de la plantilla, no un intento real de
+     *         diligenciarla — mismo criterio que usan las plantillas de Autogestión), en vez de
+     *         reportarse como error.
      */
     private function validarFilaImportacion(
         array $fila,
@@ -528,12 +597,18 @@ class GastoControlador
         $insumo = trim($fila[7] ?? '');
         $cantidadTexto = trim($fila[8] ?? '');
         $costoTexto = trim($fila[9] ?? '');
-        $mesesTexto = trim($fila[10] ?? '');
+        $mesesTexto = trim($fila[11] ?? '');
 
-        if ($anioTexto === '' || $sedeTexto === '' || $dependenciaTexto === '' || $proyectoTexto === ''
-            || $actividad === '' || $rubroTexto === '' || $insumo === '' || $cantidadTexto === ''
-            || $costoTexto === '' || $mesesTexto === ''
-        ) {
+        $vacios = count(array_filter(
+            [$anioTexto, $sedeTexto, $dependenciaTexto, $proyectoTexto, $actividad, $rubroTexto, $insumo, $cantidadTexto, $costoTexto, $mesesTexto],
+            static fn (string $valor): bool => $valor === ''
+        ));
+
+        if ($vacios > 4) {
+            return [null, ''];
+        }
+
+        if ($vacios > 0) {
             return [null, 'todos los campos obligatorios (*) deben estar diligenciados.'];
         }
 
@@ -721,10 +796,20 @@ class GastoControlador
     {
         $usuarioActualId = (int) ($usuarioActual['id'] ?? 0);
         $dependenciaUsuarioNombre = null;
+        $dependenciaFila = null;
 
         if (!empty($usuarioActual['dependencia_id'])) {
             $dependenciaFila = $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id']);
             $dependenciaUsuarioNombre = $dependenciaFila['nombre'] ?? null;
+        }
+
+        // "Auditar" (toggle global de la headerbar, solo para la dependencia raíz): en vez de
+        // exigir ser dueño o destinatario exacto de cada ítem, se ve todo lo que cae en el árbol
+        // de dependencias — mismo bypass que ya usa Peticiones en modo jerarquía.
+        if (!empty($_SESSION['modo_auditoria']) && $dependenciaFila !== null && !empty($dependenciaFila['es_raiz_superadmin'])) {
+            return array_values(array_filter($items, static fn (array $item): bool =>
+                in_array($item['dependencia'] ?? $item['dependencia_destino'] ?? null, $dependenciasPermitidas, true)
+            ));
         }
 
         $rolUsuarioId = !empty($usuarioActual['rol_id']) ? (int) $usuarioActual['rol_id'] : null;
@@ -1003,6 +1088,9 @@ class GastoControlador
         if ($dependenciaObjetivo !== null) {
             $dependenciaNombre = $dependenciaObjetivo['nombre'];
         }
+        // Solo para mostrar en los mensajes de abajo — $dependenciaNombre sigue siendo el nombre
+        // real (necesario para enviarTodosBorrador() y para que coincida con lo ya guardado).
+        $dependenciaNombreVisible = Dependencia::nombreVisible($dependenciaNombre);
 
         // "Enviar todo" agrupa por USUARIO, no por techo: toda la sub-rama de dependencias que
         // cuelga de $dependenciaObjetivo es la misma que ve y edita este usuario en su tabla de
@@ -1024,7 +1112,7 @@ class GastoControlador
             $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
 
             if (empty($destinatarios)) {
-                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '". Selecciona a quién remitir la petición.', ''];
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombreVisible . '". Selecciona a quién remitir la petición.', ''];
             }
         }
 
@@ -1036,7 +1124,7 @@ class GastoControlador
         $enviados = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaNombre, $rolDestinatarioId, $nombresAdicionales, $usuarioDestinatarioResuelto);
 
         if ($enviados === 0) {
-            return ['No hay gastos en borrador para enviar en "' . $dependenciaNombre . '".', ''];
+            return ['No hay gastos en borrador para enviar en "' . $dependenciaNombreVisible . '".', ''];
         }
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
@@ -1045,13 +1133,13 @@ class GastoControlador
             $this->modeloMensaje->crear(
                 $remitenteId,
                 (int) $destinatario['id'],
-                'Gastos enviados — ' . $dependenciaNombre,
-                'Se enviaron ' . $enviados . ' gasto(s) de "' . $dependenciaNombre . '" para tu revisión.'
+                'Gastos enviados — ' . $dependenciaNombreVisible,
+                'Se enviaron ' . $enviados . ' gasto(s) de "' . $dependenciaNombreVisible . '" para tu revisión.'
             );
         }
 
         if (empty($destinatarios)) {
-            return ['', 'Se enviaron ' . $enviados . ' gasto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '" para notificar.'];
+            return ['', 'Se enviaron ' . $enviados . ' gasto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombreVisible . '" para notificar.'];
         }
 
         return ['', 'Se enviaron ' . $enviados . ' gasto(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ').'];

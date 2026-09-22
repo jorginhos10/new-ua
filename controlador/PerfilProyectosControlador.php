@@ -13,6 +13,7 @@ require_once __DIR__ . '/../modelo/Proyecto.php';
 require_once __DIR__ . '/../modelo/Estamento.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/PeticionArchivada.php';
+require_once __DIR__ . '/../modelo/RelojArenaFormulador.php';
 
 class PerfilProyectosControlador
 {
@@ -27,6 +28,7 @@ class PerfilProyectosControlador
     private Proyecto $modeloProyecto;
     private Estamento $modeloEstamento;
     private AnioPresupuestal $modeloAnio;
+    private RelojArenaFormulador $modeloRelojFormulador;
 
     private const CAMPOS_REQUERIDOS_PROYECTO = [
         'vigencia',
@@ -58,6 +60,7 @@ class PerfilProyectosControlador
         $this->modeloProyecto = new Proyecto();
         $this->modeloEstamento = new Estamento();
         $this->modeloAnio = new AnioPresupuestal();
+        $this->modeloRelojFormulador = new RelojArenaFormulador();
     }
 
     public function index(): void
@@ -67,20 +70,23 @@ class PerfilProyectosControlador
             exit;
         }
 
-        if ($_SESSION['usuario_rol'] !== 'administrador') {
+        if (!in_array($_SESSION['usuario_rol'], ['administrador', 'invitado'], true)) {
             header('Location: index.php?ruta=dashboard');
             exit;
         }
 
+        $esInvitado = $_SESSION['usuario_rol'] === 'invitado';
         $error = '';
         $exito = '';
+        $dentroDeVentana = $esInvitado ? $this->modeloRelojFormulador->estaDentroDeVentana() : true;
+        $configuracionFormulador = $esInvitado ? $this->modeloRelojFormulador->obtener() : null;
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'enviar_todo') {
-            [$error, $exito] = $this->enviarTodo();
+            [$error, $exito] = $this->enviarTodo($esInvitado);
         } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_proyecto') {
-            [$error, $exito] = $this->crearProyecto();
+            [$error, $exito] = $this->crearProyecto($esInvitado, $dentroDeVentana);
         } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'actualizar_proyecto') {
-            [$error, $exito] = $this->actualizarProyecto();
+            [$error, $exito] = $this->actualizarProyecto($esInvitado, $dentroDeVentana);
         } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'eliminar_seleccionados') {
             [$error, $exito] = $this->eliminarSeleccionados();
         } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'duplicar_seleccionados') {
@@ -91,22 +97,39 @@ class PerfilProyectosControlador
         $necesidades = $this->modeloNecesidad->obtenerTodas();
         $necesidades = $this->filtrarPorPropietarioODestinatario($necesidades, $usuarioActual);
         $roles = $this->modeloRol->obtenerTodos();
-        $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
         $dependenciasSugeridas = array_column($this->modeloDependencia->obtenerActivas(), 'nombre');
-        $dependenciasTodas = $this->modeloDependencia->obtenerActivasParaEnvio();
         $dependenciasPrograma = $this->modeloDependencia->obtenerPorTipos(self::PROGRAMA_ACADEMICO_TIPOS);
         $lineasInversion = $this->modeloLineaInversion->obtenerActivas();
         $sublineasInversion = $this->modeloSublineaInversion->obtenerActivas();
         $sedes = $this->modeloSede->obtenerTodas();
         $proyectos = $this->modeloProyecto->obtenerTodos();
         $estamentos = $this->modeloEstamento->obtenerTodos();
-        $avaladores = $this->obtenerAvaladores();
         $aniosVigencia = $this->obtenerAniosVigencia();
         $puedeEnviarTodo = !empty(array_filter($necesidades, static fn (array $n): bool => ($n['estado'] ?? 'borrador') === 'borrador'));
+
+        // Para invitado (Formulador), "Responsable"/destinatario se acota siempre a los Gestores de
+        // su propia Facultad — nunca ve ni puede elegir el mapa completo dependencia→rol→usuario de
+        // la universidad, que solo se calcula/inyecta para administrador.
+        if ($esInvitado) {
+            $avaladores = $this->obtenerGestoresDeMiFacultad();
+            $etiquetaResponsable = 'gestor';
+            $dependenciasTodas = [];
+            $usuariosPorDependenciaYRol = [];
+        } else {
+            $avaladores = $this->obtenerAvaladores();
+            $etiquetaResponsable = 'avalador';
+            $dependenciasTodas = $this->modeloDependencia->obtenerActivasParaEnvio();
+            $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
+        }
 
         $proyectoParaEditar = null;
         if (isset($_GET['editar_id']) && ctype_digit((string) $_GET['editar_id'])) {
             $proyectoParaEditar = $this->modeloNecesidad->obtenerPorId((int) $_GET['editar_id']);
+
+            // Nadie, sin importar el rol, puede entrar a editar un proyecto que no es suyo.
+            if ($proyectoParaEditar !== null && (int) $proyectoParaEditar['usuario_id'] !== (int) $_SESSION['usuario_id']) {
+                $proyectoParaEditar = null;
+            }
         }
         $volverEdicion = $_GET['volver'] ?? '';
 
@@ -122,10 +145,26 @@ class PerfilProyectosControlador
     {
         $usuarioActualId = (int) ($usuarioActual['id'] ?? 0);
         $dependenciaUsuarioNombre = null;
+        $dependenciaFila = null;
 
         if (!empty($usuarioActual['dependencia_id'])) {
             $dependenciaFila = $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id']);
             $dependenciaUsuarioNombre = $dependenciaFila['nombre'] ?? null;
+        }
+
+        // "Auditar" (toggle global de la headerbar, solo para la dependencia raíz): en vez de
+        // exigir ser dueño o destinatario exacto de cada necesidad, se ve todo lo que cae en el
+        // árbol de dependencias — mismo bypass que ya usa Peticiones en modo jerarquía.
+        if (!empty($_SESSION['modo_auditoria']) && $dependenciaFila !== null && !empty($dependenciaFila['es_raiz_superadmin'])) {
+            $dependenciasPermitidas = [$dependenciaUsuarioNombre];
+            foreach ($this->modeloDependencia->obtenerDescendientesPlano((int) $usuarioActual['dependencia_id']) as $descendiente) {
+                $dependenciasPermitidas[] = $descendiente['nombre'];
+            }
+
+            return array_values(array_filter($items, static fn (array $item): bool =>
+                in_array($item['dependencia'] ?? null, $dependenciasPermitidas, true)
+                || in_array($item['dependencia_destino'] ?? null, $dependenciasPermitidas, true)
+            ));
         }
 
         $rolUsuarioId = !empty($usuarioActual['rol_id']) ? (int) $usuarioActual['rol_id'] : null;
@@ -165,6 +204,28 @@ class PerfilProyectosControlador
         return $this->modeloUsuario->obtenerPorRolId((int) $rolAvalador['id']);
     }
 
+    /**
+     * El invitado (Formulador) envía su proyecto al Gestor de su propia Facultad — no a cualquier
+     * Avalador. Se busca por el rol "Gestor" del catálogo y la dependencia_id del propio invitado
+     * (su Facultad real). Si no tiene dependencia_id asignada, no hay a quién enviarle.
+     */
+    private function obtenerGestoresDeMiFacultad(): array
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+
+        if ($usuarioActual === null || empty($usuarioActual['dependencia_id'])) {
+            return [];
+        }
+
+        $rolGestor = $this->modeloRol->obtenerPorNombre('Gestor');
+
+        if ($rolGestor === null) {
+            return [];
+        }
+
+        return $this->modeloUsuario->obtenerPorDependenciaYRol((int) $usuarioActual['dependencia_id'], (int) $rolGestor['id']);
+    }
+
     private function obtenerAniosVigencia(): array
     {
         $aniosActivos = $this->modeloAnio->obtenerActivos();
@@ -185,7 +246,7 @@ class PerfilProyectosControlador
             exit;
         }
 
-        if ($_SESSION['usuario_rol'] !== 'administrador') {
+        if (!in_array($_SESSION['usuario_rol'], ['administrador', 'invitado'], true)) {
             header('Location: index.php?ruta=dashboard');
             exit;
         }
@@ -244,8 +305,12 @@ class PerfilProyectosControlador
         exit;
     }
 
-    private function crearProyecto(): array
+    private function crearProyecto(bool $esInvitado, bool $dentroDeVentana): array
     {
+        if ($esInvitado && !$dentroDeVentana) {
+            return ['No estás dentro de la fecha habilitada para formular necesidades.', ''];
+        }
+
         $datos = [];
 
         foreach ($_POST as $campo => $valor) {
@@ -299,11 +364,17 @@ class PerfilProyectosControlador
         return ['', 'Proyecto registrado correctamente.'];
     }
 
-    private function actualizarProyecto(): array
+    private function actualizarProyecto(bool $esInvitado, bool $dentroDeVentana): array
     {
-        $id = (int) ($_POST['id'] ?? 0);
+        if ($esInvitado && !$dentroDeVentana) {
+            return ['No estás dentro de la fecha habilitada para formular necesidades.', ''];
+        }
 
-        if ($id <= 0 || $this->modeloNecesidad->obtenerPorId($id) === null) {
+        $id = (int) ($_POST['id'] ?? 0);
+        $existente = $id > 0 ? $this->modeloNecesidad->obtenerPorId($id) : null;
+
+        // Nadie, sin importar el rol, puede actualizar un proyecto que no es suyo.
+        if ($existente === null || (int) $existente['usuario_id'] !== (int) $_SESSION['usuario_id']) {
             return ['El proyecto que intentas editar no existe.', ''];
         }
 
@@ -376,7 +447,11 @@ class PerfilProyectosControlador
 
             $existente = $this->modeloNecesidad->obtenerPorId($id);
 
-            if ($existente !== null && ($existente['estado'] ?? 'borrador') === 'borrador') {
+            // Nadie, sin importar el rol, puede eliminar un proyecto que no es suyo.
+            if ($existente !== null
+                && (int) $existente['usuario_id'] === (int) $_SESSION['usuario_id']
+                && ($existente['estado'] ?? 'borrador') === 'borrador'
+            ) {
                 $this->modeloNecesidad->eliminar($id);
                 $eliminados++;
             }
@@ -400,6 +475,13 @@ class PerfilProyectosControlador
                 continue;
             }
 
+            // Nadie, sin importar el rol, puede duplicar un proyecto que no es suyo.
+            $existente = $this->modeloNecesidad->obtenerPorId($id);
+
+            if ($existente === null || (int) $existente['usuario_id'] !== (int) $_SESSION['usuario_id']) {
+                continue;
+            }
+
             $nuevoId = DuplicadorFilas::duplicarFila($db, 'necesidades_academicas', $id);
 
             if ($nuevoId !== null) {
@@ -415,35 +497,73 @@ class PerfilProyectosControlador
         return ['', 'Se duplicaron ' . $duplicados . ' proyecto(s).'];
     }
 
-    private function enviarTodo(): array
+    private function enviarTodo(bool $esInvitado): array
     {
-        $dependenciaDestinoNombre = trim($_POST['dependencia_destino'] ?? '');
-        $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
+        if ($esInvitado) {
+            // El invitado no elige dependencia/rol libremente — se derivan siempre de su propia
+            // Facultad y del rol "Gestor"; solo se confía en qué Gestor puntual eligió del POST.
+            $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
 
-        if ($dependenciaDestinoNombre === '' || $rolDestinatarioId <= 0) {
-            return ['Selecciona a quién se enviará y el rol al que se enviarán los proyectos.', ''];
-        }
+            if ($usuarioActual === null || empty($usuarioActual['dependencia_id'])) {
+                return ['Tu cuenta no tiene una Facultad asignada todavía.', ''];
+            }
 
-        $rol = $this->modeloRol->obtenerPorId($rolDestinatarioId);
+            $rol = $this->modeloRol->obtenerPorNombre('Gestor');
 
-        if ($rol === null) {
-            return ['El rol seleccionado no existe.', ''];
-        }
+            if ($rol === null) {
+                return ['El rol "Gestor" no existe en el catálogo.', ''];
+            }
 
-        $dependenciaDestino = $this->modeloDependencia->obtenerPorNombre($dependenciaDestinoNombre);
+            $rolDestinatarioId = (int) $rol['id'];
+            $dependenciaDestino = $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id']);
 
-        if ($dependenciaDestino === null) {
-            return ['La dependencia destino seleccionada no existe.', ''];
-        }
+            if ($dependenciaDestino === null) {
+                return ['Tu Facultad asignada ya no existe.', ''];
+            }
 
-        $destinatarios = $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaDestino['id'], $rolDestinatarioId);
-
-        if (count($destinatarios) > 1) {
+            $dependenciaDestinoNombre = $dependenciaDestino['nombre'];
+            // Solo para mostrar en los mensajes de abajo — $dependenciaDestinoNombre sigue siendo
+            // el nombre real (necesario para enviarTodosBorrador()).
+            $dependenciaDestinoVisible = Dependencia::nombreVisible($dependenciaDestinoNombre);
+            $gestoresDisponibles = $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaDestino['id'], $rolDestinatarioId);
             $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
-            $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
+            $destinatarios = array_values(array_filter($gestoresDisponibles, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
 
             if (empty($destinatarios)) {
-                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '". Selecciona a quién remitir la petición.', ''];
+                return ['Selecciona un Gestor válido de tu Facultad.', ''];
+            }
+        } else {
+            $dependenciaDestinoNombre = trim($_POST['dependencia_destino'] ?? '');
+            // Solo para mostrar en los mensajes de abajo — $dependenciaDestinoNombre sigue siendo
+            // el nombre real (necesario para obtenerPorNombre()/enviarTodosBorrador()).
+            $dependenciaDestinoVisible = Dependencia::nombreVisible($dependenciaDestinoNombre);
+            $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
+
+            if ($dependenciaDestinoNombre === '' || $rolDestinatarioId <= 0) {
+                return ['Selecciona a quién se enviará y el rol al que se enviarán los proyectos.', ''];
+            }
+
+            $rol = $this->modeloRol->obtenerPorId($rolDestinatarioId);
+
+            if ($rol === null) {
+                return ['El rol seleccionado no existe.', ''];
+            }
+
+            $dependenciaDestino = $this->modeloDependencia->obtenerPorNombre($dependenciaDestinoNombre);
+
+            if ($dependenciaDestino === null) {
+                return ['La dependencia destino seleccionada no existe.', ''];
+            }
+
+            $destinatarios = $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaDestino['id'], $rolDestinatarioId);
+
+            if (count($destinatarios) > 1) {
+                $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
+                $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
+
+                if (empty($destinatarios)) {
+                    return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '". Selecciona a quién remitir la petición.', ''];
+                }
             }
         }
 
@@ -452,7 +572,7 @@ class PerfilProyectosControlador
         // petición en Pendientes, no solo la persona elegida.
         $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
 
-        $enviados = $this->modeloNecesidad->enviarTodosBorrador($dependenciaDestinoNombre, $rolDestinatarioId, $usuarioDestinatarioResuelto);
+        $enviados = $this->modeloNecesidad->enviarTodosBorrador($dependenciaDestinoNombre, $rolDestinatarioId, $usuarioDestinatarioResuelto, (int) $_SESSION['usuario_id']);
 
         if ($enviados === 0) {
             return ['No hay proyectos en borrador para enviar.', ''];
@@ -470,9 +590,9 @@ class PerfilProyectosControlador
         }
 
         if (empty($destinatarios)) {
-            return ['', 'Se enviaron ' . $enviados . ' proyecto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '" para notificar.'];
+            return ['', 'Se enviaron ' . $enviados . ' proyecto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '" para notificar.'];
         }
 
-        return ['', 'Se enviaron ' . $enviados . ' proyecto(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoNombre . '").'];
+        return ['', 'Se enviaron ' . $enviados . ' proyecto(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoVisible . '").'];
     }
 }

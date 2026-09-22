@@ -1,25 +1,15 @@
 <?php
 $tituloPagina = 'Peticiones';
 require __DIR__ . '/../parciales/encabezado.php';
-
-$flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>';
 ?>
 
     <div class="tarjeta">
         <?php
-        $barraTitulo = $bandeja !== null ? 'Peticiones — ' . $bandejas[$bandeja]['etiqueta'] : 'Peticiones recibidas';
-        $barraBotonesSecundarios = [
-            // [
-            //     'id' => null,
-            //     'icono' => 'exportar',
-            //     'etiqueta' => 'Autogestión y perfil de proyectos',
-            //     'tipo' => 'a',
-            //     'href' => 'index.php?ruta=consolidado-autogestion',
-            // ],
-        ];
+        $barraTitulo = 'Peticiones recibidas';
+        $barraBotonesSecundarios = [];
         $barraBotonPrincipal = null;
-        $barraEstado = $bandeja !== null ? 'consulta' : 'creacion';
-        $barraRutaVolver = $bandeja !== null ? 'index.php?ruta=peticiones' : null;
+        $barraEstado = 'creacion';
+        $barraRutaVolver = null;
         require __DIR__ . '/../parciales/barra-modulo.php';
         ?>
 
@@ -31,30 +21,15 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
         <?php endif; ?>
 
-        <?php if ($bandeja === null): ?>
-        <p>Elige una bandeja para revisar lo que ya fue enviado o registrado.</p>
-        <div class="box-items-config">
-            <?php foreach ($bandejas as $claveBandeja => $infoBandeja): ?>
-            <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($claveBandeja) ?>" class="tarjeta-modulo">
-                <div class="tarjeta-modulo-cabecera">
-                    <h2><?= htmlspecialchars($infoBandeja['etiqueta']) ?></h2>
-                    <?= $flechaModulo ?>
-                </div>
-                <p class="texto-atenuado"><?= (int) ($conteosBandejas[$claveBandeja] ?? 0) ?> pendiente(s) por revisar</p>
-            </a>
-            <?php endforeach; ?>
-        </div>
-        <?php else: ?>
-
         <div class="cabecera-modulo">
             <div class="pestanas">
-                <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=pendientes" class="pestana<?= $vista === 'pendientes' ? ' activa' : '' ?>">Pendientes</a>
-                <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=consolidado" class="pestana<?= $vista === 'consolidado' ? ' activa' : '' ?>">Consolidado por tipo</a>
-                <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=archivar" class="pestana<?= $vista === 'archivar' ? ' activa' : '' ?>">Archivados</a>
-                <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=enviadas" class="pestana<?= $vista === 'enviadas' ? ' activa' : '' ?>">Enviadas</a>
+                <a href="index.php?ruta=peticiones&vista=pendientes" class="pestana<?= $vista === 'pendientes' ? ' activa' : '' ?>">Pendientes</a>
+                <a href="index.php?ruta=peticiones&vista=consolidado" class="pestana<?= $vista === 'consolidado' ? ' activa' : '' ?>">Consolidado por tipo</a>
+                <a href="index.php?ruta=peticiones&vista=archivar" class="pestana<?= $vista === 'archivar' ? ' activa' : '' ?>">Archivados</a>
+                <a href="index.php?ruta=peticiones&vista=enviadas" class="pestana<?= $vista === 'enviadas' ? ' activa' : '' ?>">Enviadas</a>
             </div>
             <?php if ($vista === 'pendientes'): ?>
-            <div class="grupo-acciones-encabezado" id="barra-acciones-pendientes" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>" data-modo="<?= $modoJerarquia ? 'jerarquia' : '' ?>">
+            <div class="grupo-acciones-encabezado" id="barra-acciones-pendientes" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
                 <button type="button" id="boton-pendientes-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
                 <button type="button" id="boton-pendientes-aprobar" class="boton-accion boton-accion-enviar" disabled>Aceptar seleccionados</button>
                 <button type="button" id="boton-pendientes-archivar" class="boton-accion boton-accion-editar" disabled>Archivar seleccionados</button>
@@ -63,7 +38,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             </div>
             <?php endif; ?>
             <?php if ($vista === 'consolidado'): ?>
-            <div class="grupo-acciones-encabezado" id="barra-acciones-consolidado" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>">
+            <div class="grupo-acciones-encabezado" id="barra-acciones-consolidado" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
                 <button type="button" id="boton-consolidado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
                 <button type="button" id="boton-consolidado-editar" class="boton-accion boton-accion-editar" disabled>Editar</button>
                 <button type="button" id="boton-consolidado-desconsolidar" class="boton-accion boton-accion-eliminar" disabled>Desconsolidar</button>
@@ -72,7 +47,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             </div>
             <?php endif; ?>
             <?php if ($vista === 'archivar'): ?>
-            <div class="grupo-acciones-encabezado" id="barra-acciones-archivar" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>">
+            <div class="grupo-acciones-encabezado" id="barra-acciones-archivar" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
                 <button type="button" id="boton-archivado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
                 <button type="button" id="boton-archivado-duplicar" class="boton-accion boton-accion-editar" disabled>Duplicar</button>
                 <button type="button" id="boton-archivado-consolidar" class="boton-accion boton-accion-enviar" disabled>Consolidar</button>
@@ -80,7 +55,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             </div>
             <?php endif; ?>
             <?php if ($vista === 'enviadas'): ?>
-            <div class="grupo-acciones-encabezado" id="barra-acciones-enviadas" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>">
+            <div class="grupo-acciones-encabezado" id="barra-acciones-enviadas" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
                 <button type="button" id="boton-enviado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
                 <button type="button" id="boton-enviado-duplicar" class="boton-accion boton-accion-editar" disabled>Duplicar</button>
                 <button type="button" id="boton-enviado-consolidar" class="boton-accion boton-accion-enviar" disabled>Consolidar</button>
@@ -89,14 +64,8 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
             <?php endif; ?>
         </div>
 
-        <?php if ($esSuperAdminRaiz && ($vista === 'pendientes' || $vista === 'consolidado')): ?>
-        <div class="enlace-modo-jerarquia">
-            <?php if ($modoJerarquia): ?>
-            <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=<?= htmlspecialchars($vista) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>">← Volver a mis pendientes por aceptar (por defecto)</a>
-            <?php else: ?>
-            <a href="index.php?ruta=peticiones&bandeja=<?= urlencode($bandeja) ?>&vista=<?= htmlspecialchars($vista) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&modo=jerarquia">Ver todo lo que tienes por debajo</a>
-            <?php endif; ?>
-        </div>
+        <?php if ($modoJerarquia && ($vista === 'pendientes' || $vista === 'consolidado')): ?>
+        <p class="texto-atenuado">Auditando: viendo todo lo pendiente de tu árbol de dependencias (activado en el interruptor "Auditar" del encabezado), no solo lo dirigido a ti.</p>
         <?php endif; ?>
 
         <?php if (empty($aniosActivos)): ?>
@@ -106,7 +75,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
         <?php if (count($aniosActivos) >= 2): ?>
             <form method="GET" action="index.php" class="form-filtro-anio">
                 <input type="hidden" name="ruta" value="peticiones">
-                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                 <input type="hidden" name="vista" value="<?= htmlspecialchars($vista) ?>">
                 <label for="anio_id_filtro">Año presupuestal</label>
                 <select id="anio_id_filtro" name="anio_id" onchange="this.form.submit()">
@@ -175,8 +143,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                                     <input type="hidden" name="accion" value="aprobar">
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
-                                    <input type="hidden" name="modo" value="jerarquia">
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
                                     <input type="hidden" name="tipo" value="<?= htmlspecialchars($item['tipo']) ?>">
@@ -191,8 +157,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                                     <input type="hidden" name="accion" value="archivar">
                                     <input type="hidden" name="vista" value="pendientes">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
-                                    <input type="hidden" name="modo" value="jerarquia">
                                     <input type="hidden" name="origen" value="<?= htmlspecialchars($item['origen']) ?>">
                                     <input type="hidden" name="origen_id" value="<?= (int) $item['origen_id'] ?>">
                                     <input type="hidden" name="tipo" value="<?= htmlspecialchars($item['tipo']) ?>">
@@ -381,7 +345,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                                     <input type="hidden" name="accion" value="restaurar">
                                     <input type="hidden" name="vista" value="archivar">
                                     <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                                    <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                                     <input type="hidden" name="id" value="<?= (int) $item['id'] ?>">
                                     <button type="submit" class="boton-accion boton-accion-editar">Restaurar</button>
                                 </form>
@@ -437,7 +400,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                         <td class="celda-acciones">
                             <div class="acciones-fila">
                                 <a href="<?= htmlspecialchars($item['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>
-                                <a href="index.php?ruta=peticiones-historial-item&origen=<?= urlencode($item['origen']) ?>&origen_id=<?= (int) $item['origen_id'] ?>&volver=<?= urlencode('index.php?ruta=peticiones&bandeja=' . $bandeja . '&vista=enviadas&anio_id=' . $anioSeleccionadoId) ?>" class="boton-accion boton-accion-editar">Historial</a>
+                                <a href="index.php?ruta=peticiones-historial-item&origen=<?= urlencode($item['origen']) ?>&origen_id=<?= (int) $item['origen_id'] ?>&volver=<?= urlencode('index.php?ruta=peticiones&vista=enviadas&anio_id=' . $anioSeleccionadoId) ?>" class="boton-accion boton-accion-editar">Historial</a>
                             </div>
                         </td>
                     </tr>
@@ -450,7 +413,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 </tbody>
             </table>
         </div>
-        <?php endif; ?>
         <?php endif; ?>
     </div>
 
@@ -482,7 +444,7 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
         </div>
     </div>
 
-    <div id="modal-editar-consolidado" class="modal-fondo" data-anio-id="<?= (int) $anioSeleccionadoId ?>" data-bandeja="<?= htmlspecialchars($bandeja) ?>">
+    <div id="modal-editar-consolidado" class="modal-fondo" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
         <div class="modal-caja">
             <div class="modal-cabecera">
                 <h2>Editar <span id="editar-consolidado-tipo-texto"></span></h2>
@@ -518,7 +480,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <input type="hidden" name="accion" value="redireccionar_consolidado">
                 <input type="hidden" name="vista" value="consolidado">
                 <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                 <div id="redireccionar-consolidado-campos-items"></div>
 
                 <div class="campo">
@@ -564,7 +525,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <input type="hidden" name="accion" value="enviar_archivado">
                 <input type="hidden" name="vista" value="archivar">
                 <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                 <div id="enviar-archivado-campos-items"></div>
 
                 <div class="campo">
@@ -610,7 +570,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <input type="hidden" name="accion" value="enviar_pendientes_grupo">
                 <input type="hidden" name="vista" value="pendientes">
                 <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                 <div id="enviar-pendientes-campos-items"></div>
 
                 <div class="campo">
@@ -669,54 +628,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
         </div>
     </div>
 
-    <div id="modal-ver-archivado" class="modal-fondo">
-        <div class="modal-caja">
-            <div class="modal-cabecera">
-                <h2>Detalle de los ítems seleccionados</h2>
-                <button type="button" id="boton-cerrar-modal-ver-archivado" class="modal-cerrar" aria-label="Cerrar">&times;</button>
-            </div>
-
-            <div class="tabla-scroll">
-                <table class="tabla-usuarios tabla-consolidado-detalle">
-                    <thead>
-                        <tr>
-                            <th class="th-ordenable" data-orden-inicial="asc">Tipo</th>
-                            <th class="th-ordenable" data-orden-inicial="asc" data-orden-defecto>Detalle</th>
-                            <th class="th-ordenable" data-orden-inicial="asc">Cantidad</th>
-                            <th class="th-ordenable" data-orden-inicial="asc">Valor</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="ver-archivado-cuerpo"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div id="modal-ver-enviado" class="modal-fondo">
-        <div class="modal-caja">
-            <div class="modal-cabecera">
-                <h2>Detalle de los ítems seleccionados</h2>
-                <button type="button" id="boton-cerrar-modal-ver-enviado" class="modal-cerrar" aria-label="Cerrar">&times;</button>
-            </div>
-
-            <div class="tabla-scroll">
-                <table class="tabla-usuarios tabla-consolidado-detalle">
-                    <thead>
-                        <tr>
-                            <th class="th-ordenable" data-orden-inicial="asc">Tipo</th>
-                            <th class="th-ordenable" data-orden-inicial="asc" data-orden-defecto>Detalle</th>
-                            <th class="th-ordenable" data-orden-inicial="asc">Cantidad</th>
-                            <th class="th-ordenable" data-orden-inicial="asc">Valor</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="ver-enviado-cuerpo"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
     <div id="modal-enviar-enviado" class="modal-fondo">
         <div class="modal-caja">
             <div class="modal-cabecera">
@@ -728,7 +639,6 @@ $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewB
                 <input type="hidden" name="accion" value="enviar_enviado">
                 <input type="hidden" name="vista" value="enviadas">
                 <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                <input type="hidden" name="bandeja" value="<?= htmlspecialchars($bandeja) ?>">
                 <div id="enviar-enviado-campos-items"></div>
 
                 <div class="campo">

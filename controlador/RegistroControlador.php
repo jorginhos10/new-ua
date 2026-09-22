@@ -3,18 +3,21 @@
 require_once __DIR__ . '/../modelo/Usuario.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/Estamento.php';
+require_once __DIR__ . '/../modelo/Rol.php';
 
 class RegistroControlador
 {
     private Usuario $modeloUsuario;
     private Dependencia $modeloDependencia;
     private Estamento $modeloEstamento;
+    private Rol $modeloRol;
 
     public function __construct()
     {
         $this->modeloUsuario = new Usuario();
         $this->modeloDependencia = new Dependencia();
         $this->modeloEstamento = new Estamento();
+        $this->modeloRol = new Rol();
     }
 
     public function index(): void
@@ -66,7 +69,22 @@ class RegistroControlador
             return ['Ese correo ya está registrado.', ''];
         }
 
-        $this->modeloUsuario->crear($nombre, $correo, $password, 'invitado', $facultad, null, null, $estamentoId);
+        // Todo invitado autoregistrado es de rol "Formulador". La dependencia_id apunta a la
+        // Facultad real que eligió (no a un cajón genérico) porque el envío de su necesidad debe
+        // poder enrutarse a un administrador Gestor de esa misma Facultad.
+        $rolFormulador = $this->modeloRol->obtenerPorNombre('Formulador');
+        $dependenciaFacultad = $this->modeloDependencia->obtenerPorNombre($facultad);
+
+        $this->modeloUsuario->crear(
+            $nombre,
+            $correo,
+            $password,
+            'invitado',
+            $facultad,
+            $rolFormulador !== null ? (int) $rolFormulador['id'] : null,
+            $dependenciaFacultad !== null ? (int) $dependenciaFacultad['id'] : null,
+            $estamentoId
+        );
 
         return ['', 'Registro exitoso. Ya puedes iniciar sesión.'];
     }

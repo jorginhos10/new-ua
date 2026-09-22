@@ -50,9 +50,14 @@ require __DIR__ . '/../parciales/encabezado.php';
                 'etiqueta' => 'Nuevo ítem',
             ];
         }
+        $fueraDeVentana = $esInvitado && !$dentroDeVentana;
         $barraBotonPrincipal = $modoEdicion
             ? ['id' => 'boton-guardar-edicion-proyecto', 'etiqueta' => 'Guardar', 'form' => 'form-editar-proyecto']
-            : ['id' => 'boton-abrir-modal-crear-proyecto', 'etiqueta' => 'Crear proyecto'];
+            : [
+                'id' => 'boton-abrir-modal-crear-proyecto',
+                'etiqueta' => 'Crear proyecto',
+                'disabled' => $fueraDeVentana,
+            ];
         $barraEstado = $modoEdicion ? 'edicion' : 'creacion';
         $barraRutaVolver = $modoEdicion
             ? ($volverEdicion !== '' ? $volverEdicion : 'index.php?ruta=perfil-proyectos')
@@ -67,6 +72,15 @@ require __DIR__ . '/../parciales/encabezado.php';
 
         <?php if (!empty($exito)): ?>
             <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
+        <?php endif; ?>
+
+        <?php if ($fueraDeVentana): ?>
+            <p class="mensaje-error">
+                No estás dentro de la fecha habilitada para formular necesidades.
+                <?php if ($configuracionFormulador !== null): ?>
+                El plazo es del <?= htmlspecialchars($configuracionFormulador['fecha_inicio']) ?> al <?= htmlspecialchars($configuracionFormulador['fecha_cierre']) ?>.
+                <?php endif; ?>
+            </p>
         <?php endif; ?>
 
         <?php if ($modoEdicion): ?>
@@ -355,12 +369,20 @@ require __DIR__ . '/../parciales/encabezado.php';
 
                 <div class="campo">
                     <label for="crear-proyecto-responsable_usuario_id">Responsable *</label>
+                    <?php if (empty($avaladores)): ?>
+                    <p class="mensaje-error" style="margin: 0;">
+                        <?= $esInvitado
+                            ? 'Tu cuenta no tiene un Gestor asignado todavía (falta la facultad en tu perfil o esa facultad no tiene un Gestor registrado). Pídele a un administrador que te la asigne desde Usuarios antes de poder registrar un proyecto.'
+                            : 'No hay avaladores registrados en el sistema.' ?>
+                    </p>
+                    <?php else: ?>
                     <select id="crear-proyecto-responsable_usuario_id" name="responsable_usuario_id" required>
-                        <option value="">Selecciona un avalador</option>
+                        <option value="">Selecciona un <?= htmlspecialchars($etiquetaResponsable) ?></option>
                         <?php foreach ($avaladores as $avaladorOpcion): ?>
                         <option value="<?= (int) $avaladorOpcion['id'] ?>"><?= htmlspecialchars($avaladorOpcion['nombre']) ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <?php endif; ?>
                 </div>
 
                 <div class="campo campo-ancho">
@@ -368,7 +390,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <textarea id="crear-proyecto-observaciones" name="observaciones" rows="3" placeholder="Diligenciar"></textarea>
                 </div>
 
-                <button type="submit" class="boton-enviar">Registrar proyecto</button>
+                <button type="submit" class="boton-enviar" <?= empty($avaladores) ? 'disabled' : '' ?>>Registrar proyecto</button>
             </form>
         </div>
     </div>
@@ -380,7 +402,34 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <button type="button" id="boton-cerrar-modal-enviar-todo-perfil-proyectos" class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
 
-            <p class="texto-atenuado">Se enviarán todos los proyectos en borrador, como una solicitud. Elige a quién se enviará: puede tener que pasar por varios avaladores intermedios antes de llegar al destino final.</p>
+            <?php if ($esInvitado): ?>
+            <p class="texto-atenuado">Se enviarán todos tus proyectos en borrador al Gestor de tu Facultad que elijas.</p>
+
+            <form method="POST" action="index.php?ruta=perfil-proyectos" class="form-necesidad">
+                <input type="hidden" name="accion" value="enviar_todo">
+
+                <div class="campo">
+                    <label for="enviar-todo-perfil-proyectos-usuario-invitado">¿A qué Gestor se enviará? *</label>
+                    <?php if (empty($avaladores)): ?>
+                    <p class="mensaje-error" style="margin: 0;">
+                        Tu cuenta no tiene un Gestor asignado todavía (falta la facultad en tu
+                        perfil o esa facultad no tiene un Gestor registrado). Pídele a un
+                        administrador que te la asigne desde Usuarios antes de poder enviar.
+                    </p>
+                    <?php else: ?>
+                    <select id="enviar-todo-perfil-proyectos-usuario-invitado" name="usuario_destinatario_id" required>
+                        <option value="">Selecciona un gestor</option>
+                        <?php foreach ($avaladores as $gestorOpcion): ?>
+                        <option value="<?= (int) $gestorOpcion['id'] ?>"><?= htmlspecialchars($gestorOpcion['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <?php endif; ?>
+                </div>
+
+                <button type="submit" class="boton-enviar" <?= empty($avaladores) ? 'disabled' : '' ?>>Enviar todo</button>
+            </form>
+            <?php else: ?>
+            <p class="texto-atenuado">Se enviarán todos tus proyectos en borrador, como una solicitud. Elige a quién se enviará: puede tener que pasar por varios avaladores intermedios antes de llegar al destino final.</p>
 
             <form method="POST" action="index.php?ruta=perfil-proyectos" class="form-necesidad">
                 <input type="hidden" name="accion" value="enviar_todo">
@@ -414,6 +463,7 @@ require __DIR__ . '/../parciales/encabezado.php';
 
                 <button type="submit" class="boton-enviar">Enviar todo</button>
             </form>
+            <?php endif; ?>
         </div>
     </div>
 

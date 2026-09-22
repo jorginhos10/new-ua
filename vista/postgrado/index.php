@@ -10,8 +10,8 @@ $nombresMesesCompletos = [
     5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
     9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
 ];
-$catalogosListosEgreso = !empty($sedes) && !empty($lineas) && !empty($motores) && !empty($proyectos) && !empty($rubros) && !empty($aniosActivos);
-$catalogosListosIngreso = !empty($aniosActivos);
+$catalogosListosEgreso = !empty($sedes) && !empty($lineas) && !empty($motores) && !empty($proyectos) && !empty($rubros) && !empty($autogestionItems) && !empty($aniosActivos);
+$catalogosListosIngreso = !empty($autogestionItems) && !empty($aniosActivos);
 $catalogosListos = $tab === 'ingresos' ? $catalogosListosIngreso : $catalogosListosEgreso;
 $modoEdicion = $egresoParaEditar !== null || $ingresoParaEditar !== null;
 require __DIR__ . '/../parciales/encabezado.php';
@@ -51,9 +51,9 @@ require __DIR__ . '/../parciales/encabezado.php';
             [
                 'id' => 'boton-abrir-modal-enviar-todo-postgrado',
                 'icono' => 'enviar',
-                'etiqueta' => 'Enviar todos los ingresos y egresos en borrador',
+                'etiqueta' => 'Enviar todos los ingresos y egresos en borrador de este ítem',
                 'disabled' => $modoEdicion || !$puedeEnviarTodo,
-                'titulo_disabled' => 'Disponible cuando el total de egresos sea igual al total de ingresos del año',
+                'titulo_disabled' => 'Disponible cuando el total de egresos sea igual al total de ingresos de este ítem',
             ],
             [
                 'id' => 'boton-exportar-plantilla-postgrado',
@@ -89,21 +89,21 @@ require __DIR__ . '/../parciales/encabezado.php';
             : ($catalogosListos ? ['id' => 'boton-abrir-modal-gasto', 'etiqueta' => '+ Agregar ' . ($tab === 'ingresos' ? 'ingreso' : 'egreso')] : null);
         $barraEstado = $modoEdicion ? 'edicion' : 'creacion';
         $barraRutaVolver = $modoEdicion
-            ? ($volverEdicion !== '' ? $volverEdicion : 'index.php?ruta=postgrado&tab=' . $tab . '&anio_id=' . $anioSeleccionadoId)
+            ? ($volverEdicion !== '' ? $volverEdicion : 'index.php?ruta=postgrado&tab=' . $tab . '&anio_id=' . $anioSeleccionadoId . '&autogestion_id=' . $autogestionSeleccionadoId)
             : null;
         $barraTextoVolver = ($modoEdicion && $volverEdicion !== '') ? 'Volver a Peticiones' : 'Volver a Postgrado';
         require __DIR__ . '/../parciales/barra-modulo.php';
         ?>
 
         <div class="pestanas">
-            <a href="index.php?ruta=postgrado&tab=ingresos" class="pestana<?= $tab === 'ingresos' ? ' activa' : '' ?>">Ingresos</a>
-            <a href="index.php?ruta=postgrado&tab=egresos" class="pestana<?= $tab === 'egresos' ? ' activa' : '' ?>">Egresos</a>
+            <a href="index.php?ruta=postgrado&tab=ingresos&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" class="pestana<?= $tab === 'ingresos' ? ' activa' : '' ?>">Ingresos</a>
+            <a href="index.php?ruta=postgrado&tab=egresos&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" class="pestana<?= $tab === 'egresos' ? ' activa' : '' ?>">Egresos</a>
             <?php if ($tab === 'ingresos'): ?>
             <span class="total-pestanas">Total ingresos: <?= number_format($totalGastado, 2, ',', '.') ?></span>
             <?php endif; ?>
         </div>
 
-        <form method="POST" action="index.php?ruta=postgrado&tab=<?= htmlspecialchars($tab) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" enctype="multipart/form-data" id="form-importar-postgrado" style="display: none;">
+        <form method="POST" action="index.php?ruta=postgrado&tab=<?= htmlspecialchars($tab) ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" enctype="multipart/form-data" id="form-importar-postgrado" style="display: none;">
             <input type="hidden" name="accion" value="importar">
             <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
             <input type="file" name="archivo" accept=".xlsx" id="input-importar-postgrado">
@@ -138,27 +138,33 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <p class="mensaje-error">Primero debes crear al menos un proyecto en <a href="index.php?ruta=proyectos">Configuraciones &gt; Proyecto</a>.</p>
             <?php elseif (empty($rubros)): ?>
                 <p class="mensaje-error">Primero debes crear al menos un rubro en <a href="index.php?ruta=rubros">Configuraciones &gt; Rubros</a>.</p>
+            <?php elseif (empty($autogestionItems)): ?>
+                <p class="mensaje-error">Primero debes crear al menos un ítem en <a href="index.php?ruta=autogestion&tab=postgrado">Configuraciones &gt; Autogestión</a>.</p>
             <?php elseif (empty($aniosActivos)): ?>
                 <p class="mensaje-error">Primero debes crear un año presupuestal activo en <a href="index.php?ruta=anios-presupuestales">Configuraciones &gt; Año presupuestal</a>.</p>
             <?php endif; ?>
+        <?php elseif (empty($autogestionItems)): ?>
+            <p class="mensaje-error">Primero debes crear al menos un ítem en <a href="index.php?ruta=autogestion&tab=postgrado">Configuraciones &gt; Autogestión</a>.</p>
         <?php elseif (empty($aniosActivos)): ?>
             <p class="mensaje-error">Primero debes crear un año presupuestal activo en <a href="index.php?ruta=anios-presupuestales">Configuraciones &gt; Año presupuestal</a>.</p>
         <?php endif; ?>
 
-        <?php if (count($aniosActivos) >= 2): ?>
-            <form method="GET" action="index.php" class="form-filtro-anio">
-                <input type="hidden" name="ruta" value="postgrado">
-                <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
-                <label for="anio_id_filtro">Año presupuestal</label>
-                <select id="anio_id_filtro" name="anio_id" onchange="this.form.submit()">
-                    <?php foreach ($aniosActivos as $anioFila): ?>
-                    <option value="<?= (int) $anioFila['id'] ?>" <?= $anioSeleccionadoId === (int) $anioFila['id'] ? 'selected' : '' ?>>
-                        <?= htmlspecialchars((string) $anioFila['anio']) ?>
-                    </option>
-                    <?php endforeach; ?>
-                </select>
-            </form>
-        <?php endif; ?>
+        <form method="GET" action="index.php" id="form-filtros" class="form-filtro-anio">
+            <input type="hidden" name="ruta" value="postgrado">
+            <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
+            <?php if (count($aniosActivos) >= 2): ?>
+            <label for="anio_id_filtro">Año presupuestal</label>
+            <select id="anio_id_filtro" name="anio_id" onchange="this.form.submit()">
+                <?php foreach ($aniosActivos as $anioFila): ?>
+                <option value="<?= (int) $anioFila['id'] ?>" <?= $anioSeleccionadoId === (int) $anioFila['id'] ? 'selected' : '' ?>>
+                    <?= htmlspecialchars((string) $anioFila['anio']) ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+            <?php elseif ($anioSeleccionadoId > 0): ?>
+            <input type="hidden" name="anio_id" value="<?= $anioSeleccionadoId ?>">
+            <?php endif; ?>
+        </form>
 
         <?php if ($tab === 'egresos' && $anioSeleccionado): ?>
             <div class="progreso-presupuesto">
@@ -168,7 +174,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                             <?= number_format($porcentajeGastado, 1) ?>% de los ingresos <?= (int) $anioSeleccionado['anio'] ?> asignados
                             (<?= number_format($totalEjecutado, 2, ',', '.') ?> / <?= number_format($presupuestoAnio, 2, ',', '.') ?>)
                         <?php else: ?>
-                            Este año todavía no tiene ingresos registrados: no se pueden agregar egresos hasta que tenga.
+                            Este ítem todavía no tiene ingresos registrados: no se pueden agregar egresos hasta que tenga.
                         <?php endif; ?>
                     </span>
                     <span class="progreso-presupuesto-dias">Día <?= $diaActual ?>/<?= $totalDiasAnio ?></span>
@@ -189,7 +195,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <?= number_format($porcentajeGastado, 1) ?>% de los ingresos <?= (int) $anioSeleccionado['anio'] ?> asignados
                         (<?= number_format($totalEjecutado, 2, ',', '.') ?> / <?= number_format($presupuestoAnio, 2, ',', '.') ?>)
                     <?php else: ?>
-                        Este año todavía no tiene ingresos registrados.
+                        Este ítem todavía no tiene ingresos registrados.
                     <?php endif; ?>
                 </span>
                 <div class="progreso-presupuesto-leyenda">
@@ -205,7 +211,7 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php
         $egresosBorrador = array_values(array_filter($gastos, static fn (array $g): bool => $g['estado'] === 'borrador'));
         $egresosEnviado = array_values(array_filter($gastos, static fn (array $g): bool => $g['estado'] === 'enviado'));
-        $filaEgresoPostgrado = static function (array $gasto) use ($anioSeleccionadoId, $nombresMeses, $puedeAdministrarContribucion, $puedeAdministrarExcedentes): void {
+        $filaEgresoPostgrado = static function (array $gasto) use ($anioSeleccionadoId, $autogestionSeleccionadoId, $nombresMeses, $puedeAdministrarContribucion, $puedeAdministrarExcedentes): void {
             $mesesGasto = $gasto['meses'] !== ''
                 ? array_map(static fn ($mes) => $nombresMeses[(int) $mes] ?? $mes, explode(',', $gasto['meses']))
                 : [];
@@ -220,10 +226,10 @@ require __DIR__ . '/../parciales/encabezado.php';
                             <?php if ($gasto['tipo_automatico'] === null && $gasto['estado'] === 'borrador'): ?>
                             <div class="acciones-fila">
                                 <a
-                                    href="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&editar_id=<?= (int) $gasto['id'] ?>"
+                                    href="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&editar_id=<?= (int) $gasto['id'] ?>"
                                     class="boton-accion boton-accion-editar"
                                 >Editar</a>
-                                <form method="POST" action="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-eliminar-egreso">
+                                <form method="POST" action="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>" class="form-eliminar-egreso">
                                     <input type="hidden" name="tab" value="egresos">
                                     <input type="hidden" name="accion" value="eliminar">
                                     <input type="hidden" name="id" value="<?= (int) $gasto['id'] ?>">
@@ -284,7 +290,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                     data-boton-editar="boton-editar-postgrado"
                     data-boton-duplicar="boton-duplicar-postgrado"
                     data-boton-eliminar="boton-eliminar-postgrado"
-                    data-accion-form="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>"
+                    data-accion-form="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>"
                     data-accion-eliminar="eliminar_seleccionados"
                     data-accion-duplicar="duplicar_seleccionados"
                     data-editar-en-pagina="1"
@@ -372,7 +378,7 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php
         $ingresosBorrador = array_values(array_filter($gastos, static fn (array $i): bool => $i['estado'] === 'borrador'));
         $ingresosEnviado = array_values(array_filter($gastos, static fn (array $i): bool => $i['estado'] === 'enviado'));
-        $filaIngresoPostgrado = static function (array $ingreso) use ($anioSeleccionadoId): void {
+        $filaIngresoPostgrado = static function (array $ingreso) use ($anioSeleccionadoId, $autogestionSeleccionadoId): void {
             ?>
                     <tr>
                         <td class="columna-seleccion">
@@ -384,10 +390,10 @@ require __DIR__ . '/../parciales/encabezado.php';
                             <?php if ($ingreso['estado'] === 'borrador'): ?>
                             <div class="acciones-fila">
                                 <a
-                                    href="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>&editar_id=<?= (int) $ingreso['id'] ?>"
+                                    href="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&editar_id=<?= (int) $ingreso['id'] ?>"
                                     class="boton-accion boton-accion-editar"
                                 >Editar</a>
-                                <form method="POST" action="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-eliminar-ingreso">
+                                <form method="POST" action="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>" class="form-eliminar-ingreso">
                                     <input type="hidden" name="tab" value="ingresos">
                                     <input type="hidden" name="accion" value="eliminar">
                                     <input type="hidden" name="id" value="<?= (int) $ingreso['id'] ?>">
@@ -441,7 +447,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                     data-boton-editar="boton-editar-postgrado"
                     data-boton-duplicar="boton-duplicar-postgrado"
                     data-boton-eliminar="boton-eliminar-postgrado"
-                    data-accion-form="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>"
+                    data-accion-form="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>"
                     data-accion-eliminar="eliminar_seleccionados"
                     data-accion-duplicar="duplicar_seleccionados"
                     data-editar-en-pagina="1"
@@ -521,6 +527,7 @@ require __DIR__ . '/../parciales/encabezado.php';
             <?php if ($tab === 'egresos'): ?>
             <form method="POST" action="index.php?ruta=postgrado&tab=egresos" class="form-necesidad">
                 <input type="hidden" name="tab" value="egresos">
+                <input type="hidden" name="autogestion_id" value="<?= $autogestionSeleccionadoId ?>">
                 <div class="campo">
                     <label for="anio_presupuestal_id">Año presupuestal *</label>
                     <select id="anio_presupuestal_id" name="anio_presupuestal_id" required>
@@ -642,6 +649,7 @@ require __DIR__ . '/../parciales/encabezado.php';
             <?php else: ?>
             <form method="POST" action="index.php?ruta=postgrado&tab=ingresos" class="form-necesidad">
                 <input type="hidden" name="tab" value="ingresos">
+                <input type="hidden" name="autogestion_id" value="<?= $autogestionSeleccionadoId ?>">
                 <div class="campo">
                     <label for="anio_presupuestal_id">Año presupuestal *</label>
                     <select id="anio_presupuestal_id" name="anio_presupuestal_id" required>
@@ -718,11 +726,12 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <button type="button" id="boton-cerrar-modal-enviar-todo-postgrado" class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
 
-            <p class="texto-atenuado">Se enviarán todos los ingresos y egresos en borrador del año presupuestal actual, como una solicitud. Elige a quién se enviará: puede tener que pasar por varios avaladores intermedios antes de llegar a Postgrados.</p>
+            <p class="texto-atenuado">Se enviarán todos los ingresos y egresos en borrador de este ítem de autogestión, como una solicitud. Elige a quién se enviará: puede tener que pasar por varios avaladores intermedios antes de llegar a Postgrados.</p>
 
-            <form method="POST" action="index.php?ruta=postgrado&anio_id=<?= (int) $anioSeleccionadoId ?>" class="form-necesidad">
+            <form method="POST" action="index.php?ruta=postgrado&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>" class="form-necesidad">
                 <input type="hidden" name="accion" value="enviar_todo">
                 <input type="hidden" name="anio_presupuestal_id" value="<?= (int) $anioSeleccionadoId ?>">
+                <input type="hidden" name="autogestion_id" value="<?= (int) $autogestionSeleccionadoId ?>">
 
                 <div class="campo">
                     <label for="enviar-todo-postgrado-destino_buscador">Enviar a la dependencia *</label>

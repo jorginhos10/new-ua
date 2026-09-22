@@ -6,9 +6,36 @@ class Dependencia
 {
     private PDO $db;
 
+    /**
+     * Alias de compatibilidad solo para MOSTRAR nombres de dependencia — nunca usar para guardar
+     * ni para comparar/filtrar. La dependencia raíz del superadmin quedó guardada como
+     * "Superadmin" desde que se creó, y esta app referencia dependencias por NOMBRE DE TEXTO (no
+     * por id) en decenas de tablas transaccionales (gastos, necesidades, solicitudes...):
+     * renombrar el registro real rompería la coincidencia con los cientos de filas que ya
+     * guardaron ese nombre. Esta traducción ocurre solo al pintar la pantalla, así que no toca
+     * nada de lo ya existente ni de lo que se guarda de aquí en adelante.
+     */
+    private const ALIAS_VISIBLE = [
+        'Superadmin' => 'PROGRAMACIÓN PRESUPUESTAL',
+    ];
+
     public function __construct()
     {
         $this->db = Conexion::obtener();
+    }
+
+    /**
+     * Traduce un nombre de dependencia SOLO para mostrarlo en pantalla (ver ALIAS_VISIBLE). Nunca
+     * usar el resultado como valor de un campo de formulario, ni para comparar/filtrar contra la
+     * base de datos — ahí siempre debe usarse el nombre real, tal como está guardado.
+     */
+    public static function nombreVisible(?string $nombre): string
+    {
+        if ($nombre === null || $nombre === '') {
+            return $nombre ?? '';
+        }
+
+        return self::ALIAS_VISIBLE[$nombre] ?? $nombre;
     }
 
     public function obtenerTodas(): array
@@ -31,6 +58,18 @@ class Dependencia
         $consulta->execute(['tipo' => $tipo]);
 
         return $consulta->fetchAll();
+    }
+
+    /** Para tipos "de una sola dependencia" (Consejo Superior, Formulador): la primera activa de ese tipo. */
+    public function obtenerPrimeraPorTipo(string $tipo): ?array
+    {
+        $consulta = $this->db->prepare(
+            "SELECT id, codigo, nombre, tipo FROM dependencias WHERE tipo = :tipo AND estado = 'activo' ORDER BY id LIMIT 1"
+        );
+        $consulta->execute(['tipo' => $tipo]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
     }
 
     /**

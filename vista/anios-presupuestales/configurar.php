@@ -80,11 +80,11 @@
                             </span>
                             <div class="campo-moneda">
                                 <span>$</span>
-                                <input type="number" class="campo-minimo-presupuestal" name="minimo[<?= (int) $dependencia['id'] ?>]" min="0" step="0.01" placeholder="0.00" value="<?= $valores['minimo'] !== null ? htmlspecialchars((string) $valores['minimo']) : '' ?>">
+                                <input type="text" inputmode="decimal" class="campo-minimo-presupuestal" name="minimo[<?= (int) $dependencia['id'] ?>]" placeholder="0,00" value="<?= $valores['minimo'] !== null ? htmlspecialchars((string) $valores['minimo']) : '' ?>">
                             </div>
                             <div class="campo-moneda">
                                 <span>$</span>
-                                <input type="number" class="campo-techo-presupuestal" name="techo[<?= (int) $dependencia['id'] ?>]" min="0" step="0.01" placeholder="0.00" value="<?= $valores['techo'] !== null ? htmlspecialchars((string) $valores['techo']) : '' ?>">
+                                <input type="text" inputmode="decimal" class="campo-techo-presupuestal" name="techo[<?= (int) $dependencia['id'] ?>]" placeholder="0,00" value="<?= $valores['techo'] !== null ? htmlspecialchars((string) $valores['techo']) : '' ?>">
                             </div>
                         </div>
                         <?php endforeach; ?>

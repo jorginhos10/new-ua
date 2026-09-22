@@ -19,22 +19,10 @@ require __DIR__ . '/../parciales/encabezado.php';
 
     <div class="tarjeta">
         <?php
-        $barraTituloExtra = null;
-        if (!empty($autogestionItems)) {
-            ob_start();
-            ?>
-            <select class="selector-autogestion-item" onchange="if (this.value) { window.location.href = this.value; }">
-                <?php foreach ($autogestionItems as $itemAutogestion): ?>
-                <option
-                    value="index.php?ruta=extension&tab=<?= htmlspecialchars($tab) ?>&autogestion_id=<?= (int) $itemAutogestion['id'] ?>&anio_id=<?= (int) $anioSeleccionadoId ?>"
-                    <?= $autogestionSeleccionadoId === (int) $itemAutogestion['id'] ? 'selected' : '' ?>
-                ><?= htmlspecialchars($itemAutogestion['nombre']) ?></option>
-                <?php endforeach; ?>
-            </select>
-            <?php
-            $barraTituloExtra = ob_get_clean();
-        }
-
+        // El selector de ítem de Autogestión vive en el sidebar (ver parciales/sidebar.php), no
+        // aquí — así queda separado de las tablas y de los formularios de esta página, con menos
+        // riesgo de que alguien lo confunda con un filtro de la tabla o lo cambie sin querer a
+        // mitad de un formulario.
         $barraTitulo = 'Extensión';
         $barraBotonesSecundarios = [
             [

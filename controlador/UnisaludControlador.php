@@ -932,6 +932,9 @@ class UnisaludControlador
     {
         $anioId = (int) ($_POST['anio_presupuestal_id'] ?? 0);
         $dependenciaDestinoNombre = trim($_POST['dependencia_destino'] ?? '');
+        // Solo para mostrar en los mensajes de abajo — $dependenciaDestinoNombre sigue siendo el
+        // nombre real (necesario para obtenerPorNombre()/enviarTodosBorrador()).
+        $dependenciaDestinoVisible = Dependencia::nombreVisible($dependenciaDestinoNombre);
         $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
 
         if ($anioId <= 0 || $dependenciaDestinoNombre === '' || $rolDestinatarioId <= 0) {
@@ -957,7 +960,7 @@ class UnisaludControlador
             $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
 
             if (empty($destinatarios)) {
-                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '". Selecciona a quién remitir la petición.', ''];
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '". Selecciona a quién remitir la petición.', ''];
             }
         }
 
@@ -993,10 +996,10 @@ class UnisaludControlador
         }
 
         if (empty($destinatarios)) {
-            return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '" para notificar.'];
+            return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '" para notificar.'];
         }
 
-        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoNombre . '").'];
+        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoVisible . '").'];
     }
 
     private function eliminarEgreso(): array
@@ -1360,10 +1363,20 @@ class UnisaludControlador
     {
         $usuarioActualId = (int) ($usuarioActual['id'] ?? 0);
         $dependenciaUsuarioNombre = null;
+        $dependenciaFila = null;
 
         if (!empty($usuarioActual['dependencia_id'])) {
             $dependenciaFila = $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id']);
             $dependenciaUsuarioNombre = $dependenciaFila['nombre'] ?? null;
+        }
+
+        // "Auditar" (toggle global de la headerbar, solo para la dependencia raíz): en vez de
+        // exigir ser dueño o destinatario exacto de cada ítem, se ve todo lo que cae en el árbol
+        // de dependencias — mismo bypass que ya usa Peticiones en modo jerarquía.
+        if (!empty($_SESSION['modo_auditoria']) && $dependenciaFila !== null && !empty($dependenciaFila['es_raiz_superadmin'])) {
+            return array_values(array_filter($items, static fn (array $item): bool =>
+                in_array($item['dependencia'] ?? $item['dependencia_destino'] ?? null, $dependenciasPermitidas, true)
+            ));
         }
 
         $rolUsuarioId = !empty($usuarioActual['rol_id']) ? (int) $usuarioActual['rol_id'] : null;

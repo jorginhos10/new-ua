@@ -1,17 +1,24 @@
 <?php
+require_once __DIR__ . '/../../modelo/Dependencia.php';
 $tituloPagina = $tituloPagina ?? 'Sistema';
 $nombreActual = $_SESSION['usuario_nombre'] ?? '';
 $rolActual = $_SESSION['usuario_rol'] ?? '';
 $estamentoActual = $_SESSION['usuario_estamento'] ?? '—';
 $dependenciaActual = $_SESSION['usuario_dependencia'] ?? '—';
 $esSuperAdminActual = false;
+$esDependenciaRaizActual = false;
 if (!empty($_SESSION['usuario_id'])) {
     require_once __DIR__ . '/../../modelo/Usuario.php';
     $usuarioEncabezado = (new Usuario())->obtenerPorId((int) $_SESSION['usuario_id']);
     $esSuperAdminActual = $usuarioEncabezado !== null && (int) ($usuarioEncabezado['es_super_admin'] ?? 0) === 1;
-    if (!isset($_SESSION['usuario_dependencia']) && $usuarioEncabezado !== null && !empty($usuarioEncabezado['dependencia_id'])) {
-        require_once __DIR__ . '/../../modelo/Dependencia.php';
-        $dependenciaEncabezado = (new Dependencia())->obtenerPorId((int) $usuarioEncabezado['dependencia_id']);
+    $dependenciaEncabezado = !empty($usuarioEncabezado['dependencia_id'])
+        ? (new Dependencia())->obtenerPorId((int) $usuarioEncabezado['dependencia_id'])
+        : null;
+    // "Auditar" (ver todo lo que cae en el árbol de dependencias, sin exigir ser el destinatario
+    // exacto de cada ítem) es solo para la dependencia RAÍZ del superadmin — un concepto distinto
+    // al flag usuario.es_super_admin de arriba (que solo decide la estrellita del nombre).
+    $esDependenciaRaizActual = $dependenciaEncabezado !== null && !empty($dependenciaEncabezado['es_raiz_superadmin']);
+    if (!isset($_SESSION['usuario_dependencia']) && $dependenciaEncabezado !== null) {
         $dependenciaActual = $dependenciaEncabezado['nombre'] ?? '—';
         $_SESSION['usuario_dependencia'] = $dependenciaActual;
     }
@@ -23,6 +30,7 @@ if (!empty($_SESSION['usuario_id'])) {
         $rolActual = $rolCatalogoEncabezado['nombre'] ?? $rolActual;
     }
 }
+$urlActualEncabezado = 'index.php?' . http_build_query($_GET);
 $inicialAvatar = $nombreActual !== '' ? mb_strtoupper(mb_substr($nombreActual, 0, 1)) : '?';
 $versionCss = @filemtime(__DIR__ . '/../../publico/css/estilo.css') ?: time();
 $versionJs = @filemtime(__DIR__ . '/../../publico/js/app.js') ?: time();
@@ -37,7 +45,6 @@ $iconosPorRuta = [
     'sin-excedentes' => '<rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 7V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v2"></path><line x1="16" y1="14" x2="20" y2="14"></line>',
     'gastos' => '<line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>',
     'perfil-proyectos' => '<rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>',
-    'formulario-invitado' => '<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"></path><rect x="9" y="3" width="6" height="4" rx="1"></rect><line x1="9" y1="12" x2="15" y2="12"></line><line x1="9" y1="16" x2="15" y2="16"></line>',
     'mensajes' => '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22 6 12 13 2 6"></polyline>',
     'techos' => '<path d="M3 21h18"></path><path d="M5 21V10l7-7 7 7v11"></path><line x1="9" y1="21" x2="9" y2="14"></line><line x1="15" y1="21" x2="15" y2="14"></line>',
     'control-versiones' => '<circle cx="12" cy="12" r="9"></circle><polyline points="12 7 12 12 16 14"></polyline>',
@@ -91,6 +98,17 @@ if (!empty($_SESSION['usuario_id'])) {
                 </div>
 
                 <div class="grupo-acciones-encabezado">
+                    <?php if ($esDependenciaRaizActual): ?>
+                    <a
+                        href="index.php?ruta=alternar-auditoria&volver=<?= urlencode($urlActualEncabezado) ?>"
+                        class="boton-auditar<?= !empty($_SESSION['modo_auditoria']) ? ' activo' : '' ?>"
+                        title="Auditar: ver todo lo pendiente de tu árbol de dependencias, sin importar a quién esté dirigido"
+                    >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        Auditar
+                    </a>
+                    <?php endif; ?>
+
                     <div class="menu-mensajes">
                         <button type="button" id="menu-mensajes-boton" class="menu-mensajes-boton" aria-label="Mensajes">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22 6 12 13 2 6"></polyline></svg>
@@ -136,7 +154,7 @@ if (!empty($_SESSION['usuario_id'])) {
                         <div id="menu-usuario-dropdown" class="menu-usuario-dropdown">
                             <div class="menu-usuario-detalle">
                                 <span class="detalle-usuario">Estamento: <?= htmlspecialchars($estamentoActual) ?></span>
-                                <span class="detalle-usuario">Dependencia: <?= htmlspecialchars($dependenciaActual) ?></span>
+                                <span class="detalle-usuario">Dependencia: <?= htmlspecialchars(Dependencia::nombreVisible($dependenciaActual)) ?></span>
                               <!--  <span class="detalle-usuario">Rol: <?= htmlspecialchars($rolActual) ?></span> -->
                             </div>
                             <a href="index.php?ruta=perfil">Perfil</a>

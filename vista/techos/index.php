@@ -3,11 +3,19 @@
     <div class="tarjeta">
         <div class="cabecera-modulo">
             <div>
-                <h1>Techos</h1>
+                <h1>
+                    Techos
+                    <?php if ($techoAsignadoPadre !== null): ?>
+                    <span class="etiqueta-techo-padre" title="<?= $esSuperAdmin ? 'Presupuesto total del año' : 'Techo asignado por tu dependencia superior' ?>">$<?= number_format($techoAsignadoPadre, 2, ',', '.') ?></span>
+                    <?php endif; ?>
+                </h1>
                 <p class="texto-atenuado">Configura el mínimo y el techo presupuestal de las dependencias que reportan a la tuya.</p>
             </div>
             <div class="grupo-acciones-encabezado">
-                <button type="button" class="boton-accion boton-accion-enviar">Exportar Excel</button>
+                <?php if (!empty($arbolHijas)): ?>
+                <button type="button" id="boton-ocultar-programas" class="boton-accion boton-accion-ver" aria-pressed="false">Ocultar pregrado y postgrado</button>
+                <?php endif; ?>
+                <a id="enlace-exportar-techos" href="index.php?ruta=techos-exportar&anio_id=<?= (int) $anioSeleccionadoId ?>" class="boton-accion boton-accion-enviar">Exportar Excel</a>
                 <a href="index.php?ruta=resumen-techos&anio_id=<?= (int) $anioSeleccionadoId ?>" class="boton-accion boton-accion-ver">Resumen de techos</a>
                 <a href="index.php?ruta=control-versiones&anio_id=<?= (int) $anioSeleccionadoId ?>" class="boton-accion boton-accion-ver">Control de versiones</a>
             </div>
@@ -56,6 +64,16 @@
                 <span>Restante</span>
             </div>
 
+            <div class="fila-presupuesto-total <?= $esSuperAdmin ? '' : 'sin-minimo' ?>">
+                <span>Total</span>
+                <?php if ($esSuperAdmin): ?>
+                <span>$<?= number_format($totalMinimo, 2, ',', '.') ?></span>
+                <?php endif; ?>
+                <span>$<?= number_format($totalTecho, 2, ',', '.') ?></span>
+                <span>$<?= number_format($totalAsignado, 2, ',', '.') ?></span>
+                <span class="<?= $totalRestante < 0 ? 'etiqueta-restante-negativo' : '' ?>">$<?= number_format($totalRestante, 2, ',', '.') ?></span>
+            </div>
+
             <?php
             $iconoCandadoCerrado = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>';
             $iconoCandadoAbierto = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>';
@@ -69,7 +87,7 @@
                 $techoNumerico = $valores['techo'] !== null ? (float) $valores['techo'] : null;
                 $restante = $techoNumerico !== null ? $techoNumerico - $gastado : null;
                 ?>
-                <div class="nodo-arbol-presupuesto">
+                <div class="nodo-arbol-presupuesto" data-tipo="<?= htmlspecialchars((string) ($dependencia['tipo'] ?? '')) ?>">
                     <div class="fila-presupuesto-dependencia <?= $esSuperAdmin ? '' : 'sin-minimo' ?>">
                         <span class="fila-presupuesto-nombre">
                             <?php if ($tieneHijos): ?>
@@ -82,19 +100,18 @@
                         <?php if ($esSuperAdmin): ?>
                         <div class="campo-moneda">
                             <span>$</span>
-                            <input type="number" name="minimo[<?= (int) $dependencia['id'] ?>]" min="0" step="0.01" placeholder="0.00" value="<?= $valores['minimo'] !== null ? htmlspecialchars((string) $valores['minimo']) : '' ?>">
+                            <input type="text" inputmode="decimal" name="minimo[<?= (int) $dependencia['id'] ?>]" placeholder="0,00" value="<?= $valores['minimo'] !== null ? htmlspecialchars((string) $valores['minimo']) : '' ?>">
                         </div>
                         <?php endif; ?>
                         <div class="campo-techo-con-candado">
                             <div class="campo-moneda">
                                 <span>$</span>
                                 <input
-                                    type="number"
+                                    type="text"
+                                    inputmode="decimal"
                                     class="campo-techo-input"
                                     name="techo[<?= (int) $dependencia['id'] ?>]"
-                                    min="0"
-                                    step="0.01"
-                                    placeholder="0.00"
+                                    placeholder="0,00"
                                     value="<?= $valores['techo'] !== null ? htmlspecialchars((string) $valores['techo']) : '' ?>"
                                     data-minimo="<?= $valores['minimo'] !== null ? htmlspecialchars((string) $valores['minimo']) : '' ?>"
                                     <?= $bloqueado && !$esSuperAdmin ? 'disabled' : '' ?>
@@ -136,16 +153,6 @@
                 $renderizarNodoArbolTechos($nodoRaiz);
             }
             ?>
-
-            <div class="fila-presupuesto-total <?= $esSuperAdmin ? '' : 'sin-minimo' ?>">
-                <span>Total</span>
-                <?php if ($esSuperAdmin): ?>
-                <span>$<?= number_format($totalMinimo, 2, ',', '.') ?></span>
-                <?php endif; ?>
-                <span>$<?= number_format($totalTecho, 2, ',', '.') ?></span>
-                <span>$<?= number_format($totalAsignado, 2, ',', '.') ?></span>
-                <span class="<?= $totalRestante < 0 ? 'etiqueta-restante-negativo' : '' ?>">$<?= number_format($totalRestante, 2, ',', '.') ?></span>
-            </div>
 
             <div class="acciones-formulario-presupuestos">
                 <button type="submit" class="boton-enviar">Guardar</button>

@@ -18,6 +18,10 @@
         <form method="POST" action="index.php?ruta=roles" class="form-agregar">
             <input type="text" name="nombre" placeholder="Nombre del rol" required>
             <input type="number" name="orden" placeholder="Orden" min="1" style="max-width: 90px;">
+            <div class="campo-color-icono" title="Color de fondo del icono">
+                <input type="color" id="nuevo-rol-color" value="#0071e3">
+                <input type="text" id="nuevo-rol-color-hex" name="color" value="#0071e3" maxlength="7" pattern="^#[0-9A-Fa-f]{6}$" placeholder="#0071e3">
+            </div>
             <button type="submit">Agregar</button>
         </form>
 
@@ -32,9 +36,14 @@
             </thead>
             <tbody>
                 <?php foreach ($roles as $rol): ?>
-                <tr>
+                <tr class="<?= $rol['nombre'] === 'Consulta' ? 'fila-rol-frontera' : '' ?>">
                     <td><?= (int) $rol['orden'] ?></td>
-                    <td><?= htmlspecialchars($rol['nombre']) ?></td>
+                    <td>
+                        <div class="celda-rol-nombre">
+                            <span class="icono-rol" style="background-color: <?= htmlspecialchars($rol['color']) ?>;" title="<?= htmlspecialchars($rol['color']) ?>"><?= htmlspecialchars(mb_strtoupper(mb_substr($rol['nombre'], 0, 1))) ?></span>
+                            <?= htmlspecialchars($rol['nombre']) ?>
+                        </div>
+                    </td>
                     <td><?= htmlspecialchars($rol['creado_en']) ?></td>
                     <td class="celda-acciones">
                         <div class="acciones-fila">
@@ -44,6 +53,7 @@
                                 data-id="<?= (int) $rol['id'] ?>"
                                 data-nombre="<?= htmlspecialchars($rol['nombre']) ?>"
                                 data-orden="<?= (int) $rol['orden'] ?>"
+                                data-color="<?= htmlspecialchars($rol['color']) ?>"
                             >Editar</button>
                             <form method="POST" action="index.php?ruta=roles">
                                 <input type="hidden" name="accion" value="eliminar">
@@ -82,6 +92,14 @@
                 <div class="campo">
                     <label for="editar-rol-orden">Orden (jerarquía)</label>
                     <input type="number" id="editar-rol-orden" name="orden" min="1">
+                </div>
+
+                <div class="campo">
+                    <label for="editar-rol-color-hex">Color de fondo del icono</label>
+                    <div class="campo-color-icono">
+                        <input type="color" id="editar-rol-color" value="#0071e3">
+                        <input type="text" id="editar-rol-color-hex" name="color" maxlength="7" pattern="^#[0-9A-Fa-f]{6}$" placeholder="#0071e3">
+                    </div>
                 </div>
 
                 <button type="submit" class="boton-enviar">Guardar cambios</button>

@@ -26,7 +26,7 @@
 
             <div class="campo">
                 <label>Rol</label>
-                <input type="text" value="<?= htmlspecialchars(ucfirst((string) $usuario['rol_id'])) ?>" disabled>
+                <input type="text" value="<?= htmlspecialchars($rolActual) ?>" disabled>
             </div>
 
             <div class="campo">
@@ -36,7 +36,7 @@
 
             <div class="campo">
                 <label>Dependencia</label>
-                <input type="text" value="<?= htmlspecialchars($dependencia['nombre'] ?? '—') ?>" disabled>
+                <input type="text" value="<?= htmlspecialchars(Dependencia::nombreVisible($dependencia['nombre'] ?? null) ?: '—') ?>" disabled>
             </div>
 
             <button type="submit" class="boton-enviar">Guardar cambios</button>

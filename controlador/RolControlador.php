@@ -53,11 +53,11 @@ class RolControlador
     private function exportarCsv(): void
     {
         $filas = array_map(
-            static fn (array $r): array => [$r['nombre'], $r['orden']],
+            static fn (array $r): array => [$r['nombre'], $r['orden'], $r['color']],
             $this->modeloRol->obtenerTodos()
         );
 
-        CsvConfiguracion::exportar('roles.csv', ['nombre', 'orden'], $filas);
+        CsvConfiguracion::exportar('roles.csv', ['nombre', 'orden', 'color'], $filas);
     }
 
     private function importarCsv(): array
@@ -96,6 +96,7 @@ class RolControlador
     {
         $nombre = trim($_POST['nombre'] ?? '');
         $ordenTexto = trim($_POST['orden'] ?? '');
+        $color = trim($_POST['color'] ?? '') ?: '#0071e3';
 
         if ($nombre === '') {
             return ['El nombre del rol es obligatorio.', ''];
@@ -105,9 +106,13 @@ class RolControlador
             return ['Ese rol ya existe.', ''];
         }
 
+        if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) {
+            return ['El color debe ser un código hexadecimal válido, por ejemplo #0071E3.', ''];
+        }
+
         $orden = $ordenTexto !== '' ? (int) $ordenTexto : $this->modeloRol->obtenerSiguienteOrden();
 
-        $this->modeloRol->crear($nombre, $orden);
+        $this->modeloRol->crear($nombre, $orden, $color);
 
         return ['', 'Rol agregado correctamente.'];
     }
@@ -117,6 +122,7 @@ class RolControlador
         $id = (int) ($_POST['id'] ?? 0);
         $nombre = trim($_POST['nombre'] ?? '');
         $ordenTexto = trim($_POST['orden'] ?? '');
+        $color = trim($_POST['color'] ?? '') ?: '#0071e3';
 
         if ($id <= 0 || $this->modeloRol->obtenerPorId($id) === null) {
             return ['El rol que intentas editar no existe.', ''];
@@ -130,9 +136,13 @@ class RolControlador
             return ['Ese rol ya existe.', ''];
         }
 
+        if (!preg_match('/^#[0-9A-Fa-f]{6}$/', $color)) {
+            return ['El color debe ser un código hexadecimal válido, por ejemplo #0071E3.', ''];
+        }
+
         $orden = $ordenTexto !== '' ? (int) $ordenTexto : 0;
 
-        $this->modeloRol->actualizar($id, $nombre, $orden);
+        $this->modeloRol->actualizar($id, $nombre, $orden, $color);
 
         return ['', 'Rol actualizado correctamente.'];
     }

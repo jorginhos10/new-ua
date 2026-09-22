@@ -6,7 +6,6 @@ require_once __DIR__ . '/controlador/LoginControlador.php';
 require_once __DIR__ . '/controlador/RegistroControlador.php';
 require_once __DIR__ . '/controlador/DashboardControlador.php';
 require_once __DIR__ . '/controlador/UsuarioControlador.php';
-require_once __DIR__ . '/controlador/NecesidadControlador.php';
 require_once __DIR__ . '/controlador/ProximamenteControlador.php';
 require_once __DIR__ . '/controlador/ConfiguracionesControlador.php';
 require_once __DIR__ . '/controlador/RolControlador.php';
@@ -34,8 +33,6 @@ require_once __DIR__ . '/controlador/UnisaludControlador.php';
 require_once __DIR__ . '/controlador/SinExcedentesControlador.php';
 require_once __DIR__ . '/controlador/PerfilProyectosControlador.php';
 require_once __DIR__ . '/controlador/SolicitudControlador.php';
-require_once __DIR__ . '/controlador/SolicitudDetalleControlador.php';
-require_once __DIR__ . '/controlador/GastoDetalleControlador.php';
 require_once __DIR__ . '/controlador/PeticionesControlador.php';
 require_once __DIR__ . '/controlador/JerarquiaControlador.php';
 require_once __DIR__ . '/controlador/VariableMacroeconomicaControlador.php';
@@ -45,12 +42,14 @@ require_once __DIR__ . '/controlador/TechosControlador.php';
 require_once __DIR__ . '/controlador/HistorialControlador.php';
 require_once __DIR__ . '/controlador/ActaControlador.php';
 require_once __DIR__ . '/controlador/ConsultaControlador.php';
+require_once __DIR__ . '/controlador/DevControlador.php';
+require_once __DIR__ . '/controlador/AuditoriaControlador.php';
 
 $ruta = $_GET['ruta'] ?? 'login';
 
 $rutaAMenuKey = [
     'peticiones' => 'peticiones',
-    'consolidado-detalle' => 'peticiones',
+    'peticiones-tipo-detalle' => 'peticiones',
     'consolidado-autogestion' => 'peticiones',
     'peticiones-historial-item' => 'peticiones',
     'extension' => 'extension',
@@ -72,6 +71,7 @@ $rutaAMenuKey = [
     'techos' => 'techos',
     'resumen-techos' => 'techos',
     'control-versiones' => 'techos',
+    'techos-exportar' => 'techos',
     'actas' => 'actas',
     'configurar-presupuestos' => 'configuraciones',
     'configuraciones' => 'configuraciones',
@@ -142,6 +142,10 @@ switch ($ruta) {
 
     case 'dejar-de-impersonar':
         (new UsuarioControlador())->dejarDeImpersonar();
+        break;
+
+    case 'alternar-auditoria':
+        (new AuditoriaControlador())->alternar();
         break;
 
     case 'sedes':
@@ -284,10 +288,6 @@ switch ($ruta) {
         (new SinExcedentesControlador())->exportar();
         break;
 
-    case 'formulario-invitado':
-        (new NecesidadControlador())->index();
-        break;
-
     case 'perfil-proyectos':
         (new PerfilProyectosControlador())->index();
         break;
@@ -300,20 +300,12 @@ switch ($ruta) {
         (new SolicitudControlador())->index();
         break;
 
-    case 'solicitud-detalle':
-        (new SolicitudDetalleControlador())->index();
-        break;
-
-    case 'gasto-detalle':
-        (new GastoDetalleControlador())->index();
+    case 'peticiones-tipo-detalle':
+        (new PeticionesControlador())->tipoDetalle();
         break;
 
     case 'peticiones':
         (new PeticionesControlador())->index();
-        break;
-
-    case 'consolidado-detalle':
-        (new PeticionesControlador())->detalle();
         break;
 
     case 'consolidado-autogestion':
@@ -322,10 +314,6 @@ switch ($ruta) {
 
     case 'peticiones-historial-item':
         (new PeticionesControlador())->historialItem();
-        break;
-
-    case 'peticiones-pendientes-grupo':
-        (new PeticionesControlador())->pendientesGrupo();
         break;
 
     case 'jerarquias':
@@ -362,6 +350,18 @@ switch ($ruta) {
 
     case 'resumen-techos':
         (new TechosControlador())->resumen();
+        break;
+
+    case 'techos-exportar':
+        (new TechosControlador())->exportar();
+        break;
+
+    case 'dev':
+        (new DevControlador())->index();
+        break;
+
+    case 'dev-vista':
+        (new DevControlador())->vista();
         break;
 
     case 'techos-alternar-bloqueo':

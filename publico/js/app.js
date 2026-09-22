@@ -188,6 +188,34 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
+// Acordeones de ítem de Autogestión en el sidebar (Extensión, Postgrado, ...): delegado por clase
+// en vez de ids fijos, para que cada módulo con ítems pueda tener el suyo sin chocar entre sí (ver
+// parciales/sidebar.php, .menu-autogestion-item).
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.menu-autogestion-item > .enlace-lateral-toggle').forEach(function (boton) {
+        var dropdown = boton.nextElementSibling;
+
+        if (!dropdown) {
+            return;
+        }
+
+        boton.addEventListener('click', function (evento) {
+            evento.stopPropagation();
+            dropdown.classList.toggle('abierto');
+        });
+    });
+
+    document.addEventListener('click', function (evento) {
+        document.querySelectorAll('.menu-autogestion-item-dropdown.abierto').forEach(function (dropdown) {
+            var boton = dropdown.previousElementSibling;
+
+            if (!dropdown.contains(evento.target) && (!boton || !boton.contains(evento.target))) {
+                dropdown.classList.remove('abierto');
+            }
+        });
+    });
+});
+
 document.addEventListener('DOMContentLoaded', function () {
     var campoProyectoId = document.getElementById('proyecto_id');
     var campoProyectoTexto = document.getElementById('proyecto_buscador');
@@ -2031,6 +2059,33 @@ document.addEventListener('DOMContentLoaded', function () {
     var campoId = document.getElementById('editar-rol-id');
     var campoNombre = document.getElementById('editar-rol-nombre');
     var campoOrden = document.getElementById('editar-rol-orden');
+    var campoColor = document.getElementById('editar-rol-color');
+    var campoColorHex = document.getElementById('editar-rol-color-hex');
+
+    // El selector nativo de color y el campo de texto hex se mantienen sincronizados en los dos
+    // sentidos, tanto para agregar un rol como para editarlo — el que de verdad se envía en el
+    // formulario es el de texto (name="color"); el nativo es solo el selector visual.
+    function enlazarSelectorColor(inputColor, inputHex) {
+        if (!inputColor || !inputHex) {
+            return;
+        }
+
+        var patronHex = /^#[0-9A-Fa-f]{6}$/;
+
+        inputColor.addEventListener('input', function () {
+            inputHex.value = inputColor.value;
+        });
+
+        inputHex.addEventListener('input', function () {
+            var valor = inputHex.value.trim();
+            if (patronHex.test(valor)) {
+                inputColor.value = valor;
+            }
+        });
+    }
+
+    enlazarSelectorColor(document.getElementById('nuevo-rol-color'), document.getElementById('nuevo-rol-color-hex'));
+    enlazarSelectorColor(campoColor, campoColorHex);
 
     function cerrarEditar() {
         modalEditar.classList.remove('abierto');
@@ -2041,6 +2096,13 @@ document.addEventListener('DOMContentLoaded', function () {
             campoId.value = boton.dataset.id;
             campoNombre.value = boton.dataset.nombre;
             campoOrden.value = boton.dataset.orden;
+            var color = boton.dataset.color || '#0071e3';
+            if (campoColor) {
+                campoColor.value = color;
+            }
+            if (campoColorHex) {
+                campoColorHex.value = color;
+            }
             modalEditar.classList.add('abierto');
         });
     });
@@ -2431,6 +2493,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var campoUsuarioNombre = document.getElementById('editar-usuario-nombre');
     var campoUsuarioCorreo = document.getElementById('editar-usuario-correo');
     var campoUsuarioPassword = document.getElementById('editar-usuario-password');
+    var campoUsuarioTipo = document.getElementById('editar-usuario-tipo');
     var campoUsuarioDependencia = document.getElementById('editar-usuario-dependencia');
     var campoUsuarioRol = document.getElementById('editar-usuario-rol');
     var campoUsuarioEstamento = document.getElementById('editar-usuario-estamento');
@@ -2454,6 +2517,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 if (window.aplicarFiltroRolUsuario) {
                     window.aplicarFiltroRolUsuario(campoUsuarioDependencia);
+                }
+            }
+
+            if (campoUsuarioTipo) {
+                var tipoDependenciaUsuario = boton.dataset.dependenciaTipo || '';
+
+                if (tipoDependenciaUsuario === '') {
+                    campoUsuarioTipo.value = '';
+                } else {
+                    var opcionTipoCoincide = Array.prototype.some.call(campoUsuarioTipo.options, function (opcion) {
+                        return opcion.value === tipoDependenciaUsuario;
+                    });
+
+                    campoUsuarioTipo.value = opcionTipoCoincide ? tipoDependenciaUsuario : '__personalizado__';
                 }
             }
 
@@ -2525,13 +2602,20 @@ document.addEventListener('DOMContentLoaded', function () {
         boton.addEventListener('click', function () {
             campoPermisosId.value = boton.dataset.id;
             campoPermisosNombre.textContent = boton.dataset.nombre;
-            establecerValorBuscable(campoPermisosDependencia.id, boton.dataset.dependenciaId && boton.dataset.dependenciaId !== '0' ? boton.dataset.dependenciaId : '');
 
-            if (window.aplicarFiltroRolUsuario) {
-                window.aplicarFiltroRolUsuario(campoPermisosDependencia);
+            // En Consulta/Formulador (Consejo Superior/Invitados) el rol y la dependencia son
+            // fijos y ese modal no trae estos campos — solo existen para Administradores.
+            if (campoPermisosDependencia) {
+                establecerValorBuscable(campoPermisosDependencia.id, boton.dataset.dependenciaId && boton.dataset.dependenciaId !== '0' ? boton.dataset.dependenciaId : '');
+
+                if (window.aplicarFiltroRolUsuario) {
+                    window.aplicarFiltroRolUsuario(campoPermisosDependencia);
+                }
             }
 
-            campoPermisosRol.value = boton.dataset.rolId && boton.dataset.rolId !== '0' ? boton.dataset.rolId : '';
+            if (campoPermisosRol) {
+                campoPermisosRol.value = boton.dataset.rolId && boton.dataset.rolId !== '0' ? boton.dataset.rolId : '';
+            }
 
             var menuEfectivo = [];
             try {
@@ -2676,8 +2760,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var barraAccionesPendientes = document.getElementById('barra-acciones-pendientes');
     var anioIdPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.anioId : '';
-    var bandejaPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.bandeja : '';
-    var modoPendientes = barraAccionesPendientes ? barraAccionesPendientes.dataset.modo : '';
 
     var botonPendientesVer = document.getElementById('boton-pendientes-ver');
     var botonPendientesAprobar = document.getElementById('boton-pendientes-aprobar');
@@ -2778,10 +2860,6 @@ document.addEventListener('DOMContentLoaded', function () {
         agregarCampo('accion', accion);
         agregarCampo('vista', 'pendientes');
         agregarCampo('anio_id', anioIdPendientes || '');
-        agregarCampo('bandeja', bandejaPendientes || '');
-        if (modoPendientes === 'jerarquia') {
-            agregarCampo('modo', 'jerarquia');
-        }
 
         // Un solo campo JSON en vez de 8 inputs ocultos por ítem: con selecciones grandes (un
         // grupo de Pendientes puede traer cientos de gastos) los inputs paralelos superaban el
@@ -3018,7 +3096,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var barraAccionesConsolidado = document.getElementById('barra-acciones-consolidado');
     var anioIdConsolidado = barraAccionesConsolidado ? barraAccionesConsolidado.dataset.anioId : '';
-    var bandejaConsolidado = barraAccionesConsolidado ? barraAccionesConsolidado.dataset.bandeja : '';
 
     var modalVerConsolidado = document.getElementById('modal-ver-consolidado');
     var modalEditarConsolidado = document.getElementById('modal-editar-consolidado');
@@ -3121,15 +3198,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // En la tabla "Consolidado por tipo" cada checkbox representa un tipo completo (puede
             // traer cientos de ítems): en vez de amontonarlos en un popup, "Ver" lleva directo a la
-            // landing de Consolidado detallado, que ya tiene búsqueda, orden por columna y las
-            // acciones reales (editar, redireccionar, duplicar, exportar).
+            // tabla real de ese origen (peticiones-tipo-detalle), con búsqueda/filtro/orden reales.
+            // Si se seleccionó más de un tipo a la vez, se abre el primero (esta tabla es por un
+            // solo origen a la vez, igual que el resto de "Ver" en Peticiones).
             if (seleccionados.length > 0 && seleccionados[0].dataset.vistaAgrupada === '1') {
-                var tiposAgrupados = tiposDeSeleccion(seleccionados);
-                var destinoAgrupado = 'index.php?ruta=consolidado-detalle&anio_id=' + encodeURIComponent(seleccionados[0].dataset.anioId || '');
-                if (tiposAgrupados.length === 1) {
-                    destinoAgrupado += '&tipo=' + encodeURIComponent(tiposAgrupados[0]);
+                var itemsAgrupados = itemsDeSeleccion(seleccionados);
+                var origenAgrupado = itemsAgrupados.length > 0 ? itemsAgrupados[0].origen : '';
+                if (origenAgrupado) {
+                    window.location.href = 'index.php?ruta=peticiones-tipo-detalle&estado=aprobada&origen=' + encodeURIComponent(origenAgrupado)
+                        + '&anio_id=' + encodeURIComponent(seleccionados[0].dataset.anioId || '') + '&resaltar_id=0';
                 }
-                window.location.href = destinoAgrupado;
                 return;
             }
 
@@ -3140,10 +3218,10 @@ document.addEventListener('DOMContentLoaded', function () {
             cuerpoVerConsolidado.innerHTML = '';
 
             if (enlaceVerConsolidadoCompleto) {
-                if (tipos.length === 1) {
+                if (tipos.length === 1 && items.length > 0) {
                     enlaceVerConsolidadoCompleto.style.display = '';
-                    enlaceVerConsolidadoCompleto.href = 'index.php?ruta=consolidado-detalle&tipo=' + encodeURIComponent(tipos[0])
-                        + '&anio_id=' + encodeURIComponent(seleccionados[0].dataset.anioId || '');
+                    enlaceVerConsolidadoCompleto.href = 'index.php?ruta=peticiones-tipo-detalle&estado=aprobada&origen=' + encodeURIComponent(items[0].origen || '')
+                        + '&anio_id=' + encodeURIComponent(seleccionados[0].dataset.anioId || '') + '&resaltar_id=0';
                 } else {
                     enlaceVerConsolidadoCompleto.style.display = 'none';
                 }
@@ -3180,8 +3258,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
                 var celdaAccion = document.createElement('td');
                 var enlace = document.createElement('a');
-                enlace.href = 'index.php?ruta=consolidado-detalle&tipo=' + encodeURIComponent(item.tipo || '')
-                    + '&anio_id=' + encodeURIComponent(seleccionados[0] ? seleccionados[0].dataset.anioId || '' : '');
+                enlace.href = 'index.php?ruta=peticiones-tipo-detalle&estado=aprobada&origen=' + encodeURIComponent(item.origen || '')
+                    + '&anio_id=' + encodeURIComponent(seleccionados[0] ? seleccionados[0].dataset.anioId || '' : '') + '&resaltar_id=' + encodeURIComponent(item.origen_id || '0');
                 enlace.className = 'boton-accion boton-accion-ver';
                 enlace.textContent = 'Ver';
                 celdaAccion.appendChild(enlace);
@@ -3437,7 +3515,6 @@ document.addEventListener('DOMContentLoaded', function () {
             agregarCampo('accion', 'archivar_consolidado');
             agregarCampo('vista', 'consolidado');
             agregarCampo('anio_id', anioIdConsolidado || '');
-            agregarCampo('bandeja', bandejaConsolidado || '');
 
             items.forEach(function (item) {
                 agregarCampo('item_origen[]', item.origen || '');
@@ -3480,7 +3557,6 @@ document.addEventListener('DOMContentLoaded', function () {
             agregarCampo('accion', 'desconsolidar_grupo');
             agregarCampo('vista', 'pendientes');
             agregarCampo('anio_id', anioIdConsolidado || '');
-            agregarCampo('bandeja', bandejaConsolidado || '');
 
             items.forEach(function (item) {
                 agregarCampo('item_origen[]', item.origen || '');
@@ -3514,14 +3590,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var barraAccionesArchivar = document.getElementById('barra-acciones-archivar');
     var anioIdArchivado = barraAccionesArchivar ? barraAccionesArchivar.dataset.anioId : '';
-    var bandejaArchivado = barraAccionesArchivar ? barraAccionesArchivar.dataset.bandeja : '';
 
     var botonArchivadoVer = document.getElementById('boton-archivado-ver');
     var botonArchivadoDuplicar = document.getElementById('boton-archivado-duplicar');
     var botonArchivadoConsolidar = document.getElementById('boton-archivado-consolidar');
     var botonArchivadoEnviar = document.getElementById('boton-archivado-enviar');
 
-    var modalVerArchivado = document.getElementById('modal-ver-archivado');
     var modalEnviarArchivado = document.getElementById('modal-enviar-archivado');
 
     function obtenerSeleccionadosArchivado() {
@@ -3535,7 +3609,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var hay = seleccionados.length > 0;
 
         if (botonArchivadoVer) {
-            botonArchivadoVer.disabled = !hay;
+            botonArchivadoVer.disabled = seleccionados.length !== 1;
         }
         if (botonArchivadoDuplicar) {
             botonArchivadoDuplicar.disabled = !hay;
@@ -3567,81 +3641,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
     actualizarBotonesArchivado();
 
-    // ---- Ver (uno o varios ítems a la vez): igual que el Ver de Consolidado, pero sin JSON
-    // agrupado — cada checkbox ya trae sus propios datos planos. ----
-    if (botonArchivadoVer && modalVerArchivado) {
-        var botonCerrarVerArchivado = document.getElementById('boton-cerrar-modal-ver-archivado');
-        var cuerpoVerArchivado = document.getElementById('ver-archivado-cuerpo');
-
-        var cerrarVerArchivado = function () {
-            modalVerArchivado.classList.remove('abierto');
-        };
-
+    // ---- Ver: exige exactamente un ítem seleccionado y navega directo a su tabla real
+    // (peticiones-tipo-detalle), sin popup intermedio — igual que ya hace Pendientes. ----
+    if (botonArchivadoVer) {
         botonArchivadoVer.addEventListener('click', function () {
             if (botonArchivadoVer.disabled) {
                 return;
             }
 
             var seleccionados = obtenerSeleccionadosArchivado();
-            cuerpoVerArchivado.innerHTML = '';
 
-            seleccionados.forEach(function (casilla) {
-                var fila = document.createElement('tr');
-
-                var celdaTipo = document.createElement('td');
-                celdaTipo.textContent = casilla.dataset.tipo || '—';
-                fila.appendChild(celdaTipo);
-
-                var celdaDetalle = document.createElement('td');
-                celdaDetalle.textContent = casilla.dataset.detalle || '—';
-                fila.appendChild(celdaDetalle);
-
-                var celdaCantidad = document.createElement('td');
-                celdaCantidad.textContent = casilla.dataset.cantidad || '—';
-                celdaCantidad.dataset.orden = casilla.dataset.cantidad ? parseFloat(casilla.dataset.cantidad) || 0 : 0;
-                fila.appendChild(celdaCantidad);
-
-                var celdaValor = document.createElement('td');
-                celdaValor.textContent = casilla.dataset.valor
-                    ? '$ ' + Number(casilla.dataset.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : '—';
-                celdaValor.dataset.orden = casilla.dataset.valor ? Number(casilla.dataset.valor) : 0;
-                fila.appendChild(celdaValor);
-
-                var celdaAccion = document.createElement('td');
-                if (casilla.dataset.rutaVer) {
-                    var enlace = document.createElement('a');
-                    enlace.href = casilla.dataset.rutaVer;
-                    enlace.className = 'boton-accion boton-accion-ver';
-                    enlace.textContent = 'Ver';
-                    celdaAccion.appendChild(enlace);
-                }
-                fila.appendChild(celdaAccion);
-
-                cuerpoVerArchivado.appendChild(fila);
-            });
-
-            var thDetalleArchivado = cuerpoVerArchivado.closest('table').querySelector('th[data-orden-defecto]');
-            if (thDetalleArchivado) {
-                window.ordenarPorEncabezado(thDetalleArchivado);
-            }
-
-            modalVerArchivado.classList.add('abierto');
-        });
-
-        if (botonCerrarVerArchivado) {
-            botonCerrarVerArchivado.addEventListener('click', cerrarVerArchivado);
-        }
-
-        modalVerArchivado.addEventListener('click', function (evento) {
-            if (evento.target === modalVerArchivado) {
-                cerrarVerArchivado();
-            }
-        });
-
-        document.addEventListener('keydown', function (evento) {
-            if (evento.key === 'Escape') {
-                cerrarVerArchivado();
+            if (seleccionados.length === 1 && seleccionados[0].dataset.rutaVer) {
+                window.location.href = seleccionados[0].dataset.rutaVer;
             }
         });
     }
@@ -3663,7 +3674,6 @@ document.addEventListener('DOMContentLoaded', function () {
         agregarCampo('accion', accion);
         agregarCampo('vista', 'archivar');
         agregarCampo('anio_id', anioIdArchivado || '');
-        agregarCampo('bandeja', bandejaArchivado || '');
 
         seleccionados.forEach(function (casilla) {
             agregarCampo('item_origen[]', casilla.dataset.origen || '');
@@ -3779,14 +3789,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var barraAccionesEnviadas = document.getElementById('barra-acciones-enviadas');
     var anioIdEnviado = barraAccionesEnviadas ? barraAccionesEnviadas.dataset.anioId : '';
-    var bandejaEnviado = barraAccionesEnviadas ? barraAccionesEnviadas.dataset.bandeja : '';
 
     var botonEnviadoVer = document.getElementById('boton-enviado-ver');
     var botonEnviadoDuplicar = document.getElementById('boton-enviado-duplicar');
     var botonEnviadoConsolidar = document.getElementById('boton-enviado-consolidar');
     var botonEnviadoEnviar = document.getElementById('boton-enviado-enviar');
 
-    var modalVerEnviado = document.getElementById('modal-ver-enviado');
     var modalEnviarEnviado = document.getElementById('modal-enviar-enviado');
 
     function obtenerSeleccionadosEnviado() {
@@ -3800,7 +3808,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var hay = seleccionados.length > 0;
 
         if (botonEnviadoVer) {
-            botonEnviadoVer.disabled = !hay;
+            botonEnviadoVer.disabled = seleccionados.length !== 1;
         }
         if (botonEnviadoDuplicar) {
             botonEnviadoDuplicar.disabled = !hay;
@@ -3832,80 +3840,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
     actualizarBotonesEnviado();
 
-    // ---- Ver (uno o varios ítems a la vez) ----
-    if (botonEnviadoVer && modalVerEnviado) {
-        var botonCerrarVerEnviado = document.getElementById('boton-cerrar-modal-ver-enviado');
-        var cuerpoVerEnviado = document.getElementById('ver-enviado-cuerpo');
-
-        var cerrarVerEnviado = function () {
-            modalVerEnviado.classList.remove('abierto');
-        };
-
+    // ---- Ver: exige exactamente un ítem seleccionado y navega directo a su tabla real
+    // (peticiones-tipo-detalle), sin popup intermedio — igual que ya hace Pendientes. ----
+    if (botonEnviadoVer) {
         botonEnviadoVer.addEventListener('click', function () {
             if (botonEnviadoVer.disabled) {
                 return;
             }
 
             var seleccionados = obtenerSeleccionadosEnviado();
-            cuerpoVerEnviado.innerHTML = '';
 
-            seleccionados.forEach(function (casilla) {
-                var fila = document.createElement('tr');
-
-                var celdaTipo = document.createElement('td');
-                celdaTipo.textContent = casilla.dataset.tipo || '—';
-                fila.appendChild(celdaTipo);
-
-                var celdaDetalle = document.createElement('td');
-                celdaDetalle.textContent = casilla.dataset.detalle || '—';
-                fila.appendChild(celdaDetalle);
-
-                var celdaCantidad = document.createElement('td');
-                celdaCantidad.textContent = casilla.dataset.cantidad || '—';
-                celdaCantidad.dataset.orden = casilla.dataset.cantidad ? parseFloat(casilla.dataset.cantidad) || 0 : 0;
-                fila.appendChild(celdaCantidad);
-
-                var celdaValor = document.createElement('td');
-                celdaValor.textContent = casilla.dataset.valor
-                    ? '$ ' + Number(casilla.dataset.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : '—';
-                celdaValor.dataset.orden = casilla.dataset.valor ? Number(casilla.dataset.valor) : 0;
-                fila.appendChild(celdaValor);
-
-                var celdaAccion = document.createElement('td');
-                if (casilla.dataset.rutaVer) {
-                    var enlace = document.createElement('a');
-                    enlace.href = casilla.dataset.rutaVer;
-                    enlace.className = 'boton-accion boton-accion-ver';
-                    enlace.textContent = 'Ver';
-                    celdaAccion.appendChild(enlace);
-                }
-                fila.appendChild(celdaAccion);
-
-                cuerpoVerEnviado.appendChild(fila);
-            });
-
-            var thDetalleEnviado = cuerpoVerEnviado.closest('table').querySelector('th[data-orden-defecto]');
-            if (thDetalleEnviado) {
-                window.ordenarPorEncabezado(thDetalleEnviado);
-            }
-
-            modalVerEnviado.classList.add('abierto');
-        });
-
-        if (botonCerrarVerEnviado) {
-            botonCerrarVerEnviado.addEventListener('click', cerrarVerEnviado);
-        }
-
-        modalVerEnviado.addEventListener('click', function (evento) {
-            if (evento.target === modalVerEnviado) {
-                cerrarVerEnviado();
-            }
-        });
-
-        document.addEventListener('keydown', function (evento) {
-            if (evento.key === 'Escape') {
-                cerrarVerEnviado();
+            if (seleccionados.length === 1 && seleccionados[0].dataset.rutaVer) {
+                window.location.href = seleccionados[0].dataset.rutaVer;
             }
         });
     }
@@ -3927,7 +3873,6 @@ document.addEventListener('DOMContentLoaded', function () {
         agregarCampo('accion', accion);
         agregarCampo('vista', 'enviadas');
         agregarCampo('anio_id', anioIdEnviado || '');
-        agregarCampo('bandeja', bandejaEnviado || '');
 
         seleccionados.forEach(function (casilla) {
             agregarCampo('item_origen[]', casilla.dataset.origen || '');
@@ -4532,6 +4477,46 @@ document.addEventListener('DOMContentLoaded', function () {
             boton.setAttribute('aria-expanded', expandir ? 'true' : 'false');
         });
     });
+
+    var botonOcultarProgramas = document.getElementById('boton-ocultar-programas');
+
+    if (botonOcultarProgramas) {
+        var nodosPrograma = document.querySelectorAll('.nodo-arbol-presupuesto[data-tipo="pregrado"], .nodo-arbol-presupuesto[data-tipo="postgrado"]');
+        var enlaceExportar = document.getElementById('enlace-exportar-techos');
+        var hrefExportarBase = enlaceExportar ? enlaceExportar.getAttribute('href') : null;
+
+        var aplicarOcultamiento = function (ocultar) {
+            nodosPrograma.forEach(function (nodo) {
+                nodo.classList.toggle('oculto', ocultar);
+            });
+            botonOcultarProgramas.textContent = ocultar ? 'Mostrar pregrado y postgrado' : 'Ocultar pregrado y postgrado';
+            botonOcultarProgramas.setAttribute('aria-pressed', ocultar ? 'true' : 'false');
+
+            if (enlaceExportar) {
+                enlaceExportar.setAttribute('href', hrefExportarBase + (ocultar ? '&ocultar_programas=1' : ''));
+            }
+        };
+
+        var ocultarInicial = false;
+        try {
+            ocultarInicial = localStorage.getItem('techos_ocultar_programas') === '1';
+        } catch (error) {
+            ocultarInicial = false;
+        }
+
+        aplicarOcultamiento(ocultarInicial);
+
+        botonOcultarProgramas.addEventListener('click', function () {
+            var ocultarAhora = botonOcultarProgramas.getAttribute('aria-pressed') !== 'true';
+            aplicarOcultamiento(ocultarAhora);
+
+            try {
+                localStorage.setItem('techos_ocultar_programas', ocultarAhora ? '1' : '0');
+            } catch (error) {
+                // almacenamiento no disponible: la preferencia simplemente no persiste
+            }
+        });
+    }
 });
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -4680,6 +4665,65 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 document.addEventListener('DOMContentLoaded', function () {
+    var camposMoneda = document.querySelectorAll('.campo-moneda input[type="text"]');
+
+    if (camposMoneda.length === 0) {
+        return;
+    }
+
+    // Formatea mientras se escribe (miles con punto, decimales con coma) sin usar
+    // <input type="number">: sus flechas de ajustar centavos se disparan por accidente con
+    // trackpad (scroll/gestos), cambiando el valor sin que el usuario se dé cuenta.
+    function formatearTextoMoneda(texto) {
+        var limpio = texto.replace(/[^0-9,]/g, '');
+        var indiceComa = limpio.indexOf(',');
+        var parteEntera = (indiceComa === -1 ? limpio : limpio.slice(0, indiceComa)).replace(/^0+(?=\d)/, '');
+        var parteDecimal = indiceComa === -1 ? '' : limpio.slice(indiceComa + 1, indiceComa + 3).replace(/,/g, '');
+        var enteroConMiles = parteEntera.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+        return indiceComa === -1 ? enteroConMiles : enteroConMiles + ',' + parteDecimal;
+    }
+
+    function valorPlanoDesdeMoneda(texto) {
+        if (!texto) {
+            return null;
+        }
+
+        var numero = parseFloat(texto.replace(/\./g, '').replace(',', '.'));
+
+        return isNaN(numero) ? null : numero;
+    }
+
+    camposMoneda.forEach(function (campo) {
+        if (campo.value) {
+            campo.value = formatearTextoMoneda(campo.value.replace('.', ','));
+        }
+
+        campo.addEventListener('input', function () {
+            var posicion = campo.selectionStart;
+            var digitosAntes = campo.value.slice(0, posicion).replace(/[^0-9,]/g, '').length;
+
+            campo.value = formatearTextoMoneda(campo.value);
+
+            var contador = 0;
+            var nuevaPosicion = campo.value.length;
+
+            for (var i = 0; i < campo.value.length; i++) {
+                if (/[0-9,]/.test(campo.value[i])) {
+                    contador++;
+                }
+                if (contador === digitosAntes) {
+                    nuevaPosicion = i + 1;
+                    break;
+                }
+            }
+
+            campo.setSelectionRange(digitosAntes === 0 ? 0 : nuevaPosicion, digitosAntes === 0 ? 0 : nuevaPosicion);
+        });
+    });
+
+    // Techo no puede quedar por debajo del mínimo presupuestal de la misma dependencia (solo
+    // aplica en la página de Techos, donde .campo-techo-input trae el mínimo en data-minimo).
     var camposConMinimo = [];
 
     document.querySelectorAll('.campo-techo-input').forEach(function (campo) {
@@ -4700,8 +4744,8 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         function validar() {
-            var valor = campo.value !== '' ? parseFloat(campo.value) : null;
-            var esMenor = valor !== null && !isNaN(valor) && valor < minimo;
+            var valor = valorPlanoDesdeMoneda(campo.value);
+            var esMenor = valor !== null && valor < minimo;
             advertencia.classList.toggle('oculto', !esMenor);
         }
 
@@ -4709,27 +4753,37 @@ document.addEventListener('DOMContentLoaded', function () {
         validar();
     });
 
-    if (camposConMinimo.length === 0) {
-        return;
-    }
+    var formularios = new Set();
 
-    var formulario = camposConMinimo[0].campo.closest('form');
+    camposMoneda.forEach(function (campo) {
+        var formulario = campo.closest('form');
 
-    if (!formulario) {
-        return;
-    }
-
-    formulario.addEventListener('submit', function (evento) {
-        var invalido = camposConMinimo.find(function (item) {
-            var valor = item.campo.value !== '' ? parseFloat(item.campo.value) : null;
-            return valor !== null && !isNaN(valor) && valor < item.minimo;
-        });
-
-        if (invalido) {
-            evento.preventDefault();
-            alert('El techo presupuestal no puede ser menor al mínimo presupuestal de la dependencia.');
-            invalido.campo.focus();
+        if (formulario) {
+            formularios.add(formulario);
         }
+    });
+
+    formularios.forEach(function (formulario) {
+        formulario.addEventListener('submit', function (evento) {
+            var invalido = camposConMinimo.find(function (item) {
+                var valor = valorPlanoDesdeMoneda(item.campo.value);
+                return valor !== null && valor < item.minimo;
+            });
+
+            if (invalido) {
+                evento.preventDefault();
+                alert('El techo presupuestal no puede ser menor al mínimo presupuestal de la dependencia.');
+                invalido.campo.focus();
+                return;
+            }
+
+            // Recién aquí, con la validación superada, se pasa de formato visual
+            // ("1.234.567,50") a número plano ("1234567.50") para que el backend lo procese.
+            camposMoneda.forEach(function (campoMoneda) {
+                var numero = valorPlanoDesdeMoneda(campoMoneda.value);
+                campoMoneda.value = numero !== null ? String(numero) : '';
+            });
+        });
     });
 });
 

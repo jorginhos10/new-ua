@@ -69,10 +69,26 @@ class UsuarioControlador
         $itemsMenu = require __DIR__ . '/../config/menu_items.php';
         $menuPorTipo = $this->modeloMenuPermiso->obtenerPlantillasCompletas();
 
+        // Para Invitados (Formulador), la Dependencia es siempre una Facultad real (para poder
+        // enrutar su necesidad al Gestor de esa Facultad) — no se ofrece la dependencia genérica
+        // "FORMULADOR" ni el resto de tipos (Oficina, Vicerrectoría, Unidad...), y no hay selector
+        // de Tipo para esta pestaña (Tipo y Rol quedan fijos en "Formulador").
+        $dependenciasInvitados = $this->modeloDependencia->obtenerPorTipos(['Facultad']);
+
         foreach ($administradores as &$admin) {
             $admin['menu_efectivo'] = $this->modeloMenuPermiso->calcularPermitidoParaUsuario($admin) ?? [];
         }
         unset($admin);
+
+        foreach ($consejoSuperior as &$miembro) {
+            $miembro['menu_efectivo'] = $this->modeloMenuPermiso->calcularPermitidoParaUsuario($miembro) ?? [];
+        }
+        unset($miembro);
+
+        foreach ($invitados as &$invitado) {
+            $invitado['menu_efectivo'] = $this->modeloMenuPermiso->calcularPermitidoParaUsuario($invitado) ?? [];
+        }
+        unset($invitado);
 
         require __DIR__ . '/../vista/usuarios/index.php';
     }
@@ -252,7 +268,9 @@ class UsuarioControlador
         $dependenciaId = (int) ($_POST['dependencia_id'] ?? 0);
         $estamentoId = (int) ($_POST['estamento_id'] ?? 0);
 
-        if ($id <= 0 || $this->modeloUsuario->obtenerPorId($id) === null) {
+        $usuarioObjetivo = $id > 0 ? $this->modeloUsuario->obtenerPorId($id) : null;
+
+        if ($usuarioObjetivo === null) {
             return ['El usuario que intentas editar no existe.', ''];
         }
 
@@ -266,6 +284,11 @@ class UsuarioControlador
 
         if ($this->modeloUsuario->existeCorreo($correo, $id)) {
             return ['Ese correo ya está registrado.', ''];
+        }
+
+        if ($usuarioObjetivo['rol'] === 'invitado') {
+            $rolFormulador = $this->modeloRol->obtenerPorNombre('Formulador');
+            $rolId = $rolFormulador !== null ? (int) $rolFormulador['id'] : 0;
         }
 
         $this->modeloUsuario->actualizar($id, $nombre, $correo, $estamentoId > 0 ? $estamentoId : null);
@@ -285,8 +308,15 @@ class UsuarioControlador
         $dependenciaId = (int) ($_POST['dependencia_id'] ?? 0);
         $menuKeys = $_POST['menu'] ?? [];
 
-        if ($id <= 0 || $this->modeloUsuario->obtenerPorId($id) === null) {
+        $usuarioObjetivo = $id > 0 ? $this->modeloUsuario->obtenerPorId($id) : null;
+
+        if ($usuarioObjetivo === null) {
             return ['El usuario que intentas editar no existe.', ''];
+        }
+
+        if ($usuarioObjetivo['rol'] === 'invitado') {
+            $rolFormulador = $this->modeloRol->obtenerPorNombre('Formulador');
+            $rolId = $rolFormulador !== null ? (int) $rolFormulador['id'] : 0;
         }
 
         $this->modeloUsuario->actualizarPermisos(

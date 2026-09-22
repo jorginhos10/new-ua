@@ -20,21 +20,29 @@
  *   prefijo+name (ej. id="dependencia_ingreso" pero name="dependencia", para no chocar con otro
  *   campo de la misma página que también se llama "dependencia").
  */
+require_once __DIR__ . '/../../modelo/Dependencia.php';
+
 $idBaseDependencia = $idBaseDependenciaOverride ?? ($idPrefijoDependencia . $nombreCampoDependencia);
 $usarIdDependencia = $dependenciaUsarId ?? false;
 $valorInicialDependencia = $dependenciaValorInicial ?? null;
+// El texto visible se traduce con el alias de compatibilidad (ver Dependencia::nombreVisible());
+// el valor que se guarda/busca (hidden, data-id) siempre es el nombre real, sin traducir, para no
+// desalinear lo que se envía con lo que ya hay guardado en la base de datos.
+$valorInicialDependenciaVisible = ($valorInicialDependencia !== null && !$usarIdDependencia)
+    ? Dependencia::nombreVisible((string) $valorInicialDependencia)
+    : $valorInicialDependencia;
 $dataSelectRolAttrDependencia = !empty($dependenciaDataSelectRol) ? ' data-select-rol="' . htmlspecialchars((string) $dependenciaDataSelectRol) . '"' : '';
 
 $opcionesDependenciaNormalizadas = array_map(static function ($item) use ($usarIdDependencia) {
     if (is_array($item)) {
         return [
             'valor' => $usarIdDependencia ? (string) $item['id'] : $item['nombre'],
-            'texto' => $item['nombre'],
+            'texto' => Dependencia::nombreVisible($item['nombre']),
             'tipo' => $item['tipo'] ?? '',
         ];
     }
 
-    return ['valor' => $item, 'texto' => $item, 'tipo' => ''];
+    return ['valor' => $item, 'texto' => Dependencia::nombreVisible($item), 'tipo' => ''];
 }, $dependenciasOpciones);
 ?>
 <div class="selector-buscable" id="<?= $idBaseDependencia ?>-selector">
@@ -44,7 +52,7 @@ $opcionesDependenciaNormalizadas = array_map(static function ($item) use ($usarI
         class="selector-buscable-input"
         placeholder="Buscar dependencia..."
         autocomplete="off"
-        value="<?= $valorInicialDependencia !== null ? htmlspecialchars((string) $valorInicialDependencia) : '' ?>"
+        value="<?= $valorInicialDependenciaVisible !== null ? htmlspecialchars((string) $valorInicialDependenciaVisible) : '' ?>"
     >
     <input
         type="hidden"

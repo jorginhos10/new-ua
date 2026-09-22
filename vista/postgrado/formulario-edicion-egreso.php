@@ -5,9 +5,10 @@
  * antiguo modal `#modal-editar-egreso` — solo cambia el contenedor (ya no es un modal)
  * y el botón oculto + auto-click que dispara ese mismo poblado al cargar la página.
  *
- * Variables esperadas: $egresoParaEditar (array), $anioSeleccionadoId, $volverEdicion,
- * $error, $aniosActivos, $categoriasEgreso, $sedes, $tieneHijas, $dependenciaPorDefecto,
- * $dependenciasSugeridas, $proyectos, $rubros, $nombresMesesCompletos.
+ * Variables esperadas: $egresoParaEditar (array), $anioSeleccionadoId,
+ * $autogestionSeleccionadoId, $volverEdicion, $error, $aniosActivos, $categoriasEgreso, $sedes,
+ * $tieneHijas, $dependenciaPorDefecto, $dependenciasSugeridas, $proyectos, $rubros,
+ * $nombresMesesCompletos.
  */
 ?>
 <h2 class="titulo-formulario-edicion">Editar egreso</h2>
@@ -18,13 +19,14 @@
 
 <form
     method="POST"
-    action="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&editar_id=<?= (int) $egresoParaEditar['id'] ?>"
+    action="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&editar_id=<?= (int) $egresoParaEditar['id'] ?>"
     id="form-editar-egreso"
     class="form-necesidad"
 >
     <input type="hidden" name="tab" value="egresos">
     <input type="hidden" name="accion" value="actualizar">
     <input type="hidden" name="id" id="editar-egreso-id" value="">
+    <input type="hidden" name="autogestion_id" id="editar-egreso-autogestion_id" value="">
     <input type="hidden" name="volver" id="editar-egreso-volver" value="">
 
     <div class="campo">

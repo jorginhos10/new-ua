@@ -55,6 +55,24 @@ class JerarquiaControlador
         $todasLasJerarquias = $this->modeloJerarquia->obtenerTodas();
         $jerarquias = $this->construirArbol($todasLasJerarquias);
         $jerarquiasAnidadas = $this->construirArbolAnidado($todasLasJerarquias);
+
+        // El Mapa se ve en 3 secciones apiladas y separadas por una línea: Consejo Superior
+        // arriba, la estructura de siempre en medio, Formuladores abajo — usando el mismo "tipo"
+        // con el que ya se configura el menú por tipo (tipo_dependencia_menu).
+        $raicesConsejoSuperior = [];
+        $raicesFormulador = [];
+        $raicesEstructura = [];
+        foreach ($jerarquiasAnidadas as $raizJerarquia) {
+            $tipoRaizJerarquia = $raizJerarquia['tipo'] ?? '';
+            if ($tipoRaizJerarquia === 'Consejo Superior') {
+                $raicesConsejoSuperior[] = $raizJerarquia;
+            } elseif ($tipoRaizJerarquia === 'Formulador') {
+                $raicesFormulador[] = $raizJerarquia;
+            } else {
+                $raicesEstructura[] = $raizJerarquia;
+            }
+        }
+
         $tiposDependencia = $this->modeloRolesPorTipo->obtenerTiposDisponibles();
         $roles = $this->modeloRol->obtenerTodos();
         $rolesPorTipo = $this->modeloRolesPorTipo->obtenerMapaCompleto();
