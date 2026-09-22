@@ -49,7 +49,6 @@ require __DIR__ . '/../parciales/encabezado.php';
             </div>
         </section>
 
-        <?php if ($esSuperAdmin): ?>
         <section class="panel-caja">
             <div class="mini-slider" data-mini-slider>
                 <div class="mini-slider-cabecera">
@@ -80,24 +79,6 @@ require __DIR__ . '/../parciales/encabezado.php';
                         </div>
                         <span class="texto-atenuado resumen-costos-cifras">$ <?= number_format($costo['total_gastado'], 2, ',', '.') ?> / $ <?= number_format($costo['presupuesto'], 2, ',', '.') ?></span>
                         <span class="texto-atenuado resumen-costos-cifras"><?= (int) $costo['dependencias_con_dato'] ?>/<?= (int) $costo['dependencias_total'] ?> dependencias</span>
-
-                        <?php if (!empty($costo['detalle_dependencias'])): ?>
-                        <p class="detalle-dependencias-titulo">Gasto por dependencia (según su techo)</p>
-                        <ul class="detalle-dependencias-lista">
-                            <?php foreach ($costo['detalle_dependencias'] as $fila): ?>
-                            <li class="detalle-dependencias-item">
-                                <div class="detalle-dependencias-info">
-                                    <span class="detalle-dependencias-nombre"><?= htmlspecialchars($fila['nombre']) ?></span>
-                                    <span class="detalle-dependencias-porcentaje"><?= number_format($fila['porcentaje'], 1) ?>%</span>
-                                </div>
-                                <div class="barra-progreso barra-progreso--mini">
-                                    <div class="barra-progreso-relleno" style="width: <?= number_format($fila['porcentaje'], 2, '.', '') ?>%;"></div>
-                                </div>
-                                <span class="texto-atenuado resumen-costos-cifras">$ <?= number_format($fila['gastado'], 2, ',', '.') ?> / $ <?= number_format($fila['techo'], 2, ',', '.') ?></span>
-                            </li>
-                            <?php endforeach; ?>
-                        </ul>
-                        <?php endif; ?>
                     </div>
                     <?php endforeach; ?>
                 </div>
@@ -111,7 +92,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <div class="progreso-presupuesto-info">
                             <span class="progreso-presupuesto-porcentaje">
                                 <?php if ($ingreso['presupuesto'] > 0): ?>
-                                    <?= number_format($ingreso['porcentaje'], 1) ?>% del tope <?= htmlspecialchars((string) $ingreso['anio']) ?> en ingresos (Extensión + Convenios)
+                                    <?= number_format($ingreso['porcentaje'], 1) ?>% del tope <?= htmlspecialchars((string) $ingreso['anio']) ?> en ingresos (Extensión)
                                 <?php else: ?>
                                     <?= htmlspecialchars((string) $ingreso['anio']) ?>: sin tope asignado en Autogestión
                                 <?php endif; ?>
@@ -135,9 +116,9 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <div class="progreso-presupuesto-info">
                             <span class="progreso-presupuesto-porcentaje">
                                 <?php if ($ingreso['presupuesto'] > 0): ?>
-                                    <?= number_format($ingreso['porcentaje'], 1) ?>% del presupuesto <?= htmlspecialchars((string) $ingreso['anio']) ?> en ingresos (Postgrado)
+                                    <?= number_format($ingreso['porcentaje'], 1) ?>% del tope <?= htmlspecialchars((string) $ingreso['anio']) ?> en ingresos (Postgrado)
                                 <?php else: ?>
-                                    <?= htmlspecialchars((string) $ingreso['anio']) ?>: sin presupuesto asignado
+                                    <?= htmlspecialchars((string) $ingreso['anio']) ?>: sin tope asignado en Autogestión
                                 <?php endif; ?>
                             </span>
                         </div>
@@ -150,18 +131,22 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <?php endforeach; ?>
                 </div>
 
+                <div class="mini-slider-slide" data-mini-slider-slide data-titulo="Mensaje global" hidden>
+                    <?php if (!empty($mensajeGlobal)): ?>
+                    <div class="mensaje-global-contenido"><?= MensajeGlobal::renderizar($mensajeGlobal) ?></div>
+                    <?php else: ?>
+                    <p class="texto-atenuado">No hay ningún mensaje global configurado.</p>
+                    <?php endif; ?>
+                </div>
+
                 <div class="mini-slider-puntos">
                     <button type="button" class="mini-slider-punto activo" data-mini-slider-punto="0" aria-label="Diapositiva 1"></button>
                     <button type="button" class="mini-slider-punto" data-mini-slider-punto="1" aria-label="Diapositiva 2"></button>
                     <button type="button" class="mini-slider-punto" data-mini-slider-punto="2" aria-label="Diapositiva 3"></button>
+                    <button type="button" class="mini-slider-punto" data-mini-slider-punto="3" aria-label="Diapositiva 4"></button>
                 </div>
             </div>
         </section>
-        <?php elseif (!empty($mensajeGlobal)): ?>
-        <section class="panel-caja">
-            <div class="mensaje-global-contenido"><?= MensajeGlobal::renderizar($mensajeGlobal) ?></div>
-        </section>
-        <?php endif; ?>
 
         <section class="panel-caja">
             <div class="panel-caja-cabecera">

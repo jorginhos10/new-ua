@@ -2255,8 +2255,10 @@ a.barra-progreso:hover {
     margin-top: 0;
 }
 
-.menu-lateral a {
+.menu-lateral a,
+.menu-lateral .enlace-lateral-toggle {
     display: block;
+    width: 100%;
     color: #d2d2d7;
     padding: 0.55rem 0.6rem 0.55rem 1.15rem;
     border-radius: var(--radio-chico);
@@ -2264,19 +2266,36 @@ a.barra-progreso:hover {
     transition: background var(--transicion), color var(--transicion);
 }
 
-.menu-lateral a:hover {
+.menu-lateral a:hover,
+.menu-lateral .enlace-lateral-toggle:hover {
     background: rgba(255, 255, 255, 0.08);
     color: #fff;
     text-decoration: none;
 }
 
-.menu-lateral a.activo {
+.menu-lateral a.activo,
+.menu-lateral .enlace-lateral-toggle.activo {
     background: rgba(10, 132, 255, 0.55);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
     color: #fff;
     font-weight: 600;
+}
+
+/* Botón que reemplaza al <a> normal cuando el enlace del sidebar necesita desplegar opciones
+   antes de navegar (ver .menu-autogestion-item) — mismo look que .menu-lateral a, pero sin los
+   estilos por defecto de <button>. */
+.enlace-lateral-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    border: none;
+    background: none;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
 }
 
 .contenido-principal {
@@ -3207,29 +3226,47 @@ a.barra-progreso:hover {
     color: var(--color-texto);
 }
 
-.selector-autogestion-item {
-    min-width: 220px;
-    padding: 0.5rem 2.2rem 0.5rem 0.9rem;
-    border: 1px solid var(--color-borde);
-    border-radius: var(--radio-chico);
-    font-family: inherit;
-    font-size: 0.88rem;
-    font-weight: 600;
-    color: var(--color-texto);
-    background-color: #fff;
-    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2386868b'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.65rem center;
-    background-size: 1.1rem;
-    appearance: none;
-    -webkit-appearance: none;
-    cursor: pointer;
+/* Ítem de Autogestión (Extensión) en el sidebar (ver parciales/sidebar.php): "Extensión" deja de
+   ser un enlace directo y pasa a ser un acordeón — un clic despliega la lista de ítems ahí mismo,
+   en el flujo normal del menú (empuja hacia abajo el resto de enlaces, no flota encima); solo al
+   elegir un ítem de esa lista se navega a la página. Menos riesgo de terminar en el ítem
+   equivocado que si la elección viviera dentro de la tabla/formularios de la página. */
+.menu-autogestion-item-dropdown {
+    display: none;
+    flex-direction: column;
+    gap: 0.05rem;
+    padding: 0.15rem 0 0.3rem;
 }
 
-.selector-autogestion-item:focus {
-    outline: none;
-    border-color: var(--color-primario);
-    box-shadow: 0 0 0 3px var(--color-primario-suave);
+.menu-autogestion-item-dropdown.abierto {
+    display: flex;
+}
+
+.menu-autogestion-item-dropdown a {
+    display: block;
+    padding: 0.45rem 0.6rem 0.45rem 2.05rem;
+    border-radius: var(--radio-chico);
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 0.8rem;
+    transition: background var(--transicion), color var(--transicion);
+}
+
+.menu-autogestion-item-dropdown a:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+    text-decoration: none;
+}
+
+.menu-autogestion-item-dropdown a.activo {
+    background: rgba(10, 132, 255, 0.4);
+    color: #fff;
+    font-weight: 600;
+}
+
+.menu-autogestion-item-flecha {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.7rem;
+    flex-shrink: 0;
 }
 
 .boton-agregar {

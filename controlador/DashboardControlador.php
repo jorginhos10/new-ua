@@ -7,13 +7,11 @@ require_once __DIR__ . '/../modelo/VariableMacroeconomica.php';
 require_once __DIR__ . '/../modelo/Gasto.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/IngresoExtension.php';
-require_once __DIR__ . '/../modelo/IngresoSinExcedentes.php';
 require_once __DIR__ . '/../modelo/IngresoPostgrado.php';
 require_once __DIR__ . '/../modelo/RelojArenaConfiguracion.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
-require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
 require_once __DIR__ . '/../modelo/MensajeGlobal.php';
-require_once __DIR__ . '/../modelo/AutogestionItem.php';
+require_once __DIR__ . '/../modelo/AutogestionPorcentaje.php';
 require_once __DIR__ . '/../modelo/RelojArenaFormulador.php';
 
 class DashboardControlador
@@ -31,7 +29,6 @@ class DashboardControlador
         if ($rolUsuario === 'administrador') {
             $modeloUsuario = new Usuario();
             $usuarioActual = $modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
-            $esSuperAdmin = $usuarioActual !== null && (int) ($usuarioActual['es_super_admin'] ?? 0) === 1;
             [$dependenciaIdsPermitidos, $dependenciaNombresPermitidos] = $this->obtenerAlcanceDependencia($usuarioActual);
 
             $usuariosAsociados = $modeloUsuario->obtenerRecientesPorDependencias($dependenciaIdsPermitidos, 5);
@@ -41,18 +38,15 @@ class DashboardControlador
                 static fn (array $variable): bool => $variable['estado'] === 'activo'
             ));
 
-            if ($esSuperAdmin) {
-                $resumenCostos = $this->obtenerResumenCostos();
-                $sumaTopeAutogestion = (new AutogestionItem())->obtenerSumaTope(['extension', 'sin-excedentes']);
-                $resumenAutogestion = $this->obtenerResumenIngresos([new IngresoExtension(), new IngresoSinExcedentes()], $sumaTopeAutogestion);
-                $resumenPostgrado = $this->obtenerResumenIngresos([new IngresoPostgrado()]);
-                $mensajeGlobal = '';
-            } else {
-                $resumenCostos = [];
-                $resumenAutogestion = [];
-                $resumenPostgrado = [];
-                $mensajeGlobal = (new MensajeGlobal())->obtener()['contenido'] ?? '';
-            }
+            // Las 4 tarjetas del mini-slider (Resumen de gastos, Autogestión, Postgrado, Mensaje
+            // global) son visibles para cualquier administrador, no solo para el superadmin.
+            $resumenCostos = $this->obtenerResumenCostos();
+            $modeloPorcentajeAutogestion = new AutogestionPorcentaje();
+            $topeExtension = $modeloPorcentajeAutogestion->obtenerTopePorModulo('extension');
+            $resumenAutogestion = $this->obtenerResumenIngresos(new IngresoExtension(), $topeExtension);
+            $topePostgrado = $modeloPorcentajeAutogestion->obtenerTopePorModulo('postgrado');
+            $resumenPostgrado = $this->obtenerResumenIngresos(new IngresoPostgrado(), $topePostgrado);
+            $mensajeGlobal = (new MensajeGlobal())->obtener()['contenido'] ?? '';
 
             $relojArena = $this->obtenerRelojArena();
 
@@ -127,7 +121,6 @@ class DashboardControlador
                 'porcentaje' => $porcentaje,
                 'dependencias_con_dato' => $dependenciasConDato,
                 'dependencias_total' => $totalDependencias,
-                'detalle_dependencias' => $this->obtenerDetalleCostosPorDependencia($anioId, $modeloGasto),
             ];
         }
 
@@ -135,59 +128,18 @@ class DashboardControlador
     }
 
     /**
-     * Gasto ejecutado de cada dependencia frente a su propio techo asignado para el año,
-     * de mayor a menor porcentaje ejecutado. Solo incluye dependencias con techo > 0.
+     * Tarjetas de Autogestión/Postgrado del Dashboard: el denominador es SIEMPRE el tope único
+     * configurado en Autogestión para ese módulo (ver AutogestionPorcentaje::obtenerTopePorModulo()
+     * — un solo número por módulo, no por ítem) — nunca el presupuesto institucional del año, que
+     * se configura por un formulario aparte (Año presupuestal) sin relación con estos módulos. Si
+     * nadie ha configurado ningún tope todavía, $tope llega en 0 y la tarjeta lo indica en vez de
+     * mostrar un porcentaje.
+     *
+     * El numerador es el total de ingresos del año (todos los ítems, todas las dependencias) que
+     * no hayan sido archivados (rechazados/descartados) en Peticiones — ver
+     * obtenerTotalPorAnioSinArchivados() en cada modelo de ingreso.
      */
-    private function obtenerDetalleCostosPorDependencia(int $anioId, Gasto $modeloGasto): array
-    {
-        $techos = (new PresupuestoDependencia())->obtenerPorAnio($anioId);
-
-        if (empty($techos)) {
-            return [];
-        }
-
-        $modeloDependencia = new Dependencia();
-        $ejecutados = $modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioId);
-
-        $detalle = [];
-
-        foreach ($techos as $dependenciaId => $info) {
-            $techo = (float) ($info['techo'] ?? 0);
-
-            if ($techo <= 0) {
-                continue;
-            }
-
-            $dependencia = $modeloDependencia->obtenerPorId($dependenciaId);
-
-            if ($dependencia === null) {
-                continue;
-            }
-
-            $gastado = $ejecutados[$dependencia['nombre']] ?? 0.0;
-
-            $detalle[] = [
-                'nombre' => $dependencia['nombre'],
-                'gastado' => $gastado,
-                'techo' => $techo,
-                'porcentaje' => min(100, ($gastado / $techo) * 100),
-            ];
-        }
-
-        usort($detalle, static fn (array $a, array $b): int => $b['porcentaje'] <=> $a['porcentaje']);
-
-        return $detalle;
-    }
-
-    /**
-     * @param float|null $topeOverride Si no es null, reemplaza el presupuesto general del año como
-     *        denominador del porcentaje — usado por la tarjeta de Autogestión del Dashboard, que
-     *        mide contra la suma de los topes configurados en Autogestión (Extensión + Sin
-     *        excedentes) en vez del presupuesto institucional completo. Si nadie ha configurado
-     *        ningún tope todavía, la suma es 0 y la tarjeta lo indica en vez de mostrar un
-     *        porcentaje contra el presupuesto general.
-     */
-    private function obtenerResumenIngresos(array $modelosIngreso, ?float $topeOverride = null): array
+    private function obtenerResumenIngresos(object $modeloIngreso, float $tope): array
     {
         $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
         $totalDependencias = (new Dependencia())->contarMonetizablesActivas();
@@ -196,21 +148,14 @@ class DashboardControlador
 
         foreach ($aniosActivos as $anioFila) {
             $anioId = (int) $anioFila['id'];
-            $totalIngresos = 0.0;
-            $dependenciasConDato = [];
-
-            foreach ($modelosIngreso as $modeloIngreso) {
-                $totalIngresos += $modeloIngreso->obtenerTotalPorAnio($anioId);
-                $dependenciasConDato = array_merge($dependenciasConDato, $modeloIngreso->obtenerDependenciasPorAnio($anioId));
-            }
-
-            $presupuestoAnio = $topeOverride ?? (float) $anioFila['presupuesto'];
-            $porcentaje = $presupuestoAnio > 0 ? min(100, ($totalIngresos / $presupuestoAnio) * 100) : 0.0;
+            $totalIngresos = $modeloIngreso->obtenerTotalPorAnioSinArchivados($anioId);
+            $dependenciasConDato = $modeloIngreso->obtenerDependenciasPorAnio($anioId);
+            $porcentaje = $tope > 0 ? min(100, ($totalIngresos / $tope) * 100) : 0.0;
 
             $resumen[] = [
                 'anio' => $anioFila['anio'],
                 'total_ingresos' => $totalIngresos,
-                'presupuesto' => $presupuestoAnio,
+                'presupuesto' => $tope,
                 'porcentaje' => $porcentaje,
                 'dependencias_con_dato' => count(array_unique($dependenciasConDato)),
                 'dependencias_total' => $totalDependencias,

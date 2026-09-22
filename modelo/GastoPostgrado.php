@@ -11,34 +11,30 @@ class GastoPostgrado
         $this->db = Conexion::obtener();
     }
 
-    public function obtenerDetallePorId(int $id): ?array
-    {
-        $consulta = $this->db->prepare(
-            'SELECT g.*,
-                    s.codigo AS sede_codigo, s.nombre AS sede_nombre,
-                    l.codigo AS linea_codigo, l.nombre AS linea_nombre,
-                    m.codigo AS motor_codigo, m.nombre AS motor_nombre,
-                    p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
-                    r.codigo AS rubro_codigo, r.descripcion AS rubro_descripcion
-             FROM gastos_postgrado g
-             JOIN sedes s ON s.id = g.sede_id
-             JOIN lineas l ON l.id = g.linea_id
-             JOIN motores m ON m.id = g.motor_id
-             JOIN proyectos p ON p.id = g.proyecto_id
-             LEFT JOIN rubros r ON r.id = g.rubro_id
-             WHERE g.id = :id'
-        );
-        $consulta->execute(['id' => $id]);
-        $fila = $consulta->fetch();
-
-        return $fila !== false ? $fila : null;
-    }
-
     public function obtenerPorAnio(int $anioPresupuestalId): array
     {
         $consulta = $this->db->prepare(
             'SELECT g.*,
                     s.codigo AS sede_codigo, s.nombre AS sede_nombre,
+                    r.codigo AS rubro_codigo, r.descripcion AS rubro_descripcion,
+                    a.nombre AS autogestion_nombre
+             FROM gastos_postgrado g
+             JOIN sedes s ON s.id = g.sede_id
+             LEFT JOIN rubros r ON r.id = g.rubro_id
+             LEFT JOIN autogestion_items a ON a.id = g.autogestion_id
+             WHERE g.anio_presupuestal_id = :anio_presupuestal_id
+             ORDER BY g.creado_en DESC'
+        );
+        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
+
+        return $consulta->fetchAll();
+    }
+
+    public function obtenerPorAnioYAutogestion(int $anioPresupuestalId, int $autogestionId): array
+    {
+        $consulta = $this->db->prepare(
+            'SELECT g.*,
+                    s.codigo AS sede_codigo, s.nombre AS sede_nombre,
                     l.codigo AS linea_codigo, l.nombre AS linea_nombre,
                     m.codigo AS motor_codigo, m.nombre AS motor_nombre,
                     p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
@@ -49,7 +45,7 @@ class GastoPostgrado
              JOIN motores m ON m.id = g.motor_id
              JOIN proyectos p ON p.id = g.proyecto_id
              LEFT JOIN rubros r ON r.id = g.rubro_id
-             WHERE g.anio_presupuestal_id = :anio_presupuestal_id
+             WHERE g.anio_presupuestal_id = :anio_presupuestal_id AND g.autogestion_id = :autogestion_id
              ORDER BY
                 CASE g.tipo_automatico
                     WHEN \'costos_inversiones\' THEN 1
@@ -61,9 +57,37 @@ class GastoPostgrado
                 END,
                 g.creado_en DESC'
         );
-        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
+        $consulta->execute([
+            'anio_presupuestal_id' => $anioPresupuestalId,
+            'autogestion_id' => $autogestionId,
+        ]);
 
         return $consulta->fetchAll();
+    }
+
+    public function obtenerDetallePorId(int $id): ?array
+    {
+        $consulta = $this->db->prepare(
+            'SELECT g.*,
+                    s.codigo AS sede_codigo, s.nombre AS sede_nombre,
+                    l.codigo AS linea_codigo, l.nombre AS linea_nombre,
+                    m.codigo AS motor_codigo, m.nombre AS motor_nombre,
+                    p.codigo AS proyecto_codigo, p.nombre AS proyecto_nombre,
+                    r.codigo AS rubro_codigo, r.descripcion AS rubro_descripcion,
+                    a.nombre AS autogestion_nombre
+             FROM gastos_postgrado g
+             JOIN sedes s ON s.id = g.sede_id
+             JOIN lineas l ON l.id = g.linea_id
+             JOIN motores m ON m.id = g.motor_id
+             JOIN proyectos p ON p.id = g.proyecto_id
+             LEFT JOIN rubros r ON r.id = g.rubro_id
+             LEFT JOIN autogestion_items a ON a.id = g.autogestion_id
+             WHERE g.id = :id'
+        );
+        $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
     }
 
     public function obtenerTotalPorAnio(int $anioPresupuestalId): float
@@ -77,6 +101,20 @@ class GastoPostgrado
         return (float) $consulta->fetchColumn();
     }
 
+    public function obtenerTotalPorAnioYAutogestion(int $anioPresupuestalId, int $autogestionId): float
+    {
+        $consulta = $this->db->prepare(
+            'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id'
+        );
+        $consulta->execute([
+            'anio_presupuestal_id' => $anioPresupuestalId,
+            'autogestion_id' => $autogestionId,
+        ]);
+
+        return (float) $consulta->fetchColumn();
+    }
+
     public function obtenerTotalPorAnioYCategoria(int $anioPresupuestalId, string $categoria): float
     {
         $consulta = $this->db->prepare(
@@ -84,6 +122,21 @@ class GastoPostgrado
              WHERE anio_presupuestal_id = :anio_presupuestal_id AND categoria = :categoria'
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'categoria' => $categoria]);
+
+        return (float) $consulta->fetchColumn();
+    }
+
+    public function obtenerTotalPorAnioAutogestionYCategoria(int $anioPresupuestalId, int $autogestionId, string $categoria): float
+    {
+        $consulta = $this->db->prepare(
+            'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id AND categoria = :categoria'
+        );
+        $consulta->execute([
+            'anio_presupuestal_id' => $anioPresupuestalId,
+            'autogestion_id' => $autogestionId,
+            'categoria' => $categoria,
+        ]);
 
         return (float) $consulta->fetchColumn();
     }
@@ -117,6 +170,33 @@ class GastoPostgrado
     }
 
     /**
+     * Igual que obtenerTotalPorAnioYAutogestion(), pero acotado a un conjunto de dependencias.
+     */
+    public function obtenerTotalPorAnioYAutogestionYDependencias(int $anioPresupuestalId, int $autogestionId, array $dependencias): float
+    {
+        if (empty($dependencias)) {
+            return 0.0;
+        }
+
+        $parametros = ['anio_presupuestal_id' => $anioPresupuestalId, 'autogestion_id' => $autogestionId];
+        $marcadores = [];
+        foreach (array_values($dependencias) as $indice => $dependencia) {
+            $clave = 'dep' . $indice;
+            $marcadores[] = ':' . $clave;
+            $parametros[$clave] = $dependencia;
+        }
+
+        $consulta = $this->db->prepare(
+            'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id
+                AND dependencia IN (' . implode(', ', $marcadores) . ')'
+        );
+        $consulta->execute($parametros);
+
+        return (float) $consulta->fetchColumn();
+    }
+
+    /**
      * Igual que obtenerTotalPorAnioYCategoria(), pero acotado a un conjunto de dependencias.
      */
     public function obtenerTotalPorAnioYCategoriaYDependencias(int $anioPresupuestalId, string $categoria, array $dependencias): float
@@ -142,18 +222,49 @@ class GastoPostgrado
         return (float) $consulta->fetchColumn();
     }
 
-    public function obtenerDependenciasBorrador(int $anioPresupuestalId): array
+    /**
+     * Igual que obtenerTotalPorAnioAutogestionYCategoria(), pero acotado a un conjunto de
+     * dependencias.
+     */
+    public function obtenerTotalPorAnioAutogestionYCategoriaYDependencias(int $anioPresupuestalId, int $autogestionId, string $categoria, array $dependencias): float
+    {
+        if (empty($dependencias)) {
+            return 0.0;
+        }
+
+        $parametros = ['anio_presupuestal_id' => $anioPresupuestalId, 'autogestion_id' => $autogestionId, 'categoria' => $categoria];
+        $marcadores = [];
+        foreach (array_values($dependencias) as $indice => $dependencia) {
+            $clave = 'dep' . $indice;
+            $marcadores[] = ':' . $clave;
+            $parametros[$clave] = $dependencia;
+        }
+
+        $consulta = $this->db->prepare(
+            'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id AND categoria = :categoria
+                AND dependencia IN (' . implode(', ', $marcadores) . ')'
+        );
+        $consulta->execute($parametros);
+
+        return (float) $consulta->fetchColumn();
+    }
+
+    public function obtenerDependenciasBorrador(int $anioPresupuestalId, int $autogestionId): array
     {
         $consulta = $this->db->prepare(
             "SELECT DISTINCT dependencia FROM gastos_postgrado
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND estado = 'borrador'"
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id AND estado = 'borrador'"
         );
-        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
+        $consulta->execute([
+            'anio_presupuestal_id' => $anioPresupuestalId,
+            'autogestion_id' => $autogestionId,
+        ]);
 
         return array_column($consulta->fetchAll(), 'dependencia');
     }
 
-    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaDestinoNombre, int $rolDestinatarioId, array $dependenciasOrigen, ?int $usuarioDestinatarioId = null): int
+    public function enviarTodosBorrador(int $anioPresupuestalId, int $autogestionId, string $dependenciaDestinoNombre, int $rolDestinatarioId, array $dependenciasOrigen, ?int $usuarioDestinatarioId = null): int
     {
         if (empty($dependenciasOrigen)) {
             return 0;
@@ -161,6 +272,7 @@ class GastoPostgrado
 
         $parametros = [
             'anio_presupuestal_id' => $anioPresupuestalId,
+            'autogestion_id' => $autogestionId,
             'dependencia' => $dependenciaDestinoNombre,
             'rol_destinatario_id' => $rolDestinatarioId,
             'usuario_destinatario_id' => $usuarioDestinatarioId,
@@ -173,12 +285,13 @@ class GastoPostgrado
         }
 
         // El IN de dependencia acota a solo las dependencias que el remitente puede ver — sin
-        // esto, "Enviar todo" marcaba como enviados los borradores de CUALQUIER dependencia del
-        // año, no solo los del usuario que envía.
+        // esto, "Enviar todo" marcaba como enviados los borradores de CUALQUIER dependencia que
+        // compartiera año + ítem de Autogestión, no solo los del usuario que envía.
         $consulta = $this->db->prepare(
             "UPDATE gastos_postgrado
              SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, usuario_destinatario_id = :usuario_destinatario_id, dependencia_destino = :dependencia
              WHERE anio_presupuestal_id = :anio_presupuestal_id
+                AND autogestion_id = :autogestion_id
                 AND estado = 'borrador'
                 AND dependencia IN (" . implode(', ', $marcadores) . ')'
         );
@@ -191,9 +304,9 @@ class GastoPostgrado
     {
         $consulta = $this->db->prepare(
             'INSERT INTO gastos_postgrado
-                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, insumo, cantidad, costo_unitario, valor_total, meses, usuario_id)
+                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, autogestion_id, insumo, cantidad, costo_unitario, valor_total, meses, usuario_id)
              VALUES
-                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses, :usuario_id)'
+                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :autogestion_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses, :usuario_id)'
         );
 
         return $consulta->execute([
@@ -207,6 +320,7 @@ class GastoPostgrado
             'objeto_proyecto_paa' => $datos['objeto_proyecto_paa'],
             'actividad' => $datos['actividad'],
             'rubro_id' => $datos['rubro_id'],
+            'autogestion_id' => $datos['autogestion_id'],
             'insumo' => $datos['insumo'],
             'cantidad' => $datos['cantidad'],
             'costo_unitario' => $datos['costo_unitario'],
@@ -232,8 +346,8 @@ class GastoPostgrado
                 sede_id = :sede_id, anio_presupuestal_id = :anio_presupuestal_id, categoria = :categoria,
                 dependencia = :dependencia, linea_id = :linea_id, motor_id = :motor_id, proyecto_id = :proyecto_id,
                 objeto_proyecto_paa = :objeto_proyecto_paa, actividad = :actividad, rubro_id = :rubro_id,
-                insumo = :insumo, cantidad = :cantidad, costo_unitario = :costo_unitario,
-                valor_total = :valor_total, meses = :meses
+                autogestion_id = :autogestion_id, insumo = :insumo, cantidad = :cantidad,
+                costo_unitario = :costo_unitario, valor_total = :valor_total, meses = :meses
              WHERE id = :id AND tipo_automatico IS NULL"
         );
 
@@ -249,6 +363,7 @@ class GastoPostgrado
             'objeto_proyecto_paa' => $datos['objeto_proyecto_paa'],
             'actividad' => $datos['actividad'],
             'rubro_id' => $datos['rubro_id'],
+            'autogestion_id' => $datos['autogestion_id'],
             'insumo' => $datos['insumo'],
             'cantidad' => $datos['cantidad'],
             'costo_unitario' => $datos['costo_unitario'],
@@ -277,8 +392,8 @@ class GastoPostgrado
                 sede_id = :sede_id, anio_presupuestal_id = :anio_presupuestal_id, categoria = :categoria,
                 dependencia = :dependencia, linea_id = :linea_id, motor_id = :motor_id, proyecto_id = :proyecto_id,
                 objeto_proyecto_paa = :objeto_proyecto_paa, actividad = :actividad, rubro_id = :rubro_id,
-                insumo = :insumo, cantidad = :cantidad, costo_unitario = :costo_unitario,
-                valor_total = :valor_total, meses = :meses, tipo_automatico = NULL
+                autogestion_id = :autogestion_id, insumo = :insumo, cantidad = :cantidad,
+                costo_unitario = :costo_unitario, valor_total = :valor_total, meses = :meses, tipo_automatico = NULL
              WHERE id = :id AND tipo_automatico = 'contrib_postgrado'"
         );
 
@@ -294,6 +409,7 @@ class GastoPostgrado
             'objeto_proyecto_paa' => $datos['objeto_proyecto_paa'],
             'actividad' => $datos['actividad'],
             'rubro_id' => $datos['rubro_id'],
+            'autogestion_id' => $datos['autogestion_id'],
             'insumo' => $datos['insumo'],
             'cantidad' => $datos['cantidad'],
             'costo_unitario' => $datos['costo_unitario'],
@@ -314,8 +430,8 @@ class GastoPostgrado
                 sede_id = :sede_id, anio_presupuestal_id = :anio_presupuestal_id, categoria = :categoria,
                 dependencia = :dependencia, linea_id = :linea_id, motor_id = :motor_id, proyecto_id = :proyecto_id,
                 objeto_proyecto_paa = :objeto_proyecto_paa, actividad = :actividad, rubro_id = :rubro_id,
-                insumo = :insumo, cantidad = :cantidad, costo_unitario = :costo_unitario,
-                valor_total = :valor_total, meses = :meses, tipo_automatico = NULL
+                autogestion_id = :autogestion_id, insumo = :insumo, cantidad = :cantidad,
+                costo_unitario = :costo_unitario, valor_total = :valor_total, meses = :meses, tipo_automatico = NULL
              WHERE id = :id AND tipo_automatico = 'excedentes'"
         );
 
@@ -331,6 +447,7 @@ class GastoPostgrado
             'objeto_proyecto_paa' => $datos['objeto_proyecto_paa'],
             'actividad' => $datos['actividad'],
             'rubro_id' => $datos['rubro_id'],
+            'autogestion_id' => $datos['autogestion_id'],
             'insumo' => $datos['insumo'],
             'cantidad' => $datos['cantidad'],
             'costo_unitario' => $datos['costo_unitario'],
@@ -339,15 +456,16 @@ class GastoPostgrado
         ]);
     }
 
-    public function obtenerAutomaticoPorTipo(int $anioPresupuestalId, string $tipo): ?array
+    public function obtenerAutomaticoPorTipo(int $anioPresupuestalId, int $autogestionId, string $tipo): ?array
     {
         $consulta = $this->db->prepare(
             'SELECT * FROM gastos_postgrado
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND tipo_automatico = :tipo
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id AND tipo_automatico = :tipo
              LIMIT 1'
         );
         $consulta->execute([
             'anio_presupuestal_id' => $anioPresupuestalId,
+            'autogestion_id' => $autogestionId,
             'tipo' => $tipo,
         ]);
         $fila = $consulta->fetch();
@@ -359,9 +477,9 @@ class GastoPostgrado
     {
         $consulta = $this->db->prepare(
             'INSERT INTO gastos_postgrado
-                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_texto, ingreso_id, tipo_automatico, insumo, cantidad, costo_unitario, valor_total, meses)
+                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_texto, autogestion_id, ingreso_id, tipo_automatico, insumo, cantidad, costo_unitario, valor_total, meses)
              VALUES
-                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_texto, :ingreso_id, :tipo_automatico, :insumo, :cantidad, :costo_unitario, :valor_total, :meses)'
+                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_texto, :autogestion_id, :ingreso_id, :tipo_automatico, :insumo, :cantidad, :costo_unitario, :valor_total, :meses)'
         );
 
         return $consulta->execute([
@@ -375,6 +493,7 @@ class GastoPostgrado
             'objeto_proyecto_paa' => $datos['objeto_proyecto_paa'],
             'actividad' => $datos['actividad'],
             'rubro_texto' => $datos['rubro_texto'],
+            'autogestion_id' => $datos['autogestion_id'],
             'ingreso_id' => $datos['ingreso_id'],
             'tipo_automatico' => $datos['tipo_automatico'],
             'insumo' => $datos['insumo'],
@@ -385,26 +504,27 @@ class GastoPostgrado
         ]);
     }
 
-    public function eliminarAutomaticosDistintosDe(int $anioPresupuestalId, array $tiposValidos): bool
+    public function eliminarAutomaticosDistintosDe(int $anioPresupuestalId, int $autogestionId, array $tiposValidos): bool
     {
         if (empty($tiposValidos)) {
             $consulta = $this->db->prepare(
                 'DELETE FROM gastos_postgrado
-                 WHERE anio_presupuestal_id = :anio_presupuestal_id AND tipo_automatico IS NOT NULL'
+                 WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id AND tipo_automatico IS NOT NULL'
             );
 
             return $consulta->execute([
                 'anio_presupuestal_id' => $anioPresupuestalId,
+                'autogestion_id' => $autogestionId,
             ]);
         }
 
         $marcadores = implode(',', array_fill(0, count($tiposValidos), '?'));
         $consulta = $this->db->prepare(
             "DELETE FROM gastos_postgrado
-             WHERE anio_presupuestal_id = ? AND tipo_automatico IS NOT NULL AND tipo_automatico NOT IN ($marcadores)"
+             WHERE anio_presupuestal_id = ? AND autogestion_id = ? AND tipo_automatico IS NOT NULL AND tipo_automatico NOT IN ($marcadores)"
         );
 
-        return $consulta->execute(array_merge([$anioPresupuestalId], $tiposValidos));
+        return $consulta->execute(array_merge([$anioPresupuestalId, $autogestionId], $tiposValidos));
     }
 
     public function actualizarAutomatico(int $id, array $datos): bool

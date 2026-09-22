@@ -13,7 +13,7 @@ class AutogestionItem
 
     public function obtenerTodos(string $modulo): array
     {
-        $consulta = $this->db->prepare('SELECT id, nombre, tope, estado, creado_en FROM autogestion_items WHERE modulo = :modulo ORDER BY nombre');
+        $consulta = $this->db->prepare('SELECT id, nombre, costos, inversiones, excedentes, contribucion_postgrado, estado, creado_en FROM autogestion_items WHERE modulo = :modulo ORDER BY nombre');
         $consulta->execute(['modulo' => $modulo]);
 
         return $consulta->fetchAll();
@@ -47,18 +47,18 @@ class AutogestionItem
 
     public function obtenerPorId(int $id): ?array
     {
-        $consulta = $this->db->prepare('SELECT id, nombre, tope, modulo, estado, creado_en FROM autogestion_items WHERE id = :id');
+        $consulta = $this->db->prepare('SELECT id, nombre, costos, inversiones, excedentes, contribucion_postgrado, modulo, estado, creado_en FROM autogestion_items WHERE id = :id');
         $consulta->execute(['id' => $id]);
         $fila = $consulta->fetch();
 
         return $fila !== false ? $fila : null;
     }
 
-    public function crear(string $nombre, string $modulo, ?float $tope = null): bool
+    public function crear(string $nombre, string $modulo): bool
     {
-        $consulta = $this->db->prepare('INSERT INTO autogestion_items (nombre, modulo, tope) VALUES (:nombre, :modulo, :tope)');
+        $consulta = $this->db->prepare('INSERT INTO autogestion_items (nombre, modulo) VALUES (:nombre, :modulo)');
 
-        return $consulta->execute(['nombre' => $nombre, 'modulo' => $modulo, 'tope' => $tope]);
+        return $consulta->execute(['nombre' => $nombre, 'modulo' => $modulo]);
     }
 
     public function actualizar(int $id, string $nombre): bool
@@ -68,11 +68,19 @@ class AutogestionItem
         return $consulta->execute(['id' => $id, 'nombre' => $nombre]);
     }
 
-    public function actualizarTope(int $id, ?float $tope): bool
+    public function actualizarPorcentajes(int $id, ?float $costos, ?float $inversiones, ?float $excedentes, ?float $contribucionPostgrado = null): bool
     {
-        $consulta = $this->db->prepare('UPDATE autogestion_items SET tope = :tope WHERE id = :id');
+        $consulta = $this->db->prepare(
+            'UPDATE autogestion_items SET costos = :costos, inversiones = :inversiones, excedentes = :excedentes, contribucion_postgrado = :contribucion_postgrado WHERE id = :id'
+        );
 
-        return $consulta->execute(['id' => $id, 'tope' => $tope]);
+        return $consulta->execute([
+            'id' => $id,
+            'costos' => $costos,
+            'inversiones' => $inversiones,
+            'excedentes' => $excedentes,
+            'contribucion_postgrado' => $contribucionPostgrado,
+        ]);
     }
 
     public function cambiarEstado(int $id): bool
@@ -84,22 +92,4 @@ class AutogestionItem
         return $consulta->execute(['id' => $id]);
     }
 
-    /**
-     * Suma de los topes activos de los módulos indicados — usada en el Dashboard para la tarjeta
-     * de Autogestión (Extensión + Convenios), en vez del presupuesto general del año.
-     */
-    public function obtenerSumaTope(array $modulos): float
-    {
-        if (empty($modulos)) {
-            return 0.0;
-        }
-
-        $marcadores = implode(',', array_fill(0, count($modulos), '?'));
-        $consulta = $this->db->prepare(
-            "SELECT COALESCE(SUM(tope), 0) FROM autogestion_items WHERE estado = 'activo' AND modulo IN ($marcadores)"
-        );
-        $consulta->execute(array_values($modulos));
-
-        return (float) $consulta->fetchColumn();
-    }
 }

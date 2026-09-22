@@ -932,6 +932,9 @@ class UnisaludControlador
     {
         $anioId = (int) ($_POST['anio_presupuestal_id'] ?? 0);
         $dependenciaDestinoNombre = trim($_POST['dependencia_destino'] ?? '');
+        // Solo para mostrar en los mensajes de abajo — $dependenciaDestinoNombre sigue siendo el
+        // nombre real (necesario para obtenerPorNombre()/enviarTodosBorrador()).
+        $dependenciaDestinoVisible = Dependencia::nombreVisible($dependenciaDestinoNombre);
         $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
 
         if ($anioId <= 0 || $dependenciaDestinoNombre === '' || $rolDestinatarioId <= 0) {
@@ -957,7 +960,7 @@ class UnisaludControlador
             $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
 
             if (empty($destinatarios)) {
-                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '". Selecciona a quién remitir la petición.', ''];
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '". Selecciona a quién remitir la petición.', ''];
             }
         }
 
@@ -993,10 +996,10 @@ class UnisaludControlador
         }
 
         if (empty($destinatarios)) {
-            return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '" para notificar.'];
+            return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '" para notificar.'];
         }
 
-        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoNombre . '").'];
+        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoVisible . '").'];
     }
 
     private function eliminarEgreso(): array

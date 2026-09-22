@@ -522,6 +522,9 @@ class PerfilProyectosControlador
             }
 
             $dependenciaDestinoNombre = $dependenciaDestino['nombre'];
+            // Solo para mostrar en los mensajes de abajo — $dependenciaDestinoNombre sigue siendo
+            // el nombre real (necesario para enviarTodosBorrador()).
+            $dependenciaDestinoVisible = Dependencia::nombreVisible($dependenciaDestinoNombre);
             $gestoresDisponibles = $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependenciaDestino['id'], $rolDestinatarioId);
             $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
             $destinatarios = array_values(array_filter($gestoresDisponibles, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
@@ -531,6 +534,9 @@ class PerfilProyectosControlador
             }
         } else {
             $dependenciaDestinoNombre = trim($_POST['dependencia_destino'] ?? '');
+            // Solo para mostrar en los mensajes de abajo — $dependenciaDestinoNombre sigue siendo
+            // el nombre real (necesario para obtenerPorNombre()/enviarTodosBorrador()).
+            $dependenciaDestinoVisible = Dependencia::nombreVisible($dependenciaDestinoNombre);
             $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
 
             if ($dependenciaDestinoNombre === '' || $rolDestinatarioId <= 0) {
@@ -556,7 +562,7 @@ class PerfilProyectosControlador
                 $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
 
                 if (empty($destinatarios)) {
-                    return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '". Selecciona a quién remitir la petición.', ''];
+                    return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '". Selecciona a quién remitir la petición.', ''];
                 }
             }
         }
@@ -584,9 +590,9 @@ class PerfilProyectosControlador
         }
 
         if (empty($destinatarios)) {
-            return ['', 'Se enviaron ' . $enviados . ' proyecto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '" para notificar.'];
+            return ['', 'Se enviaron ' . $enviados . ' proyecto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '" para notificar.'];
         }
 
-        return ['', 'Se enviaron ' . $enviados . ' proyecto(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoNombre . '").'];
+        return ['', 'Se enviaron ' . $enviados . ' proyecto(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoVisible . '").'];
     }
 }

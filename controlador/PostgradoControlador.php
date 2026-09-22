@@ -10,7 +10,7 @@ require_once __DIR__ . '/../modelo/Rubro.php';
 require_once __DIR__ . '/../modelo/ContratoComun.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/Sede.php';
-require_once __DIR__ . '/../modelo/AutogestionPorcentaje.php';
+require_once __DIR__ . '/../modelo/AutogestionItem.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/Usuario.php';
 require_once __DIR__ . '/../modelo/Rol.php';
@@ -30,7 +30,7 @@ class PostgradoControlador
     private ContratoComun $modeloContratoComun;
     private AnioPresupuestal $modeloAnio;
     private Sede $modeloSede;
-    private AutogestionPorcentaje $modeloPorcentaje;
+    private AutogestionItem $modeloAutogestion;
     private Dependencia $modeloDependencia;
     private Usuario $modeloUsuario;
     private Rol $modeloRol;
@@ -44,9 +44,28 @@ class PostgradoControlador
         'proyecto_id',
         'actividad',
         'rubro_id',
+        'autogestion_id',
         'insumo',
         'cantidad',
         'costo_unitario',
+    ];
+
+    /**
+     * Nombre legible de cada campo requerido, usado para armar mensajes de error específicos en
+     * vez de un genérico "todos los campos son obligatorios" que no dice cuál falta.
+     */
+    private const ETIQUETAS_CAMPOS = [
+        'sede_id' => 'la sede',
+        'anio_presupuestal_id' => 'el año presupuestal',
+        'categoria' => 'la categoría',
+        'dependencia' => 'la dependencia',
+        'proyecto_id' => 'el proyecto PDI',
+        'actividad' => 'la actividad',
+        'rubro_id' => 'el rubro',
+        'autogestion_id' => 'el ítem de Autogestión (selector del sidebar)',
+        'insumo' => 'el insumo',
+        'cantidad' => 'la cantidad',
+        'costo_unitario' => 'el costo unitario',
     ];
 
     private const CATEGORIAS_EGRESO = [
@@ -85,7 +104,7 @@ class PostgradoControlador
         $this->modeloContratoComun = new ContratoComun();
         $this->modeloAnio = new AnioPresupuestal();
         $this->modeloSede = new Sede();
-        $this->modeloPorcentaje = new AutogestionPorcentaje();
+        $this->modeloAutogestion = new AutogestionItem();
         $this->modeloDependencia = new Dependencia();
         $this->modeloUsuario = new Usuario();
         $this->modeloRol = new Rol();
@@ -142,6 +161,7 @@ class PostgradoControlador
         $contratosComunes = $this->modeloContratoComun->obtenerActivos();
         $aniosActivos = $this->modeloAnio->obtenerActivos();
         $sedes = $this->modeloSede->obtenerTodas();
+        $autogestionItems = $this->modeloAutogestion->obtenerActivos('postgrado');
         $categoriasEgreso = self::CATEGORIAS_EGRESO;
         $roles = $this->modeloRol->obtenerTodos();
         $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
@@ -186,13 +206,39 @@ class PostgradoControlador
             }
         }
 
-        $gastosEgresos = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : [];
+        $autogestionSeleccionadoId = 0;
 
-        if ($tab === 'ingresos') {
-            $gastos = $anioSeleccionadoId > 0 ? $this->modeloIngreso->obtenerPorAnio($anioSeleccionadoId) : [];
-            $gastos = $this->filtrarPorPropietarioODestinatario($gastos, $usuarioActual, $dependenciasSugeridas);
+        if (!empty($autogestionItems)) {
+            $autogestionSeleccionadoId = isset($_GET['autogestion_id']) ? (int) $_GET['autogestion_id'] : (int) $autogestionItems[0]['id'];
+
+            $idsValidosAutogestion = array_map('intval', array_column($autogestionItems, 'id'));
+            if (!in_array($autogestionSeleccionadoId, $idsValidosAutogestion, true)) {
+                $autogestionSeleccionadoId = (int) $autogestionItems[0]['id'];
+            }
+        }
+
+        if ($anioSeleccionadoId > 0 && $autogestionSeleccionadoId > 0) {
+            // Filtrados por dependencia/propietario de una vez aquí: $gastosEgresos e $ingresosTotal
+            // alimentan tanto la tabla como la barra de resumen (total ingresos, % asignado,
+            // desglose Costos+Inversión/Excedentes) — si no se filtran aquí, la barra de resumen
+            // termina sumando ingresos/egresos de OTRAS dependencias que comparten el mismo ítem
+            // de Autogestión, y una dependencia ve los totales de otra.
+            $gastosEgresos = $this->filtrarEgresosVisibles(
+                $this->modeloGasto->obtenerPorAnioYAutogestion($anioSeleccionadoId, $autogestionSeleccionadoId),
+                $usuarioActual,
+                $dependenciasSugeridas
+            );
+            $ingresosTotal = $this->filtrarPorPropietarioODestinatario(
+                $this->modeloIngreso->obtenerPorAnioYAutogestion($anioSeleccionadoId, $autogestionSeleccionadoId),
+                $usuarioActual,
+                $dependenciasSugeridas
+            );
+
+            $gastos = $tab === 'ingresos' ? $ingresosTotal : $gastosEgresos;
         } else {
-            $gastos = $this->filtrarEgresosVisibles($gastosEgresos, $usuarioActual, $dependenciasSugeridas);
+            $ingresosTotal = [];
+            $gastos = [];
+            $gastosEgresos = [];
         }
 
         $dependenciasTodas = $this->modeloDependencia->obtenerActivasParaEnvio();
@@ -218,9 +264,7 @@ class PostgradoControlador
 
         $totalGastado = array_sum(array_map(static fn (array $g): float => (float) $g['valor_total'], $gastos));
         $totalEjecutado = array_sum(array_map(static fn (array $g): float => (float) $g['valor_total'], $gastosEgresos));
-        $presupuestoAnio = $anioSeleccionadoId > 0
-            ? $this->modeloIngreso->obtenerTotalPorAnioYDependencias($anioSeleccionadoId, $dependenciasSugeridas)
-            : 0.0;
+        $presupuestoAnio = array_sum(array_map(static fn (array $i): float => (float) $i['valor_total'], $ingresosTotal));
         $porcentajeGastado = $presupuestoAnio > 0 ? min(100, ($totalEjecutado / $presupuestoAnio) * 100) : 0.0;
         $puedeEnviarTodo = $presupuestoAnio > 0 && abs($presupuestoAnio - $totalEjecutado) < 0.01;
 
@@ -264,6 +308,7 @@ class PostgradoControlador
             'Años' => array_map(static fn (array $a): string => (string) $a['anio'], $catalogos['aniosActivos']),
             'Sedes' => array_map(static fn (array $s): string => $s['codigo'] . ' - ' . $s['nombre'], $catalogos['sedes']),
             'Dependencias' => $catalogos['dependenciasSugeridas'],
+            'Items' => array_map(static fn (array $i): string => $i['nombre'], $catalogos['autogestionItems']),
             'Proyectos' => array_map(static fn (array $p): string => self::textoProyecto($p), $catalogos['proyectos']),
             'Contratos' => array_map(static fn (array $c): string => $c['codigo'], $catalogos['contratosComunes']),
             'Categorias' => self::CATEGORIAS_EGRESO,
@@ -271,32 +316,34 @@ class PostgradoControlador
         ];
 
         $hojaIngresos = [
-            'encabezados' => ['Año presupuestal *', 'Dependencia *', 'Concepto *', 'Cantidad *', 'Valor unitario *', 'Valor total'],
-            'columnasConLista' => [0 => 'Años', 1 => 'Dependencias'],
+            'encabezados' => ['Año presupuestal *', 'Dependencia *', 'Ítem de autogestión *', 'Concepto *', 'Cantidad *', 'Valor unitario *', 'Valor total'],
+            'columnasConLista' => [0 => 'Años', 1 => 'Dependencias', 2 => 'Items'],
             'filaEjemplo' => [
                 $listasComunes['Años'][0] ?? '',
                 $listasComunes['Dependencias'][0] ?? '',
+                $listasComunes['Items'][0] ?? '',
                 'Ejemplo: matrícula programa de posgrado',
                 '1',
                 '1000000',
                 '',
             ],
-            'columnaCantidad' => 3,
-            'columnaValorUnitario' => 4,
-            'columnaValorTotal' => 5,
+            'columnaCantidad' => 4,
+            'columnaValorUnitario' => 5,
+            'columnaValorTotal' => 6,
         ];
 
         $hojaGastos = [
             'encabezados' => [
-                'Año presupuestal *', 'Sede *', 'Dependencia *', 'Proyecto PDI *', 'Contratos comunes',
-                'Categoría *', 'Actividad *', 'Rubro *', 'Insumo *', 'Cantidad *', 'Costo unitario *',
-                'Valor total', 'Meses de ejecución * (ej: 1,3,5)',
+                'Año presupuestal *', 'Sede *', 'Dependencia *', 'Ítem de autogestión *', 'Proyecto PDI *',
+                'Contratos comunes', 'Categoría *', 'Actividad *', 'Rubro *', 'Insumo *', 'Cantidad *',
+                'Costo unitario *', 'Valor total', 'Meses de ejecución * (ej: 1,3,5)',
             ],
-            'columnasConLista' => [0 => 'Años', 1 => 'Sedes', 2 => 'Dependencias', 3 => 'Proyectos', 4 => 'Contratos', 5 => 'Categorias', 7 => 'Rubros'],
+            'columnasConLista' => [0 => 'Años', 1 => 'Sedes', 2 => 'Dependencias', 3 => 'Items', 4 => 'Proyectos', 5 => 'Contratos', 6 => 'Categorias', 8 => 'Rubros'],
             'filaEjemplo' => [
                 $listasComunes['Años'][0] ?? '',
                 $listasComunes['Sedes'][0] ?? '',
                 $listasComunes['Dependencias'][0] ?? '',
+                $listasComunes['Items'][0] ?? '',
                 $listasComunes['Proyectos'][0] ?? '',
                 '',
                 $listasComunes['Categorias'][0] ?? '',
@@ -308,20 +355,19 @@ class PostgradoControlador
                 '',
                 '1,2,3',
             ],
-            'columnaCantidad' => 9,
-            'columnaValorUnitario' => 10,
-            'columnaValorTotal' => 11,
-            'columnaCategoria' => 5,
+            'columnaCantidad' => 10,
+            'columnaValorUnitario' => 11,
+            'columnaValorTotal' => 12,
+            'columnaCategoria' => 6,
         ];
 
-        $porcentajesModulo = $this->modeloPorcentaje->obtenerPorModulo('postgrado');
-        $mapaCategoriaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
-        $validacionPorcentajes = array_map(static function (string $etiqueta) use ($porcentajesModulo, $mapaCategoriaPorcentaje): array {
-            $clave = $mapaCategoriaPorcentaje[$etiqueta];
-            $valor = $porcentajesModulo[$clave] ?? null;
-
-            return ['etiqueta' => $etiqueta, 'porcentaje' => $valor !== null ? (float) $valor : null];
-        }, self::CATEGORIAS_VALIDACION_PLANTILLA);
+        // El % de Costos/Inversiones/Excedentes/Contribución a posgrado ahora se configura por
+        // ítem de Autogestión (ver autogestion_items.costos/inversiones/excedentes/
+        // contribucion_postgrado), no por módulo — y esta plantilla mezcla filas de distintos
+        // ítems en una sola hoja, así que no hay un único % que mostrar aquí de forma fiable. Se
+        // deja "N/A" en este bloque informativo (pendiente rehacerlo por ítem); la validación real
+        // sí se aplica ítem por ítem al importar (ver importar()).
+        $validacionPorcentajes = array_map(static fn (string $etiqueta): array => ['etiqueta' => $etiqueta, 'porcentaje' => null], self::CATEGORIAS_VALIDACION_PLANTILLA);
 
         $metadatos = [
             'plantilla' => 'autogestion-postgrado',
@@ -335,7 +381,8 @@ class PostgradoControlador
 
     /**
      * Exporta a .xlsx los ingresos y egresos visibles para el usuario actual en el año
-     * presupuestal indicado, en dos hojas ("Ingresos" y "Gastos").
+     * presupuestal indicado, en dos hojas ("Ingresos" y "Gastos"), con el mismo alcance de
+     * dependencias/propietario que se ve en pantalla (ver index()).
      */
     public function exportar(): void
     {
@@ -349,15 +396,35 @@ class PostgradoControlador
 
         $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
         [, $dependenciasPermitidas] = $this->obtenerDependenciasVisiblesUsuarioActual();
+        $autogestionItems = $this->modeloAutogestion->obtenerActivos('postgrado');
 
-        $ingresos = $anioSeleccionadoId > 0 ? $this->modeloIngreso->obtenerPorAnio($anioSeleccionadoId) : [];
-        $ingresos = $this->filtrarPorPropietarioODestinatario($ingresos, $usuarioActual, $dependenciasPermitidas);
+        $mapaItems = [];
+        foreach ($autogestionItems as $item) {
+            $mapaItems[(int) $item['id']] = $item['nombre'];
+        }
 
-        $gastos = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : [];
-        $gastos = $this->filtrarEgresosVisibles($gastos, $usuarioActual, $dependenciasPermitidas);
+        $ingresos = [];
+        $gastos = [];
 
-        $filaIngreso = static function (array $ingreso): array {
+        if ($anioSeleccionadoId > 0) {
+            foreach ($autogestionItems as $item) {
+                $itemId = (int) $item['id'];
+                $ingresos = array_merge($ingresos, $this->filtrarPorPropietarioODestinatario(
+                    $this->modeloIngreso->obtenerPorAnioYAutogestion($anioSeleccionadoId, $itemId),
+                    $usuarioActual,
+                    $dependenciasPermitidas
+                ));
+                $gastos = array_merge($gastos, $this->filtrarEgresosVisibles(
+                    $this->modeloGasto->obtenerPorAnioYAutogestion($anioSeleccionadoId, $itemId),
+                    $usuarioActual,
+                    $dependenciasPermitidas
+                ));
+            }
+        }
+
+        $filaIngreso = static function (array $ingreso) use ($mapaItems): array {
             return [
+                $mapaItems[(int) $ingreso['autogestion_id']] ?? '',
                 $ingreso['dependencia'],
                 (string) ($ingreso['concepto_adicional'] ?? ''),
                 number_format((float) $ingreso['valor_adicional'], 2, ',', '.'),
@@ -366,8 +433,9 @@ class PostgradoControlador
             ];
         };
 
-        $filaGasto = static function (array $gasto): array {
+        $filaGasto = static function (array $gasto) use ($mapaItems): array {
             return [
+                $mapaItems[(int) $gasto['autogestion_id']] ?? '',
                 $gasto['dependencia'],
                 $gasto['categoria'],
                 $gasto['insumo'],
@@ -379,8 +447,8 @@ class PostgradoControlador
         };
 
         $hojas = [
-            ['nombre' => 'Ingresos', 'encabezados' => ['Dependencia', 'Concepto adicional', 'Valor adicional', 'Valor total', 'Estado'], 'filas' => array_map($filaIngreso, $ingresos)],
-            ['nombre' => 'Gastos', 'encabezados' => ['Dependencia', 'Categoría', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Estado'], 'filas' => array_map($filaGasto, $gastos)],
+            ['nombre' => 'Ingresos', 'encabezados' => ['Ítem de autogestión', 'Dependencia', 'Concepto adicional', 'Valor adicional', 'Valor total', 'Estado'], 'filas' => array_map($filaIngreso, $ingresos)],
+            ['nombre' => 'Gastos', 'encabezados' => ['Ítem de autogestión', 'Dependencia', 'Categoría', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Estado'], 'filas' => array_map($filaGasto, $gastos)],
         ];
 
         $anioTexto = (string) $anioSeleccionadoId;
@@ -411,6 +479,7 @@ class PostgradoControlador
         $contratosComunes = $this->modeloContratoComun->obtenerActivos();
         $aniosActivos = $this->modeloAnio->obtenerActivos();
         $sedes = $this->modeloSede->obtenerTodas();
+        $autogestionItems = $this->modeloAutogestion->obtenerActivos('postgrado');
 
         $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
         [, $dependenciasSugeridas] = $this->obtenerDependenciasVisiblesUsuarioActual();
@@ -421,6 +490,7 @@ class PostgradoControlador
             'contratosComunes' => $contratosComunes,
             'aniosActivos' => $aniosActivos,
             'sedes' => $sedes,
+            'autogestionItems' => $autogestionItems,
             'usuarioActual' => $usuarioActual,
             'dependenciasSugeridas' => $dependenciasSugeridas,
         ];
@@ -428,14 +498,14 @@ class PostgradoControlador
 
     /**
      * Importa ingresos y egresos en borrador desde un archivo .xlsx (plantilla generada por
-     * exportarPlantilla()): la hoja "Ingresos" se lee y se agrupa PRIMERO (por año+dependencia, en
-     * una sola cabecera con varios conceptos), porque el total de cada grupo es el que se usa
+     * exportarPlantilla()): la hoja "Ingresos" se lee y se agrupa PRIMERO (por año+ítem+dependencia,
+     * en una sola cabecera con varios conceptos), porque el total de cada grupo es el que se usa
      * después para validar el balance de la hoja "Gastos" (ver más abajo). Todo o nada: si
      * cualquier fila de cualquiera de las dos hojas falla una validación, no se importa nada.
      *
      * El presupuesto disponible y el % por categoría NO se validan fila por fila: se acumula
-     * primero el total de TODAS las filas de Gastos válidas por cada año+dependencia y recién al
-     * final se compara ese total contra lo disponible — así, si el archivo no cabe, el error dice
+     * primero el total de TODAS las filas de Gastos válidas por cada año+ítem+dependencia y recién
+     * al final se compara ese total contra lo disponible — así, si el archivo no cabe, el error dice
      * que el valor total que se intentó importar excede lo permitido, en vez de señalar "la última
      * fila", que sería engañoso: como la importación es todo o nada, ninguna fila anterior se llegó
      * a importar tampoco.
@@ -488,6 +558,11 @@ class PostgradoControlador
             $mapaSedes[$sede['codigo'] . ' - ' . $sede['nombre']] = (int) $sede['id'];
         }
 
+        $mapaItems = [];
+        foreach ($catalogos['autogestionItems'] as $item) {
+            $mapaItems[$item['nombre']] = (int) $item['id'];
+        }
+
         $mapaProyectos = [];
         foreach ($catalogos['proyectos'] as $proyecto) {
             $mapaProyectos[self::textoProyecto($proyecto)] = $proyecto;
@@ -502,8 +577,8 @@ class PostgradoControlador
 
         $errores = [];
 
-        // --- 1) Ingresos primero: se agrupan por año + dependencia en una sola cabecera con varios
-        // conceptos. Una fila con más de 4 de sus campos obligatorios en blanco se ignora en
+        // --- 1) Ingresos primero: se agrupan por año + ítem + dependencia en una sola cabecera con
+        // varios conceptos. Una fila con más de 4 de sus campos obligatorios en blanco se ignora en
         // silencio (fila sin usar; puede traer, por ejemplo, un "0" residual en la columna
         // calculada "Valor total" tras abrir la plantilla en Excel) en vez de reportarse como error. ---
         $gruposIngreso = [];
@@ -513,12 +588,13 @@ class PostgradoControlador
 
             $anioTexto = trim($fila[0] ?? '');
             $dependenciaTexto = trim($fila[1] ?? '');
-            $conceptoTexto = trim($fila[2] ?? '');
-            $cantidadTexto = trim($fila[3] ?? '');
-            $valorTexto = trim($fila[4] ?? '');
+            $itemTexto = trim($fila[2] ?? '');
+            $conceptoTexto = trim($fila[3] ?? '');
+            $cantidadTexto = trim($fila[4] ?? '');
+            $valorTexto = trim($fila[5] ?? '');
 
             $vacios = count(array_filter(
-                [$anioTexto, $dependenciaTexto, $conceptoTexto, $cantidadTexto, $valorTexto],
+                [$anioTexto, $dependenciaTexto, $itemTexto, $conceptoTexto, $cantidadTexto, $valorTexto],
                 static fn (string $valor): bool => $valor === ''
             ));
 
@@ -541,6 +617,11 @@ class PostgradoControlador
                 continue;
             }
 
+            if (!isset($mapaItems[$itemTexto])) {
+                $errores[] = "Ingresos, fila $numeroFilaExcel: el ítem de autogestión \"$itemTexto\" no es válido. Usa el desplegable de la columna.";
+                continue;
+            }
+
             if (!is_numeric($cantidadTexto) || (int) $cantidadTexto <= 0) {
                 $errores[] = "Ingresos, fila $numeroFilaExcel: la cantidad debe ser un número entero mayor a 0.";
                 continue;
@@ -552,11 +633,13 @@ class PostgradoControlador
             }
 
             $anioId = $mapaAnios[$anioTexto];
-            $clave = $anioId . ':' . $dependenciaTexto;
+            $itemId = $mapaItems[$itemTexto];
+            $clave = $anioId . ':' . $itemId . ':' . $dependenciaTexto;
 
             if (!isset($gruposIngreso[$clave])) {
                 $gruposIngreso[$clave] = [
                     'anio_presupuestal_id' => $anioId,
+                    'autogestion_id' => $itemId,
                     'dependencia' => $dependenciaTexto,
                     'concepto_adicional' => '',
                     'valor_adicional' => 0.0,
@@ -591,18 +674,19 @@ class PostgradoControlador
             $anioTexto = trim($fila[0] ?? '');
             $sedeTexto = trim($fila[1] ?? '');
             $dependenciaTexto = trim($fila[2] ?? '');
-            $proyectoTexto = trim($fila[3] ?? '');
-            $contratoTexto = trim($fila[4] ?? '');
-            $categoriaTexto = trim($fila[5] ?? '');
-            $actividad = trim($fila[6] ?? '');
-            $rubroTexto = trim($fila[7] ?? '');
-            $insumo = trim($fila[8] ?? '');
-            $cantidadTexto = trim($fila[9] ?? '');
-            $costoTexto = trim($fila[10] ?? '');
-            $mesesTexto = trim($fila[12] ?? '');
+            $itemTexto = trim($fila[3] ?? '');
+            $proyectoTexto = trim($fila[4] ?? '');
+            $contratoTexto = trim($fila[5] ?? '');
+            $categoriaTexto = trim($fila[6] ?? '');
+            $actividad = trim($fila[7] ?? '');
+            $rubroTexto = trim($fila[8] ?? '');
+            $insumo = trim($fila[9] ?? '');
+            $cantidadTexto = trim($fila[10] ?? '');
+            $costoTexto = trim($fila[11] ?? '');
+            $mesesTexto = trim($fila[13] ?? '');
 
             $vacios = count(array_filter(
-                [$anioTexto, $sedeTexto, $dependenciaTexto, $proyectoTexto, $categoriaTexto, $actividad, $rubroTexto, $insumo, $cantidadTexto, $costoTexto, $mesesTexto],
+                [$anioTexto, $sedeTexto, $dependenciaTexto, $itemTexto, $proyectoTexto, $categoriaTexto, $actividad, $rubroTexto, $insumo, $cantidadTexto, $costoTexto, $mesesTexto],
                 static fn (string $valor): bool => $valor === ''
             ));
 
@@ -627,6 +711,11 @@ class PostgradoControlador
 
             if (!in_array($dependenciaTexto, $dependenciasPermitidas, true)) {
                 $errores[] = "Gastos, fila $numeroFilaExcel: la dependencia \"$dependenciaTexto\" no está disponible para tu usuario.";
+                continue;
+            }
+
+            if (!isset($mapaItems[$itemTexto])) {
+                $errores[] = "Gastos, fila $numeroFilaExcel: el ítem de autogestión \"$itemTexto\" no es válido. Usa el desplegable de la columna.";
                 continue;
             }
 
@@ -673,9 +762,10 @@ class PostgradoControlador
             sort($meses);
             $proyecto = $mapaProyectos[$proyectoTexto];
             $anioId = $mapaAnios[$anioTexto];
+            $itemId = $mapaItems[$itemTexto];
 
             $filasGastoCandidatas[] = [
-                'claveGrupo' => $anioId . ':' . $dependenciaTexto,
+                'claveGrupo' => $anioId . ':' . $itemId . ':' . $dependenciaTexto,
                 'categoria' => $categoriaTexto,
                 'nuevoValor' => (int) $cantidadTexto * (float) $costoTexto,
                 'datos' => [
@@ -689,6 +779,7 @@ class PostgradoControlador
                     'objeto_proyecto_paa' => $contratoTexto,
                     'actividad' => $actividad,
                     'rubro_id' => $mapaRubros[$rubroTexto],
+                    'autogestion_id' => $itemId,
                     'insumo' => $insumo,
                     'cantidad' => (int) $cantidadTexto,
                     'costo_unitario' => (float) $costoTexto,
@@ -699,7 +790,7 @@ class PostgradoControlador
         }
 
         // --- 3) Presupuesto y % por categoría: sobre el TOTAL de lo que se intenta importar por
-        // cada año+dependencia, no fila por fila. ---
+        // cada año+ítem+dependencia, no fila por fila. ---
         $totalesPorGrupo = [];
         foreach ($filasGastoCandidatas as $candidata) {
             $clave = $candidata['claveGrupo'];
@@ -707,6 +798,7 @@ class PostgradoControlador
             if (!isset($totalesPorGrupo[$clave])) {
                 $totalesPorGrupo[$clave] = [
                     'anio_presupuestal_id' => $candidata['datos']['anio_presupuestal_id'],
+                    'autogestion_id' => $candidata['datos']['autogestion_id'],
                     'dependencia' => $candidata['datos']['dependencia'],
                     'total' => 0.0,
                     'categorias' => [],
@@ -718,59 +810,64 @@ class PostgradoControlador
                 = ($totalesPorGrupo[$clave]['categorias'][$candidata['categoria']] ?? 0.0) + $candidata['nuevoValor'];
         }
 
-        $porcentajesModulo = $this->modeloPorcentaje->obtenerPorModulo('postgrado');
         $mapaCategoriaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
 
         foreach ($totalesPorGrupo as $clave => $grupo) {
             $anioId = $grupo['anio_presupuestal_id'];
+            $itemId = $grupo['autogestion_id'];
             $dependenciaTexto = $grupo['dependencia'];
+            $itemTexto = array_search($itemId, $mapaItems, true);
+            $itemTexto = $itemTexto !== false ? $itemTexto : '';
+            // El % es propio de cada ítem (autogestion_items.costos/inversiones/excedentes), no del
+            // módulo — se busca por ítem, no una sola vez para todo el archivo.
+            $porcentajesItem = $this->modeloAutogestion->obtenerPorId($itemId) ?? [];
 
-            $ingresosExistentes = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($anioId, [$dependenciaTexto]);
+            $ingresosExistentes = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $itemId, [$dependenciaTexto]);
             $ingresosNuevos = $totalIngresosPorGrupo[$clave] ?? 0.0;
             $ingresosDisponibles = $ingresosExistentes + $ingresosNuevos;
-            $totalExistente = $this->modeloGasto->obtenerTotalPorAnioYDependencias($anioId, [$dependenciaTexto]);
+            $totalExistente = $this->modeloGasto->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $itemId, [$dependenciaTexto]);
 
             if ($totalExistente + $grupo['total'] > $ingresosDisponibles) {
                 $disponible = max(0, $ingresosDisponibles - $totalExistente);
-                $errores[] = "Gastos, \"$dependenciaTexto\": el valor total de gastos que intentas importar ("
+                $errores[] = "Gastos, \"$itemTexto\" en \"$dependenciaTexto\": el valor total de gastos que intentas importar ("
                     . number_format($grupo['total'], 2, ',', '.') . ') excede el disponible (' . number_format($disponible, 2, ',', '.') . '). '
-                    . 'Ingresos de "' . $dependenciaTexto . '" para este año: ' . number_format($ingresosExistentes, 2, ',', '.') . ' ya registrados + '
+                    . 'Ingresos de "' . $itemTexto . '" en "' . $dependenciaTexto . '" para este año: ' . number_format($ingresosExistentes, 2, ',', '.') . ' ya registrados + '
                     . number_format($ingresosNuevos, 2, ',', '.') . ' nuevos en la hoja "Ingresos" de este archivo.'
-                    . ($ingresosNuevos <= 0 ? ' No se detectó ninguna fila de Ingresos para esta dependencia en este archivo: revisa que el nombre de la dependencia y el año coincidan exactamente (elegidos del desplegable) en ambas hojas.' : '');
+                    . ($ingresosNuevos <= 0 ? ' No se detectó ninguna fila de Ingresos para este ítem y dependencia en este archivo: revisa que el ítem de autogestión, la dependencia y el año coincidan exactamente (elegidos del desplegable) en ambas hojas.' : '');
                 continue;
             }
 
             foreach ($grupo['categorias'] as $categoria => $totalCategoria) {
                 $clavePorcentaje = $mapaCategoriaPorcentaje[$categoria] ?? null;
 
-                if ($clavePorcentaje === null || $porcentajesModulo[$clavePorcentaje] === null) {
+                if ($clavePorcentaje === null || ($porcentajesItem[$clavePorcentaje] ?? null) === null) {
                     continue;
                 }
 
-                $valorEsperadoCategoria = round($ingresosDisponibles * (float) $porcentajesModulo[$clavePorcentaje] / 100, 2);
+                $valorEsperadoCategoria = round($ingresosDisponibles * (float) $porcentajesItem[$clavePorcentaje] / 100, 2);
 
                 // Excedentes se calcula SOLO a partir del ingreso de esta importación (% × ingresos
-                // disponibles de esta dependencia): no se compara contra lo que ya exista en la base
-                // de datos para "Excedentes" en esa dependencia, porque esa dependencia puede tener
-                // registros de otras personas o de pruebas anteriores que no son parte de este
-                // archivo — si no hay ingreso, el excedente esperado es 0, sin importar qué otro
-                // valor exista ya. Para Gastos/Inversiones sí se sigue acumulando contra lo
-                // existente, porque esas categorías sí son de cupo compartido con el resto del año.
+                // disponibles de este ítem+dependencia): no se compara contra lo que ya exista en la
+                // base de datos para "Excedentes" ahí, porque puede tener registros de otras
+                // personas o de pruebas anteriores que no son parte de este archivo — si no hay
+                // ingreso, el excedente esperado es 0, sin importar qué otro valor exista ya. Para
+                // Gastos/Inversiones sí se sigue acumulando contra lo existente, porque esas
+                // categorías sí son de cupo compartido con el resto del año.
                 if ($categoria === 'Excedentes') {
                     if (abs(round($totalCategoria, 2) - $valorEsperadoCategoria) > 0.01) {
-                        $porcentajeTexto = rtrim(rtrim(number_format((float) $porcentajesModulo[$clavePorcentaje], 2), '0'), '.');
-                        $errores[] = "Gastos, \"$dependenciaTexto\", categoría Excedentes: el valor que intentas importar (" . number_format($totalCategoria, 2, ',', '.')
-                            . ") debe corresponder exactamente al {$porcentajeTexto}% de los ingresos de esta dependencia (" . number_format($valorEsperadoCategoria, 2, ',', '.') . ').';
+                        $porcentajeTexto = rtrim(rtrim(number_format((float) $porcentajesItem[$clavePorcentaje], 2), '0'), '.');
+                        $errores[] = "Gastos, \"$itemTexto\" en \"$dependenciaTexto\", categoría Excedentes: el valor que intentas importar (" . number_format($totalCategoria, 2, ',', '.')
+                            . ") debe corresponder exactamente al {$porcentajeTexto}% de los ingresos de este ítem y dependencia (" . number_format($valorEsperadoCategoria, 2, ',', '.') . ').';
                     }
                     continue;
                 }
 
-                $totalExistenteCategoria = $this->modeloGasto->obtenerTotalPorAnioYCategoriaYDependencias($anioId, $categoria, [$dependenciaTexto]);
+                $totalExistenteCategoria = $this->modeloGasto->obtenerTotalPorAnioAutogestionYCategoriaYDependencias($anioId, $itemId, $categoria, [$dependenciaTexto]);
                 $totalRealCategoria = round($totalExistenteCategoria + $totalCategoria, 2);
 
                 if ($totalRealCategoria > $valorEsperadoCategoria) {
                     $disponibleCategoria = max(0, $valorEsperadoCategoria - $totalExistenteCategoria);
-                    $errores[] = "Gastos, \"$dependenciaTexto\", categoría $categoria: el valor total que intentas importar ("
+                    $errores[] = "Gastos, \"$itemTexto\" en \"$dependenciaTexto\", categoría $categoria: el valor total que intentas importar ("
                         . number_format($totalCategoria, 2, ',', '.') . ') excede el % disponible (' . number_format($disponibleCategoria, 2, ',', '.') . ').';
                 }
             }
@@ -795,7 +892,7 @@ class PostgradoControlador
                 unset($grupo['conceptos']);
                 $grupo['valor_total'] = $totalIngresosPorGrupo[$clave] ?? 0.0;
                 $this->modeloIngreso->crear($grupo, $conceptos);
-                $gruposAfectados[$grupo['anio_presupuestal_id'] . ':' . $grupo['dependencia']] = $grupo;
+                $gruposAfectados[$grupo['anio_presupuestal_id'] . ':' . $grupo['autogestion_id'] . ':' . $grupo['dependencia']] = $grupo;
             }
 
             foreach ($filasGastoCandidatas as $candidata) {
@@ -809,7 +906,7 @@ class PostgradoControlador
         }
 
         foreach ($gruposAfectados as $grupo) {
-            $this->generarEgresosAutomaticos(null, $grupo['anio_presupuestal_id'], $grupo['dependencia']);
+            $this->generarEgresosAutomaticos(null, $grupo['anio_presupuestal_id'], $grupo['autogestion_id'], $grupo['dependencia']);
         }
 
         $mensaje = count($gruposIngreso) . ' ingreso(s) y ' . count($filasGastoCandidatas) . ' gasto(s) importado(s) correctamente como borrador.';
@@ -826,17 +923,17 @@ class PostgradoControlador
         }
 
         [, $dependenciasPermitidas] = $this->obtenerDependenciasVisiblesUsuarioActual();
-        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($datos['anio_presupuestal_id'], $dependenciasPermitidas);
-        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnioYDependencias($datos['anio_presupuestal_id'], $dependenciasPermitidas);
+        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($datos['anio_presupuestal_id'], $datos['autogestion_id'], $dependenciasPermitidas);
+        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnioYAutogestionYDependencias($datos['anio_presupuestal_id'], $datos['autogestion_id'], $dependenciasPermitidas);
         $nuevoValor = $datos['cantidad'] * $datos['costo_unitario'];
 
         if ($egresosActuales + $nuevoValor > $ingresosDisponibles) {
             $disponible = max(0, $ingresosDisponibles - $egresosActuales);
 
-            return ['Este egreso supera los ingresos disponibles de este año. Disponible: ' . number_format($disponible, 2, ',', '.') . '.', ''];
+            return ['Este egreso supera los ingresos disponibles de este ítem de autogestión. Disponible: ' . number_format($disponible, 2, ',', '.') . '.', ''];
         }
 
-        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, 0.0, $dependenciasPermitidas);
+        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], (int) $datos['autogestion_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, 0.0, $dependenciasPermitidas);
 
         if ($errorCategoria !== '') {
             return [$errorCategoria, ''];
@@ -923,18 +1020,18 @@ class PostgradoControlador
         }
 
         [, $dependenciasPermitidas] = $this->obtenerDependenciasVisiblesUsuarioActual();
-        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($datos['anio_presupuestal_id'], $dependenciasPermitidas);
-        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnioYDependencias($datos['anio_presupuestal_id'], $dependenciasPermitidas) - (float) $existente['valor_total'];
+        $ingresosDisponibles = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($datos['anio_presupuestal_id'], $datos['autogestion_id'], $dependenciasPermitidas);
+        $egresosActuales = $this->modeloGasto->obtenerTotalPorAnioYAutogestionYDependencias($datos['anio_presupuestal_id'], $datos['autogestion_id'], $dependenciasPermitidas) - (float) $existente['valor_total'];
         $nuevoValor = $datos['cantidad'] * $datos['costo_unitario'];
 
         if ($egresosActuales + $nuevoValor > $ingresosDisponibles) {
             $disponible = max(0, $ingresosDisponibles - $egresosActuales);
 
-            return ['Este egreso supera los ingresos disponibles de este año. Disponible: ' . number_format($disponible, 2, ',', '.') . '.', ''];
+            return ['Este egreso supera los ingresos disponibles de este ítem de autogestión. Disponible: ' . number_format($disponible, 2, ',', '.') . '.', ''];
         }
 
         $valorExcluidoCategoria = $existente['categoria'] === $datos['categoria'] ? (float) $existente['valor_total'] : 0.0;
-        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, $valorExcluidoCategoria, $dependenciasPermitidas);
+        $errorCategoria = $this->validarLimiteCategoria($datos['anio_presupuestal_id'], (int) $datos['autogestion_id'], $datos['categoria'], $nuevoValor, $ingresosDisponibles, $valorExcluidoCategoria, $dependenciasPermitidas);
 
         if ($errorCategoria !== '') {
             return [$errorCategoria, ''];
@@ -956,12 +1053,12 @@ class PostgradoControlador
 
         $destino = !empty($_POST['volver'])
             ? $_POST['volver']
-            : 'index.php?ruta=postgrado&tab=egresos&anio_id=' . $datos['anio_presupuestal_id'];
+            : 'index.php?ruta=postgrado&tab=egresos&anio_id=' . $datos['anio_presupuestal_id'] . '&autogestion_id=' . $datos['autogestion_id'];
         header('Location: ' . $destino);
         exit;
     }
 
-    private function validarLimiteCategoria(int $anioPresupuestalId, string $categoria, float $nuevoValor, float $totalIngresos, float $valorExcluido = 0.0, array $dependenciasPermitidas = []): string
+    private function validarLimiteCategoria(int $anioPresupuestalId, int $autogestionId, string $categoria, float $nuevoValor, float $totalIngresos, float $valorExcluido = 0.0, array $dependenciasPermitidas = []): string
     {
         $mapaCategoriaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
         $clavePorcentaje = $mapaCategoriaPorcentaje[$categoria] ?? null;
@@ -970,14 +1067,14 @@ class PostgradoControlador
             return '';
         }
 
-        $porcentajes = $this->modeloPorcentaje->obtenerPorModulo('postgrado');
+        $item = $this->modeloAutogestion->obtenerPorId($autogestionId);
 
-        if ($porcentajes[$clavePorcentaje] === null) {
+        if ($item === null || $item[$clavePorcentaje] === null) {
             return '';
         }
 
-        $limiteCategoria = round($totalIngresos * (float) $porcentajes[$clavePorcentaje] / 100, 2);
-        $totalCategoriaActual = $this->modeloGasto->obtenerTotalPorAnioYCategoriaYDependencias($anioPresupuestalId, $categoria, $dependenciasPermitidas) - $valorExcluido;
+        $limiteCategoria = round($totalIngresos * (float) $item[$clavePorcentaje] / 100, 2);
+        $totalCategoriaActual = $this->modeloGasto->obtenerTotalPorAnioAutogestionYCategoriaYDependencias($anioPresupuestalId, $autogestionId, $categoria, $dependenciasPermitidas) - $valorExcluido;
 
         if ($totalCategoriaActual + $nuevoValor > $limiteCategoria) {
             $disponibleCategoria = max(0, $limiteCategoria - $totalCategoriaActual);
@@ -991,10 +1088,14 @@ class PostgradoControlador
     private function enviarTodo(): array
     {
         $anioId = (int) ($_POST['anio_presupuestal_id'] ?? 0);
+        $autogestionId = (int) ($_POST['autogestion_id'] ?? 0);
         $dependenciaDestinoNombre = trim($_POST['dependencia_destino'] ?? '');
+        // Solo para mostrar en los mensajes de abajo — $dependenciaDestinoNombre sigue siendo el
+        // nombre real (necesario para obtenerPorNombre()/enviarTodosBorrador()).
+        $dependenciaDestinoVisible = Dependencia::nombreVisible($dependenciaDestinoNombre);
         $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
 
-        if ($anioId <= 0 || $dependenciaDestinoNombre === '' || $rolDestinatarioId <= 0) {
+        if ($anioId <= 0 || $autogestionId <= 0 || $dependenciaDestinoNombre === '' || $rolDestinatarioId <= 0) {
             return ['Selecciona a quién se enviará y el rol al que se enviarán los ingresos y egresos.', ''];
         }
 
@@ -1017,16 +1118,16 @@ class PostgradoControlador
             $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
 
             if (empty($destinatarios)) {
-                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '". Selecciona a quién remitir la petición.', ''];
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '". Selecciona a quién remitir la petición.', ''];
             }
         }
 
         [, $dependenciasPermitidasEnvio] = $this->obtenerDependenciasVisiblesUsuarioActual();
-        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($anioId, $dependenciasPermitidasEnvio);
-        $totalEgresos = $this->modeloGasto->obtenerTotalPorAnioYDependencias($anioId, $dependenciasPermitidasEnvio);
+        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $autogestionId, $dependenciasPermitidasEnvio);
+        $totalEgresos = $this->modeloGasto->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $autogestionId, $dependenciasPermitidasEnvio);
 
         if ($totalIngresos <= 0 || abs($totalIngresos - $totalEgresos) >= 0.01) {
-            return ['Solo puedes enviar cuando el total de egresos sea igual al total de ingresos de este año.', ''];
+            return ['Solo puedes enviar cuando el total de egresos sea igual al total de ingresos de este ítem.', ''];
         }
 
         // Una vez resuelto (único con ese rol, o desambiguado arriba), se guarda quién es
@@ -1034,8 +1135,8 @@ class PostgradoControlador
         // petición en Pendientes, no solo la persona elegida.
         $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
 
-        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
-        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
+        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $autogestionId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
+        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $autogestionId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
 
         if ($enviadosIngresos === 0 && $enviadosEgresos === 0) {
             return ['No hay ingresos ni egresos en borrador para enviar.', ''];
@@ -1053,10 +1154,10 @@ class PostgradoControlador
         }
 
         if (empty($destinatarios)) {
-            return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '" para notificar.'];
+            return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '" para notificar.'];
         }
 
-        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoNombre . '").'];
+        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoVisible . '").'];
     }
 
     private function eliminarEgreso(): array
@@ -1083,7 +1184,9 @@ class PostgradoControlador
 
         foreach (self::CAMPOS_REQUERIDOS_EGRESO as $campo) {
             if (($datos[$campo] ?? '') === '') {
-                return [[], 'Todos los campos son obligatorios.'];
+                $etiqueta = self::ETIQUETAS_CAMPOS[$campo] ?? $campo;
+
+                return [[], 'Falta ' . $etiqueta . '. Ese campo es obligatorio para registrar el egreso.'];
             }
         }
 
@@ -1124,6 +1227,7 @@ class PostgradoControlador
         $datos['motor_id'] = (int) $proyectoPdi['motor_id'];
         $datos['linea_id'] = (int) $proyectoPdi['linea_id'];
         $datos['rubro_id'] = (int) $datos['rubro_id'];
+        $datos['autogestion_id'] = (int) $datos['autogestion_id'];
         $datos['cantidad'] = (int) $datos['cantidad'];
         $datos['costo_unitario'] = (float) $datos['costo_unitario'];
         $datos['usuario_id'] = (int) ($_SESSION['usuario_id'] ?? 0);
@@ -1134,12 +1238,21 @@ class PostgradoControlador
     private function validarDatosIngreso(): array
     {
         $anioPresupuestalId = (int) ($_POST['anio_presupuestal_id'] ?? 0);
+        $autogestionId = (int) ($_POST['autogestion_id'] ?? 0);
         $dependencia = trim($_POST['dependencia'] ?? '');
         $conceptoAdicional = trim($_POST['concepto_adicional'] ?? '');
         $valorAdicional = is_numeric($_POST['valor_adicional'] ?? '') ? (float) $_POST['valor_adicional'] : 0.0;
 
-        if ($anioPresupuestalId <= 0 || $dependencia === '') {
-            return [[], [], 'El año presupuestal y la dependencia son obligatorios.'];
+        if ($anioPresupuestalId <= 0) {
+            return [[], [], 'Falta el año presupuestal. Ese campo es obligatorio para registrar el ingreso.'];
+        }
+
+        if ($autogestionId <= 0) {
+            return [[], [], 'Falta el ítem de Autogestión (selector del sidebar). Ese campo es obligatorio para registrar el ingreso. Si el selector aparece vacío, pide a un administrador que active un ítem en Configuraciones > Autogestión.'];
+        }
+
+        if ($dependencia === '') {
+            return [[], [], 'Falta la dependencia. Ese campo es obligatorio para registrar el ingreso.'];
         }
 
         if ($valorAdicional < 0) {
@@ -1185,6 +1298,7 @@ class PostgradoControlador
 
         $cabecera = [
             'anio_presupuestal_id' => $anioPresupuestalId,
+            'autogestion_id' => $autogestionId,
             'dependencia' => $dependencia,
             'concepto_adicional' => $conceptoAdicional,
             'valor_adicional' => $valorAdicional,
@@ -1209,7 +1323,7 @@ class PostgradoControlador
             return ['No se pudo registrar el ingreso: ' . $excepcion->getMessage(), ''];
         }
 
-        $this->generarEgresosAutomaticos($ingresoId, $cabecera['anio_presupuestal_id'], $cabecera['dependencia']);
+        $this->generarEgresosAutomaticos($ingresoId, $cabecera['anio_presupuestal_id'], $cabecera['autogestion_id'], $cabecera['dependencia']);
 
         return ['', 'Ingreso registrado correctamente.'];
     }
@@ -1235,13 +1349,13 @@ class PostgradoControlador
             return ['No se pudo actualizar el ingreso: ' . $excepcion->getMessage(), ''];
         }
 
-        $this->generarEgresosAutomaticos($id, $cabecera['anio_presupuestal_id'], $cabecera['dependencia']);
+        $this->generarEgresosAutomaticos($id, $cabecera['anio_presupuestal_id'], $cabecera['autogestion_id'], $cabecera['dependencia']);
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('ingreso_postgrado', $id, $cabecera['valor_total'], $cabecera['dependencia']);
 
         $destino = !empty($_POST['volver'])
             ? $_POST['volver']
-            : 'index.php?ruta=postgrado&tab=ingresos&anio_id=' . $cabecera['anio_presupuestal_id'];
+            : 'index.php?ruta=postgrado&tab=ingresos&anio_id=' . $cabecera['anio_presupuestal_id'] . '&autogestion_id=' . $cabecera['autogestion_id'];
         header('Location: ' . $destino);
         exit;
     }
@@ -1259,6 +1373,7 @@ class PostgradoControlador
         $this->generarEgresosAutomaticos(
             null,
             (int) $existente['anio_presupuestal_id'],
+            (int) $existente['autogestion_id'],
             (string) $existente['dependencia']
         );
 
@@ -1290,6 +1405,7 @@ class PostgradoControlador
                     $this->generarEgresosAutomaticos(
                         null,
                         (int) $existente['anio_presupuestal_id'],
+                        (int) $existente['autogestion_id'],
                         (string) $existente['dependencia']
                     );
                     $eliminados++;
@@ -1333,6 +1449,7 @@ class PostgradoControlador
                         $this->generarEgresosAutomaticos(
                             null,
                             (int) $nuevo['anio_presupuestal_id'],
+                            (int) $nuevo['autogestion_id'],
                             (string) $nuevo['dependencia']
                         );
                     }
@@ -1347,30 +1464,30 @@ class PostgradoControlador
         return ['', 'Se duplicaron ' . $duplicados . ' elemento(s).'];
     }
 
-    private function generarEgresosAutomaticos(?int $ingresoId, int $anioPresupuestalId, string $dependencia): void
+    private function generarEgresosAutomaticos(?int $ingresoId, int $anioPresupuestalId, int $autogestionId, string $dependencia): void
     {
-        $porcentajes = $this->modeloPorcentaje->obtenerPorModulo('postgrado');
-        // Acotado a la propia dependencia del ingreso: antes usaba obtenerTotalPorAnio() (todo el
-        // año, todas las dependencias), así que el egreso automático de cada dependencia se
-        // calculaba sobre el total de TODA la universidad, no sobre lo que esa dependencia
-        // realmente ingresó.
-        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($anioPresupuestalId, [$dependencia]);
+        $item = $this->modeloAutogestion->obtenerPorId($autogestionId);
+        // Acotado a la propia dependencia del ingreso: antes usaba obtenerTotalPorAnioYDependencias()
+        // sin ítem (todas las dependencias que compartieran el año), así que el egreso automático
+        // de cada dependencia se calculaba sobre el total de TODA la universidad, no sobre lo que
+        // esa dependencia realmente ingresó en este ítem.
+        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($anioPresupuestalId, $autogestionId, [$dependencia]);
 
         $lineas = [];
 
-        if ($porcentajes['excedentes'] !== null) {
-            $lineas['excedentes'] = ['porcentaje' => (float) $porcentajes['excedentes'], 'etiqueta' => 'Excedentes nivel central'];
+        if ($item !== null && $item['excedentes'] !== null) {
+            $lineas['excedentes'] = ['porcentaje' => (float) $item['excedentes'], 'etiqueta' => 'Excedentes nivel central'];
         }
 
-        if ($porcentajes['contribucion_postgrado'] !== null) {
-            $lineas['contrib_postgrado'] = ['porcentaje' => (float) $porcentajes['contribucion_postgrado'], 'etiqueta' => 'Contribución a posgrado'];
+        if ($item !== null && $item['contribucion_postgrado'] !== null) {
+            $lineas['contrib_postgrado'] = ['porcentaje' => (float) $item['contribucion_postgrado'], 'etiqueta' => 'Contribución a posgrado'];
         }
 
-        $this->modeloGasto->eliminarAutomaticosDistintosDe($anioPresupuestalId, array_keys($lineas));
+        $this->modeloGasto->eliminarAutomaticosDistintosDe($anioPresupuestalId, $autogestionId, array_keys($lineas));
 
         foreach ($lineas as $tipo => $info) {
             $valor = round($totalIngresos * $info['porcentaje'] / 100, 2);
-            $existente = $this->modeloGasto->obtenerAutomaticoPorTipo($anioPresupuestalId, $tipo);
+            $existente = $this->modeloGasto->obtenerAutomaticoPorTipo($anioPresupuestalId, $autogestionId, $tipo);
 
             // Si ya no hay ingresos que la sustenten (p. ej. tras eliminar el último), la fila
             // automática desaparece en vez de quedar visible en $0.00.
@@ -1396,6 +1513,7 @@ class PostgradoControlador
                 'objeto_proyecto_paa' => self::AUTOMATICO_OBJETO_PROYECTO_PAA,
                 'actividad' => self::AUTOMATICO_ACTIVIDAD,
                 'rubro_texto' => self::AUTOMATICO_RUBRO_TEXTO,
+                'autogestion_id' => $autogestionId,
                 'ingreso_id' => $ingresoId,
                 'tipo_automatico' => $tipo,
                 'insumo' => self::AUTOMATICO_INSUMO,

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/../../modelo/Dependencia.php';
 $tituloPagina = $tituloPagina ?? 'Sistema';
 $nombreActual = $_SESSION['usuario_nombre'] ?? '';
 $rolActual = $_SESSION['usuario_rol'] ?? '';
@@ -8,7 +9,6 @@ $esSuperAdminActual = false;
 $esDependenciaRaizActual = false;
 if (!empty($_SESSION['usuario_id'])) {
     require_once __DIR__ . '/../../modelo/Usuario.php';
-    require_once __DIR__ . '/../../modelo/Dependencia.php';
     $usuarioEncabezado = (new Usuario())->obtenerPorId((int) $_SESSION['usuario_id']);
     $esSuperAdminActual = $usuarioEncabezado !== null && (int) ($usuarioEncabezado['es_super_admin'] ?? 0) === 1;
     $dependenciaEncabezado = !empty($usuarioEncabezado['dependencia_id'])
@@ -154,7 +154,7 @@ if (!empty($_SESSION['usuario_id'])) {
                         <div id="menu-usuario-dropdown" class="menu-usuario-dropdown">
                             <div class="menu-usuario-detalle">
                                 <span class="detalle-usuario">Estamento: <?= htmlspecialchars($estamentoActual) ?></span>
-                                <span class="detalle-usuario">Dependencia: <?= htmlspecialchars($dependenciaActual) ?></span>
+                                <span class="detalle-usuario">Dependencia: <?= htmlspecialchars(Dependencia::nombreVisible($dependenciaActual)) ?></span>
                               <!--  <span class="detalle-usuario">Rol: <?= htmlspecialchars($rolActual) ?></span> -->
                             </div>
                             <a href="index.php?ruta=perfil">Perfil</a>

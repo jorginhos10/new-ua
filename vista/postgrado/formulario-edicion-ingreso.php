@@ -5,8 +5,9 @@
  * antiguo modal `#modal-editar-ingreso` — solo cambia el contenedor (ya no es un modal)
  * y el botón oculto + auto-click que dispara ese mismo poblado al cargar la página.
  *
- * Variables esperadas: $ingresoParaEditar (array), $anioSeleccionadoId, $volverEdicion,
- * $error, $aniosActivos, $tieneHijas, $dependenciaPorDefecto, $dependenciasSugeridas.
+ * Variables esperadas: $ingresoParaEditar (array), $anioSeleccionadoId,
+ * $autogestionSeleccionadoId, $volverEdicion, $error, $aniosActivos, $tieneHijas,
+ * $dependenciaPorDefecto, $dependenciasSugeridas.
  */
 ?>
 <h2 class="titulo-formulario-edicion">Editar ingreso</h2>
@@ -17,13 +18,14 @@
 
 <form
     method="POST"
-    action="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>&editar_id=<?= (int) $ingresoParaEditar['id'] ?>"
+    action="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&editar_id=<?= (int) $ingresoParaEditar['id'] ?>"
     id="form-editar-ingreso"
     class="form-necesidad"
 >
     <input type="hidden" name="tab" value="ingresos">
     <input type="hidden" name="accion" value="actualizar">
     <input type="hidden" name="id" id="editar-ingreso-id" value="">
+    <input type="hidden" name="autogestion_id" id="editar-ingreso-autogestion_id" value="">
     <input type="hidden" name="volver" id="editar-ingreso-volver" value="">
 
     <div class="campo">

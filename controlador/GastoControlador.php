@@ -1088,6 +1088,9 @@ class GastoControlador
         if ($dependenciaObjetivo !== null) {
             $dependenciaNombre = $dependenciaObjetivo['nombre'];
         }
+        // Solo para mostrar en los mensajes de abajo — $dependenciaNombre sigue siendo el nombre
+        // real (necesario para enviarTodosBorrador() y para que coincida con lo ya guardado).
+        $dependenciaNombreVisible = Dependencia::nombreVisible($dependenciaNombre);
 
         // "Enviar todo" agrupa por USUARIO, no por techo: toda la sub-rama de dependencias que
         // cuelga de $dependenciaObjetivo es la misma que ve y edita este usuario en su tabla de
@@ -1109,7 +1112,7 @@ class GastoControlador
             $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
 
             if (empty($destinatarios)) {
-                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '". Selecciona a quién remitir la petición.', ''];
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombreVisible . '". Selecciona a quién remitir la petición.', ''];
             }
         }
 
@@ -1121,7 +1124,7 @@ class GastoControlador
         $enviados = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaNombre, $rolDestinatarioId, $nombresAdicionales, $usuarioDestinatarioResuelto);
 
         if ($enviados === 0) {
-            return ['No hay gastos en borrador para enviar en "' . $dependenciaNombre . '".', ''];
+            return ['No hay gastos en borrador para enviar en "' . $dependenciaNombreVisible . '".', ''];
         }
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
@@ -1130,13 +1133,13 @@ class GastoControlador
             $this->modeloMensaje->crear(
                 $remitenteId,
                 (int) $destinatario['id'],
-                'Gastos enviados — ' . $dependenciaNombre,
-                'Se enviaron ' . $enviados . ' gasto(s) de "' . $dependenciaNombre . '" para tu revisión.'
+                'Gastos enviados — ' . $dependenciaNombreVisible,
+                'Se enviaron ' . $enviados . ' gasto(s) de "' . $dependenciaNombreVisible . '" para tu revisión.'
             );
         }
 
         if (empty($destinatarios)) {
-            return ['', 'Se enviaron ' . $enviados . ' gasto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '" para notificar.'];
+            return ['', 'Se enviaron ' . $enviados . ' gasto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombreVisible . '" para notificar.'];
         }
 
         return ['', 'Se enviaron ' . $enviados . ' gasto(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ').'];

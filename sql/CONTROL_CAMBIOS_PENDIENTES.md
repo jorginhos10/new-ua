@@ -55,6 +55,53 @@ Cada entrada indica: fecha, qué cambia, qué archivo(s) de `sql/` lo implementa
 
 ---
 
+## 2026-09-21 — Porcentaje de Costos/Inversiones/Excedentes por ítem de Autogestión (Extensión)
+
+- **Archivo:** `sql/autogestion_items_porcentajes.sql`
+- **Cambio:** `ALTER TABLE autogestion_items ADD COLUMN costos/inversiones/excedentes DECIMAL(5,2)
+  NULL` (mismo patrón nullable de "No aplica" que ya usaba `autogestion_porcentajes`); `UPDATE`
+  que copia, solo para los ítems con `modulo = 'extension'`, el % que tenía el módulo completo en
+  `autogestion_porcentajes` (semilla inicial, para no romper nada en curso).
+- **Motivo:** El % dejó de ser global por módulo — ahora cada ítem de Extensión (Cursos libres,
+  Educación continua, etc.) reparte su propio ingreso con su propio Costos/Inversiones/Excedentes,
+  en vez de que todos los ítems compartan un único % fijado a nivel de módulo. La fila
+  `autogestion_porcentajes` de `modulo = 'extension'` queda congelada/sin usar (ya no editable
+  desde Configuraciones); Postgrado/Unidad de Salud/Convenios siguen usando `autogestion_porcentajes`
+  igual que antes (no tienen ítems).
+- **Aplicado en local:** Sí (2026-09-21).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** El archivo trae `USE new_ua;` (igual que las demás migraciones de esta carpeta) pero la
+  BD local se llama `again` — al aplicarlo ahí hubo que saltarse esa línea. La plantilla Excel de
+  Extensión ("Exportar plantilla") todavía muestra su bloque de validación de % como "N/A" (ver
+  comentario en `ExtensionControlador::exportarPlantilla()`): quedó pendiente rehacerlo para que
+  valide por ítem en el propio archivo Excel — la validación real al importar sí es correcta ítem
+  por ítem.
+
+---
+
+## 2026-09-21 — Postgrado: ítems de Autogestión propios (clonado del patrón de Extensión)
+
+- **Archivo:** `sql/postgrado_autogestion_items.sql`
+- **Cambio:** `autogestion_items` gana la columna `contribucion_postgrado DECIMAL(5,2) NULL`
+  (nullable, mismo patrón "No aplica"); se crea un ítem `nombre='General', modulo='postgrado'`
+  sembrado con el % que tenía `autogestion_porcentajes` para ese módulo; `ingresos_postgrado` y
+  `gastos_postgrado` ganan `autogestion_id INT NOT NULL` con FK a `autogestion_items(id)` (misma
+  posición relativa que sus columnas gemelas en `ingresos_extension`/`gastos_extension`), con TODO
+  lo existente hasta ahora migrado a ese ítem "General" para no perder continuidad.
+- **Motivo:** Postgrado no tenía ningún concepto de "ítems" (a diferencia de Extensión) — todo el
+  módulo compartía un único % de Costos/Inversiones/Excedentes/Contribución a posgrado. Se clona el
+  patrón completo de Extensión (selector en el sidebar, % por ítem, egresos automáticos con
+  columna `autogestion_id`) para que cada ítem de Postgrado (ej. distintos programas/convenios)
+  pueda tener su propio reparto.
+- **Aplicado en local:** Sí (2026-09-21).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** El `id` del ítem "General" es el que quede autoincrementado en cada entorno (11 en
+  local) — no asumir ese mismo número en producción, ubicarlo por `modulo='postgrado' AND
+  nombre='General'`. El archivo trae `USE new_ua;` (igual que las demás migraciones) pero la BD
+  local se llama `again` — se aplicó saltándose esa línea. La fila `autogestion_porcentajes` de
+  `modulo='postgrado'` queda congelada/sin usar desde Configuraciones (igual que pasó con
+  `extension`), reemplazada por el % del ítem "General".
+
 <!--
 Plantilla para la próxima entrada:
 

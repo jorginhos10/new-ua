@@ -1,5 +1,10 @@
 <?php
-$rolActual = $_SESSION['usuario_rol'] ?? '';
+// Tipo de cuenta crudo ('administrador'/'consejo_superior'/'invitado'), usado aquí solo para
+// decidir qué bloque de menú renderizar — deliberadamente NO se llama $rolActual, porque
+// encabezado.php ya usa ese nombre para el rol específico resuelto (Gestor/Avalador/Superadmin/
+// etc., ver Rol::obtenerPorId()) y este archivo se incluye DESDE ADENTRO de encabezado.php: si
+// reutilizara el mismo nombre, lo pisaría antes de que cualquier vista llegara a mostrarlo.
+$tipoCuentaActual = $_SESSION['usuario_rol'] ?? '';
 $rutaActual = $_GET['ruta'] ?? 'dashboard';
 
 $menuPermitido = null; // null = sin restricción configurada (se muestra todo, o el fallback fijo)
@@ -13,7 +18,7 @@ $esDependenciaSuperadmin = false;
 $menuConfiguradoParaTipo = false;
 $itemsMenuSidebar = [];
 
-if (!empty($_SESSION['usuario_id']) && in_array($rolActual, ['administrador', 'consejo_superior', 'invitado'], true)) {
+if (!empty($_SESSION['usuario_id']) && in_array($tipoCuentaActual, ['administrador', 'consejo_superior', 'invitado'], true)) {
     require_once __DIR__ . '/../../modelo/Usuario.php';
     require_once __DIR__ . '/../../modelo/MenuPermiso.php';
     require_once __DIR__ . '/../../modelo/Dependencia.php';
@@ -24,7 +29,7 @@ if (!empty($_SESSION['usuario_id']) && in_array($rolActual, ['administrador', 'c
     if ($usuarioActualSidebar !== null) {
         $modeloMenuPermisoSidebar = new MenuPermiso();
 
-        if ($rolActual === 'invitado') {
+        if ($tipoCuentaActual === 'invitado') {
             // Para Invitados, dependencia_id es su Facultad real (para poder enrutar su
             // necesidad al Gestor de esa Facultad) — NUNCA su alcance de menú: esa Facultad
             // puede tener (y normalmente tiene) una plantilla de menú pensada para el personal
@@ -42,7 +47,7 @@ if (!empty($_SESSION['usuario_id']) && in_array($rolActual, ['administrador', 'c
         $menuConfiguradoParaTipo = $permitidoSidebar !== null;
         $menuPermitido = $permitidoSidebar === null ? null : array_flip($permitidoSidebar);
 
-        if ($rolActual === 'administrador' && !empty($usuarioActualSidebar['dependencia_id'])) {
+        if ($tipoCuentaActual === 'administrador' && !empty($usuarioActualSidebar['dependencia_id'])) {
             $dependenciaActualSidebar = (new Dependencia())->obtenerPorId((int) $usuarioActualSidebar['dependencia_id']);
             $puedeVerActas = $dependenciaActualSidebar !== null
                 && in_array($dependenciaActualSidebar['tipo'] ?? '', ['Facultad', 'Vicerrectoria'], true);
@@ -51,7 +56,7 @@ if (!empty($_SESSION['usuario_id']) && in_array($rolActual, ['administrador', 'c
         }
     }
 
-    if (in_array($rolActual, ['consejo_superior', 'invitado'], true)) {
+    if (in_array($tipoCuentaActual, ['consejo_superior', 'invitado'], true)) {
         $itemsMenuSidebar = require __DIR__ . '/../../config/menu_items.php';
     }
 }
@@ -62,7 +67,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
 <aside class="barra-lateral">
     <a href="index.php?ruta=dashboard" class="marca">S P P I</a>
         <nav class="menu-lateral">
-    <?php if ($rolActual === 'administrador'): ?>
+    <?php if ($tipoCuentaActual === 'administrador'): ?>
             <?php if ($puedeVerMenu('inicio') || $puedeVerMenu('peticiones')): ?>
             <p class="grupo-menu">Resumen</p>
             <?php if ($puedeVerMenu('inicio')): ?>
@@ -73,20 +78,69 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <?php endif; ?>
             <?php endif; ?>
 
-            <?php if ($puedeVerMenu('extension') || $puedeVerMenu('postgrado') || $puedeVerMenu('unisalud') || $puedeVerMenu('sin-excedentes')): ?>
+            <?php if ($puedeVerMenu('extension') || $puedeVerMenu('postgrado') || $puedeVerMenu('unisalud')): ?>
             <p class="grupo-menu">Autogestión</p>
-            <?php if ($puedeVerMenu('extension')): ?>
+            <?php if ($puedeVerMenu('extension')):
+                require_once __DIR__ . '/../../modelo/AutogestionItem.php';
+                $autogestionItemsSidebar = (new AutogestionItem())->obtenerActivos('extension');
+            ?>
+            <?php if (!empty($autogestionItemsSidebar)):
+                $tabAutogestionSidebar = ($rutaActual === 'extension' && ($_GET['tab'] ?? '') === 'egresos') ? 'egresos' : 'ingresos';
+                $anioAutogestionSidebar = $rutaActual === 'extension' ? (int) ($_GET['anio_id'] ?? 0) : 0;
+                $autogestionSeleccionadoSidebar = $rutaActual === 'extension' ? (int) ($_GET['autogestion_id'] ?? 0) : 0;
+            ?>
+            <div class="menu-autogestion-item">
+                <button type="button" class="enlace-lateral-toggle<?= $rutaActual === 'extension' ? ' activo' : '' ?>">
+                    <span>Extensión</span>
+                    <span class="menu-autogestion-item-flecha">▾</span>
+                </button>
+                <div class="menu-autogestion-item-dropdown<?= $rutaActual === 'extension' ? ' abierto' : '' ?>">
+                    <?php foreach ($autogestionItemsSidebar as $itemAutogestionSidebar): ?>
+                    <a
+                        href="index.php?ruta=extension&tab=<?= htmlspecialchars($tabAutogestionSidebar) ?>&autogestion_id=<?= (int) $itemAutogestionSidebar['id'] ?>&anio_id=<?= $anioAutogestionSidebar ?>"
+                        class="<?= $autogestionSeleccionadoSidebar === (int) $itemAutogestionSidebar['id'] ? 'activo' : '' ?>"
+                    ><?= htmlspecialchars($itemAutogestionSidebar['nombre']) ?></a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php else: ?>
             <a href="index.php?ruta=extension" class="<?= $rutaActual === 'extension' ? 'activo' : '' ?>">Extensión</a>
             <?php endif; ?>
-            <?php if ($puedeVerMenu('postgrado')): ?>
+            <?php endif; ?>
+            <?php if ($puedeVerMenu('postgrado')):
+                require_once __DIR__ . '/../../modelo/AutogestionItem.php';
+                $autogestionItemsSidebarPostgrado = (new AutogestionItem())->obtenerActivos('postgrado');
+            ?>
+            <?php if (!empty($autogestionItemsSidebarPostgrado)):
+                $tabAutogestionSidebarPostgrado = ($rutaActual === 'postgrado' && ($_GET['tab'] ?? '') === 'egresos') ? 'egresos' : 'ingresos';
+                $anioAutogestionSidebarPostgrado = $rutaActual === 'postgrado' ? (int) ($_GET['anio_id'] ?? 0) : 0;
+                $autogestionSeleccionadoSidebarPostgrado = $rutaActual === 'postgrado' ? (int) ($_GET['autogestion_id'] ?? 0) : 0;
+            ?>
+            <div class="menu-autogestion-item">
+                <button type="button" class="enlace-lateral-toggle<?= $rutaActual === 'postgrado' ? ' activo' : '' ?>">
+                    <span>Postgrado</span>
+                    <span class="menu-autogestion-item-flecha">▾</span>
+                </button>
+                <div class="menu-autogestion-item-dropdown<?= $rutaActual === 'postgrado' ? ' abierto' : '' ?>">
+                    <?php foreach ($autogestionItemsSidebarPostgrado as $itemAutogestionSidebarPostgrado): ?>
+                    <a
+                        href="index.php?ruta=postgrado&tab=<?= htmlspecialchars($tabAutogestionSidebarPostgrado) ?>&autogestion_id=<?= (int) $itemAutogestionSidebarPostgrado['id'] ?>&anio_id=<?= $anioAutogestionSidebarPostgrado ?>"
+                        class="<?= $autogestionSeleccionadoSidebarPostgrado === (int) $itemAutogestionSidebarPostgrado['id'] ? 'activo' : '' ?>"
+                    ><?= htmlspecialchars($itemAutogestionSidebarPostgrado['nombre']) ?></a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php else: ?>
             <a href="index.php?ruta=postgrado" class="<?= $rutaActual === 'postgrado' ? 'activo' : '' ?>">Postgrado</a>
+            <?php endif; ?>
             <?php endif; ?>
             <?php if ($puedeVerMenu('unisalud')): ?>
             <a href="index.php?ruta=unisalud" class="<?= $rutaActual === 'unisalud' ? 'activo' : '' ?>">Unidad de Salud</a>
             <?php endif; ?>
-            <?php if ($puedeVerMenu('sin-excedentes')): ?>
-            <a href="index.php?ruta=sin-excedentes" class="<?= $rutaActual === 'sin-excedentes' ? 'activo' : '' ?>">Convenios</a>
-            <?php endif; ?>
+            <?php // Convenios (sin-excedentes) se oculta del sidebar: su único propósito era sumar al
+            // tope de la tarjeta de Autogestión del Dashboard, que ahora mide solo Extensión — el
+            // controlador, las rutas y los datos ya registrados siguen intactos (ver
+            // SinExcedentesControlador), solo se quitó el enlace de navegación. ?>
             <?php endif; ?>
 
             <?php if ($puedeVerMenu('gastos') || $puedeVerMenu('solicitudes') || $puedeVerMenu('techos') || $puedeVerActas): ?>
@@ -126,7 +180,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <p class="grupo-menu">Documentación</p>
             <a href="publico/documentos/ficha-tecnica.docx">Ficha técnica</a>
             <a href="publico/documentos/esencia-del-software.docx">¿Para qué sirve?</a>
-    <?php elseif ($rolActual === 'consejo_superior'): ?>
+    <?php elseif ($tipoCuentaActual === 'consejo_superior'): ?>
             <?php
             // "Consulta" ya no es un enlace fijo: es una opción más de config/menu_items.php,
             // igual que el resto — se muestra/oculta desde Jerarquías > Mapa > ⚙ o desde
@@ -143,7 +197,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <?php endforeach; ?>
             <?php endif; ?>
             <?php endforeach; ?>
-    <?php elseif ($rolActual === 'invitado'): ?>
+    <?php elseif ($tipoCuentaActual === 'invitado'): ?>
             <p class="grupo-menu">Resumen</p>
             <a href="index.php" class="<?= in_array($rutaActual, ['dashboard', 'perfil-proyectos'], true) ? 'activo' : '' ?>">Inicio</a>
 

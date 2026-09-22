@@ -188,6 +188,34 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
+// Acordeones de ítem de Autogestión en el sidebar (Extensión, Postgrado, ...): delegado por clase
+// en vez de ids fijos, para que cada módulo con ítems pueda tener el suyo sin chocar entre sí (ver
+// parciales/sidebar.php, .menu-autogestion-item).
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.menu-autogestion-item > .enlace-lateral-toggle').forEach(function (boton) {
+        var dropdown = boton.nextElementSibling;
+
+        if (!dropdown) {
+            return;
+        }
+
+        boton.addEventListener('click', function (evento) {
+            evento.stopPropagation();
+            dropdown.classList.toggle('abierto');
+        });
+    });
+
+    document.addEventListener('click', function (evento) {
+        document.querySelectorAll('.menu-autogestion-item-dropdown.abierto').forEach(function (dropdown) {
+            var boton = dropdown.previousElementSibling;
+
+            if (!dropdown.contains(evento.target) && (!boton || !boton.contains(evento.target))) {
+                dropdown.classList.remove('abierto');
+            }
+        });
+    });
+});
+
 document.addEventListener('DOMContentLoaded', function () {
     var campoProyectoId = document.getElementById('proyecto_id');
     var campoProyectoTexto = document.getElementById('proyecto_buscador');

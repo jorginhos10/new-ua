@@ -11,7 +11,6 @@ require_once __DIR__ . '/../modelo/ContratoComun.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/Sede.php';
 require_once __DIR__ . '/../modelo/AutogestionItem.php';
-require_once __DIR__ . '/../modelo/AutogestionPorcentaje.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/Usuario.php';
 require_once __DIR__ . '/../modelo/Rol.php';
@@ -32,7 +31,6 @@ class ExtensionControlador
     private AnioPresupuestal $modeloAnio;
     private Sede $modeloSede;
     private AutogestionItem $modeloAutogestion;
-    private AutogestionPorcentaje $modeloPorcentaje;
     private Dependencia $modeloDependencia;
     private Usuario $modeloUsuario;
     private Rol $modeloRol;
@@ -107,7 +105,6 @@ class ExtensionControlador
         $this->modeloAnio = new AnioPresupuestal();
         $this->modeloSede = new Sede();
         $this->modeloAutogestion = new AutogestionItem();
-        $this->modeloPorcentaje = new AutogestionPorcentaje();
         $this->modeloDependencia = new Dependencia();
         $this->modeloUsuario = new Usuario();
         $this->modeloRol = new Rol();
@@ -362,14 +359,12 @@ class ExtensionControlador
             'columnaCategoria' => 6,
         ];
 
-        $porcentajesModulo = $this->modeloPorcentaje->obtenerPorModulo('extension');
-        $mapaCategoriaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
-        $validacionPorcentajes = array_map(static function (string $etiqueta) use ($porcentajesModulo, $mapaCategoriaPorcentaje): array {
-            $clave = $mapaCategoriaPorcentaje[$etiqueta];
-            $valor = $porcentajesModulo[$clave] ?? null;
-
-            return ['etiqueta' => $etiqueta, 'porcentaje' => $valor !== null ? (float) $valor : null];
-        }, self::CATEGORIAS_VALIDACION_PLANTILLA);
+        // El % de Costos/Inversiones/Excedentes ahora se configura por ítem de Autogestión (ver
+        // autogestion_items.costos/inversiones/excedentes), no por módulo — y esta plantilla mezcla
+        // filas de distintos ítems en una sola hoja, así que no hay un único % que mostrar aquí de
+        // forma fiable. Se deja "N/A" en este bloque informativo (pendiente rehacerlo por ítem); la
+        // validación real sí se aplica ítem por ítem al importar (ver importar()).
+        $validacionPorcentajes = array_map(static fn (string $etiqueta): array => ['etiqueta' => $etiqueta, 'porcentaje' => null], self::CATEGORIAS_VALIDACION_PLANTILLA);
 
         $metadatos = [
             'plantilla' => 'autogestion-extension',
@@ -812,7 +807,6 @@ class ExtensionControlador
                 = ($totalesPorGrupo[$clave]['categorias'][$candidata['categoria']] ?? 0.0) + $candidata['nuevoValor'];
         }
 
-        $porcentajesModulo = $this->modeloPorcentaje->obtenerPorModulo('extension');
         $mapaCategoriaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
 
         foreach ($totalesPorGrupo as $clave => $grupo) {
@@ -821,6 +815,9 @@ class ExtensionControlador
             $dependenciaTexto = $grupo['dependencia'];
             $itemTexto = array_search($itemId, $mapaItems, true);
             $itemTexto = $itemTexto !== false ? $itemTexto : '';
+            // El % es propio de cada ítem (autogestion_items.costos/inversiones/excedentes), no del
+            // módulo — se busca por ítem, no una sola vez para todo el archivo.
+            $porcentajesItem = $this->modeloAutogestion->obtenerPorId($itemId) ?? [];
 
             $ingresosExistentes = $this->modeloIngreso->obtenerTotalPorAnioYAutogestionYDependencias($anioId, $itemId, [$dependenciaTexto]);
             $ingresosNuevos = $totalIngresosPorGrupo[$clave] ?? 0.0;
@@ -840,11 +837,11 @@ class ExtensionControlador
             foreach ($grupo['categorias'] as $categoria => $totalCategoria) {
                 $clavePorcentaje = $mapaCategoriaPorcentaje[$categoria] ?? null;
 
-                if ($clavePorcentaje === null || $porcentajesModulo[$clavePorcentaje] === null) {
+                if ($clavePorcentaje === null || ($porcentajesItem[$clavePorcentaje] ?? null) === null) {
                     continue;
                 }
 
-                $valorEsperadoCategoria = round($ingresosDisponibles * (float) $porcentajesModulo[$clavePorcentaje] / 100, 2);
+                $valorEsperadoCategoria = round($ingresosDisponibles * (float) $porcentajesItem[$clavePorcentaje] / 100, 2);
 
                 // Excedentes se calcula SOLO a partir del ingreso de esta importación (% × ingresos
                 // disponibles de este ítem+dependencia): no se compara contra lo que ya exista en la
@@ -855,7 +852,7 @@ class ExtensionControlador
                 // categorías sí son de cupo compartido con el resto del año.
                 if ($categoria === 'Excedentes') {
                     if (abs(round($totalCategoria, 2) - $valorEsperadoCategoria) > 0.01) {
-                        $porcentajeTexto = rtrim(rtrim(number_format((float) $porcentajesModulo[$clavePorcentaje], 2), '0'), '.');
+                        $porcentajeTexto = rtrim(rtrim(number_format((float) $porcentajesItem[$clavePorcentaje], 2), '0'), '.');
                         $errores[] = "Gastos, \"$itemTexto\" en \"$dependenciaTexto\", categoría Excedentes: el valor que intentas importar (" . number_format($totalCategoria, 2, ',', '.')
                             . ") debe corresponder exactamente al {$porcentajeTexto}% de los ingresos de este ítem y dependencia (" . number_format($valorEsperadoCategoria, 2, ',', '.') . ').';
                     }
@@ -1008,13 +1005,13 @@ class ExtensionControlador
             return '';
         }
 
-        $porcentajes = $this->modeloPorcentaje->obtenerPorModulo('extension');
+        $item = $this->modeloAutogestion->obtenerPorId($autogestionId);
 
-        if ($porcentajes[$clavePorcentaje] === null) {
+        if ($item === null || $item[$clavePorcentaje] === null) {
             return '';
         }
 
-        $limiteCategoria = round($totalIngresos * (float) $porcentajes[$clavePorcentaje] / 100, 2);
+        $limiteCategoria = round($totalIngresos * (float) $item[$clavePorcentaje] / 100, 2);
         $totalCategoriaActual = $this->modeloGasto->obtenerTotalPorAnioAutogestionYCategoriaYDependencias($anioPresupuestalId, $autogestionId, $categoria, $dependenciasPermitidas) - $valorExcluido;
 
         if ($totalCategoriaActual + $nuevoValor > $limiteCategoria) {
@@ -1031,6 +1028,9 @@ class ExtensionControlador
         $anioId = (int) ($_POST['anio_presupuestal_id'] ?? 0);
         $autogestionId = (int) ($_POST['autogestion_id'] ?? 0);
         $dependenciaDestinoNombre = trim($_POST['dependencia_destino'] ?? '');
+        // Solo para mostrar en los mensajes de abajo — $dependenciaDestinoNombre sigue siendo el
+        // nombre real (necesario para obtenerPorNombre()/enviarTodosBorrador()).
+        $dependenciaDestinoVisible = Dependencia::nombreVisible($dependenciaDestinoNombre);
         $rolDestinatarioId = (int) ($_POST['rol_destinatario_id'] ?? 0);
 
         if ($anioId <= 0 || $autogestionId <= 0 || $dependenciaDestinoNombre === '' || $rolDestinatarioId <= 0) {
@@ -1056,7 +1056,7 @@ class ExtensionControlador
             $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
 
             if (empty($destinatarios)) {
-                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '". Selecciona a quién remitir la petición.', ''];
+                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '". Selecciona a quién remitir la petición.', ''];
             }
         }
 
@@ -1092,10 +1092,10 @@ class ExtensionControlador
         }
 
         if (empty($destinatarios)) {
-            return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoNombre . '" para notificar.'];
+            return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaDestinoVisible . '" para notificar.'];
         }
 
-        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoNombre . '").'];
+        return ['', 'Se enviaron ' . $enviadosIngresos . ' ingreso(s) y ' . $enviadosEgresos . ' egreso(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaDestinoVisible . '").'];
     }
 
     private function eliminarEgreso(): array
@@ -1406,7 +1406,7 @@ class ExtensionControlador
 
     private function generarEgresosAutomaticos(?int $ingresoId, int $anioPresupuestalId, int $autogestionId, string $dependencia): void
     {
-        $porcentajes = $this->modeloPorcentaje->obtenerPorModulo('extension');
+        $item = $this->modeloAutogestion->obtenerPorId($autogestionId);
         // Acotado a la propia dependencia del ingreso: antes usaba obtenerTotalPorAnioYAutogestion()
         // (todas las dependencias que comparten ese ítem de Autogestión), así que el egreso
         // automático de cada dependencia se calculaba sobre el total combinado de todas ellas, no
@@ -1415,8 +1415,8 @@ class ExtensionControlador
 
         $lineas = [];
 
-        if ($porcentajes['excedentes'] !== null) {
-            $lineas['excedentes'] = ['porcentaje' => (float) $porcentajes['excedentes'], 'etiqueta' => 'Excedentes nivel central'];
+        if ($item !== null && $item['excedentes'] !== null) {
+            $lineas['excedentes'] = ['porcentaje' => (float) $item['excedentes'], 'etiqueta' => 'Excedentes nivel central'];
         }
 
         $this->modeloGasto->eliminarAutomaticosDistintosDe($anioPresupuestalId, $autogestionId, array_keys($lineas));
