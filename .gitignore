@@ -16,8 +16,4 @@ Thumbs.db
 .claude/
 .claude.zip
 
-# Volcados de base de datos (contienen datos reales de producción)
-*.sql.bak
-base de datos actua.sql
-sql/produccion_actual_para_local.sql
 
