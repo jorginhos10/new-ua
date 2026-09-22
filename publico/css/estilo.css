@@ -4629,7 +4629,7 @@ body.tabla-redimensionando-cursor * {
     padding: 0.75rem 0.25rem 0.5rem;
 }
 
-.tabla-dev-datos.modo-grafica {
+.tabla-dev-datos.modo-grafica tbody {
     display: none;
 }
 

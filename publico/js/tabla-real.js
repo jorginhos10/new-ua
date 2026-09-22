@@ -956,6 +956,9 @@ document.addEventListener('DOMContentLoaded', function () {
         panelExpandidoNombre = null;
         if (botonVistaTabla) { botonVistaTabla.classList.add('activo'); botonVistaTabla.setAttribute('aria-pressed', 'true'); }
         if (botonVistaGrafica) { botonVistaGrafica.classList.remove('activo'); botonVistaGrafica.setAttribute('aria-pressed', 'false'); }
+
+        // En modo tabla el botón "Filtrar" vuelve a controlar si la fila de filtros se ve o no.
+        if (botonFiltrar) { botonFiltrar.disabled = false; }
     }
 
     function activarVistaGrafica() {
@@ -963,6 +966,13 @@ document.addEventListener('DOMContentLoaded', function () {
         tabla.classList.add('modo-grafica');
         if (botonVistaGrafica) { botonVistaGrafica.classList.add('activo'); botonVistaGrafica.setAttribute('aria-pressed', 'true'); }
         if (botonVistaTabla) { botonVistaTabla.classList.remove('activo'); botonVistaTabla.setAttribute('aria-pressed', 'false'); }
+
+        // La gráfica se filtra con los mismos combos por columna que la tabla (aplicarFiltros()
+        // ya llama a actualizarGrafica()); acá forzamos que la fila quede visible y fija mientras
+        // se está en este modo, en vez de depender del toggle "Filtrar" de la tabla.
+        if (filaFiltros) { filaFiltros.classList.add('visible'); }
+        if (botonFiltrar) { botonFiltrar.classList.add('activo'); botonFiltrar.disabled = true; }
+
         actualizarGrafica();
     }
 
