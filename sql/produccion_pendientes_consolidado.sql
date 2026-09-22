@@ -18,6 +18,13 @@
 -- Invitados corregidas en Usuarios > Formulador > Editar, etc. — ver el comentario de cada paso).
 -- Aun así, se recomienda respaldar la base de datos antes de correrlo.
 --
+-- El paso 4 ya NO usa "AFTER tope" al agregar columnas a autogestion_items: si en ese entorno ya
+-- se corrió antes (a mano, fuera de este consolidado) el parche suelto que agrega
+-- autogestion_porcentajes.tope y elimina autogestion_items.tope (ver la entrada del 2026-09-21 en
+-- CONTROL_CAMBIOS_PENDIENTES.md), la columna tope ya no existe ahí y ese ANCLA fallaba con
+-- "Unknown column 'tope'" (1054). El orden de columnas no afecta nada funcionalmente, así que se
+-- quitó la referencia.
+--
 -- Los pasos 1-3 SÍ se pensaron para una corrida única de puesta al día (no para repetirse como
 -- mantenimiento rutinario): son correctos de volver a correr si la corrida se interrumpe a medio
 -- camino, pero no están pensados para ejecutarse una y otra vez indefinidamente una vez que
@@ -126,7 +133,7 @@ SET @col_existe_4 = (
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'autogestion_items' AND COLUMN_NAME = 'costos'
 );
 SET @sql_4 = IF(@col_existe_4 = 0,
-    'ALTER TABLE autogestion_items ADD COLUMN costos DECIMAL(5, 2) NULL AFTER tope, ADD COLUMN inversiones DECIMAL(5, 2) NULL AFTER costos, ADD COLUMN excedentes DECIMAL(5, 2) NULL AFTER inversiones',
+    'ALTER TABLE autogestion_items ADD COLUMN costos DECIMAL(5, 2) NULL, ADD COLUMN inversiones DECIMAL(5, 2) NULL AFTER costos, ADD COLUMN excedentes DECIMAL(5, 2) NULL AFTER inversiones',
     'SELECT 1'
 );
 PREPARE stmt_4 FROM @sql_4;
