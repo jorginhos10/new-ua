@@ -1,5 +1,11 @@
 <?php
 
+// TEMPORAL — solo para diagnosticar el error 500 en producción; quitar apenas se identifique la
+// causa real (no debe quedar así en un sitio público: expone rutas/detalles del servidor).
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+
 session_start();
 
 require_once __DIR__ . '/controlador/LoginControlador.php';
