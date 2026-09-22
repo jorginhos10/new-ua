@@ -4734,7 +4734,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        camposConMinimo.push({ campo: campo, minimo: minimo });
+        camposConMinimo.push({ campo: campo, minimo: minimo, valorInicial: campo.value });
 
         var fila = campo.closest('.fila-presupuesto-dependencia');
         var advertencia = fila ? fila.querySelector('.advertencia-minimo') : null;
@@ -4766,6 +4766,10 @@ document.addEventListener('DOMContentLoaded', function () {
     formularios.forEach(function (formulario) {
         formulario.addEventListener('submit', function (evento) {
             var invalido = camposConMinimo.find(function (item) {
+                if (item.campo.value === item.valorInicial) {
+                    return false;
+                }
+
                 var valor = valorPlanoDesdeMoneda(item.campo.value);
                 return valor !== null && valor < item.minimo;
             });

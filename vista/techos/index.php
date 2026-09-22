@@ -100,7 +100,7 @@
                         <?php if ($esSuperAdmin): ?>
                         <div class="campo-moneda">
                             <span>$</span>
-                            <input type="text" inputmode="decimal" name="minimo[<?= (int) $dependencia['id'] ?>]" placeholder="0,00" value="<?= $valores['minimo'] !== null ? htmlspecialchars((string) $valores['minimo']) : '' ?>">
+                            <input type="text" inputmode="decimal" autocomplete="off" name="minimo[<?= (int) $dependencia['id'] ?>]" placeholder="0,00" value="<?= $valores['minimo'] !== null ? htmlspecialchars((string) $valores['minimo']) : '' ?>">
                         </div>
                         <?php endif; ?>
                         <div class="campo-techo-con-candado">
@@ -109,6 +109,7 @@
                                 <input
                                     type="text"
                                     inputmode="decimal"
+                                    autocomplete="off"
                                     class="campo-techo-input"
                                     name="techo[<?= (int) $dependencia['id'] ?>]"
                                     placeholder="0,00"
