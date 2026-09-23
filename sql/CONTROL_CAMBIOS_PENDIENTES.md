@@ -164,6 +164,29 @@ de datos antes de correrlo.
   nada — solo hay que confirmar el nombre `idx_gastos_anio_dependencia` no esté ya usado). No
   requiere downtime perceptible: es solo una reconstrucción de índice sobre ~1600-2000 filas.
 
+---
+
+## 2026-09-22 — Permiso "validación flexible de techo" en Gastos + Dumi visibles en el sidebar
+
+- **Archivo:** `sql/gasto_techo_flexible_permiso.sql`
+- **Cambio:** `usuarios` gana la columna `techo_flexible TINYINT(1) NULL` (tri-estado: NULL =
+  hereda el default de su tipo/rol, 1 = forzado activo, 0 = forzado inactivo); se crea la tabla
+  `tipo_dependencia_techo_flexible (tipo, rol_id, activo)` con los defaults por tipo+rol — mismo
+  patrón de dos niveles que `tipo_dependencia_menu`/`MenuPermiso`, para este único booleano.
+- **Motivo:** Ver plan `el-techo-no-deberia-kind-candle`. El criterio de "un hijo sin techo propio
+  cuenta contra el techo de quien envía" (`GastoControlador::resolverDependenciaConTecho()`) ya
+  existía de forma automática e implícita para todo administrador — este cambio lo formaliza como
+  un permiso explícito y auditable (por usuario, con default por tipo/rol), sin alterar el
+  algoritmo de validación en sí. Además, "Gastos" en el sidebar se vuelve un desplegable (como
+  Extensión/Postgrado) con una opción por cada programa Dumi asociado al usuario, para que sean
+  más fáciles de encontrar — este permiso NUNCA afecta cómo se valida un Dumi.
+- **Aplicado en local:** Sí (2026-09-22).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Con el permiso desactivado (default para todo el mundo hasta que un admin lo prenda),
+  el comportamiento de Gastos es idéntico al de antes de este cambio. Se configura por usuario
+  desde Usuarios → Permisos (campo "Validación flexible de techo"), o por tipo/rol desde
+  Jerarquías > Mapa > ⚙ (checkbox nuevo en el mismo modal del menú).
+
 <!--
 Plantilla para la próxima entrada:
 

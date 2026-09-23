@@ -303,6 +303,17 @@
                 </div>
                 <?php endforeach; ?>
 
+                <div class="campo campo-ancho">
+                    <label class="campo-checkbox">
+                        <input type="checkbox" id="menu-tipo-techo-flexible" name="techo_flexible" value="1">
+                        Validación flexible de techo (Gastos) por defecto para este tipo/rol
+                    </label>
+                    <p class="texto-atenuado" style="margin: 0.3rem 0 0;">
+                        Se puede individualizar por usuario desde Usuarios &rarr; Permisos, igual
+                        que el menú de arriba.
+                    </p>
+                </div>
+
                 <button type="submit" class="boton-enviar">Guardar plantilla</button>
             </form>
         </div>
@@ -310,5 +321,6 @@
 
     <script type="application/json" id="datos-roles-por-tipo-jerarquia"><?= json_encode($rolesPorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
     <script type="application/json" id="datos-menu-por-tipo"><?= json_encode($menuPorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
+    <script type="application/json" id="datos-techo-flexible-por-tipo"><?= json_encode($techoFlexiblePorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

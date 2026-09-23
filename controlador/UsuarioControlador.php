@@ -5,6 +5,7 @@ require_once __DIR__ . '/../modelo/Rol.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/TipoDependenciaRol.php';
 require_once __DIR__ . '/../modelo/MenuPermiso.php';
+require_once __DIR__ . '/../modelo/TechoFlexiblePermiso.php';
 require_once __DIR__ . '/../modelo/Estamento.php';
 
 class UsuarioControlador
@@ -14,6 +15,7 @@ class UsuarioControlador
     private Dependencia $modeloDependencia;
     private TipoDependenciaRol $modeloRolesPorTipo;
     private MenuPermiso $modeloMenuPermiso;
+    private TechoFlexiblePermiso $modeloTechoFlexiblePermiso;
     private Estamento $modeloEstamento;
 
     public function __construct()
@@ -23,6 +25,7 @@ class UsuarioControlador
         $this->modeloDependencia = new Dependencia();
         $this->modeloRolesPorTipo = new TipoDependenciaRol();
         $this->modeloMenuPermiso = new MenuPermiso();
+        $this->modeloTechoFlexiblePermiso = new TechoFlexiblePermiso();
         $this->modeloEstamento = new Estamento();
     }
 
@@ -373,6 +376,14 @@ class UsuarioControlador
 
         $this->modeloUsuario->actualizarMenuPersonalizado($id, true);
         $this->modeloMenuPermiso->guardarMenuUsuario($id, $menuKeys);
+
+        // Tri-estado independiente del menú de arriba: '' = hereda el default de tipo/rol, '1'/'0'
+        // = forzado. Solo aplica de verdad a administradores (Gastos no es accesible para
+        // consejo_superior/invitado), pero se guarda igual sin condicionar por tab — es inofensivo
+        // para los otros roles.
+        $techoFlexibleTexto = $_POST['techo_flexible'] ?? '';
+        $techoFlexibleValor = $techoFlexibleTexto === '' ? null : ($techoFlexibleTexto === '1');
+        $this->modeloTechoFlexiblePermiso->guardarOverrideUsuario($id, $techoFlexibleValor);
 
         return ['', 'Permisos actualizados correctamente.'];
     }

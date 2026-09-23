@@ -120,6 +120,7 @@ function celdaFiltroUsuario(int $indice): string
                                         data-rol-id="<?= (int) ($admin['rol_id'] ?? 0) ?>"
                                         data-dependencia-id="<?= (int) ($admin['dependencia_id'] ?? 0) ?>"
                                         data-menu-efectivo="<?= htmlspecialchars(json_encode($admin['menu_efectivo'])) ?>"
+                                        data-techo-flexible="<?= $admin['techo_flexible'] === null ? '' : (int) $admin['techo_flexible'] ?>"
                                     >Permisos</button>
                                     <form method="POST" action="index.php?ruta=usuarios&tab=administradores">
                                         <input type="hidden" name="accion" value="eliminar">
@@ -531,6 +532,22 @@ function celdaFiltroUsuario(int $indice): string
                         <option value="<?= (int) $rolCatalogo['id'] ?>"><?= htmlspecialchars($rolCatalogo['nombre']) ?></option>
                         <?php endforeach; ?>
                     </select>
+                </div>
+
+                <div class="campo">
+                    <label for="permisos-usuario-techo-flexible">Validación flexible de techo (Gastos)</label>
+                    <select id="permisos-usuario-techo-flexible" name="techo_flexible">
+                        <option value="">Usar el valor por defecto de su tipo/rol</option>
+                        <option value="1">Activada</option>
+                        <option value="0">Desactivada</option>
+                    </select>
+                    <p class="texto-atenuado" style="margin: 0.3rem 0 0;">
+                        Con esta opción activa, al registrar gastos en Gastos puede elegir su
+                        dependencia o cualquier descendiente suya, y el total cuenta contra el
+                        techo de su propia dependencia (sin afectar nunca los Dumi, que siempre
+                        validan igual). Con el valor por defecto, sigue el que tenga configurado
+                        su tipo de dependencia + rol.
+                    </p>
                 </div>
                 <?php else: ?>
                 <p class="texto-atenuado">

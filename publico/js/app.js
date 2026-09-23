@@ -2576,6 +2576,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var campoPermisosDependencia = document.getElementById('permisos-usuario-dependencia');
     var campoPermisosRol = document.getElementById('permisos-usuario-rol');
     var botonRestablecerMenu = document.getElementById('boton-restablecer-menu-permisos');
+    var campoPermisosTechoFlexible = document.getElementById('permisos-usuario-techo-flexible');
 
     var datosMenuPorTipoUsuarios = document.getElementById('datos-menu-por-tipo-usuarios');
     var menuPorTipoUsuarios = {};
@@ -2615,6 +2616,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (campoPermisosRol) {
                 campoPermisosRol.value = boton.dataset.rolId && boton.dataset.rolId !== '0' ? boton.dataset.rolId : '';
+            }
+
+            if (campoPermisosTechoFlexible) {
+                campoPermisosTechoFlexible.value = boton.dataset.techoFlexible || '';
             }
 
             var menuEfectivo = [];
@@ -2686,10 +2691,22 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    var datosTechoFlexibleElemento = document.getElementById('datos-techo-flexible-por-tipo');
+    var techoFlexiblePorTipo = {};
+
+    if (datosTechoFlexibleElemento) {
+        try {
+            techoFlexiblePorTipo = JSON.parse(datosTechoFlexibleElemento.textContent || '{}');
+        } catch (error) {
+            techoFlexiblePorTipo = {};
+        }
+    }
+
     var botonCerrarMenuTipo = document.getElementById('boton-cerrar-modal-menu-tipo');
     var campoMenuTipoNombre = document.getElementById('menu-tipo-nombre');
     var campoMenuTipoValor = document.getElementById('menu-tipo-valor');
     var campoMenuTipoRol = document.getElementById('menu-tipo-rol');
+    var campoMenuTipoTechoFlexible = document.getElementById('menu-tipo-techo-flexible');
 
     function cerrarMenuTipo() {
         modalMenuTipo.classList.remove('abierto');
@@ -2704,6 +2721,11 @@ document.addEventListener('DOMContentLoaded', function () {
         modalMenuTipo.querySelectorAll('input[name="menu[]"]').forEach(function (casilla) {
             casilla.checked = permitidos.indexOf(casilla.value) !== -1;
         });
+
+        if (campoMenuTipoTechoFlexible) {
+            var techoFlexibleTipo = techoFlexiblePorTipo[tipo] || {};
+            campoMenuTipoTechoFlexible.checked = rolId ? !!techoFlexibleTipo[rolId] : !!techoFlexibleTipo.general;
+        }
     }
 
     document.querySelectorAll('.boton-configurar-menu-tipo').forEach(function (boton) {

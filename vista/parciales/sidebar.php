@@ -145,8 +145,47 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
 
             <?php if ($puedeVerMenu('gastos') || $puedeVerMenu('solicitudes') || $puedeVerMenu('techos') || $puedeVerActas): ?>
             <p class="grupo-menu">Egresos</p>
-            <?php if ($puedeVerMenu('gastos')): ?>
+            <?php if ($puedeVerMenu('gastos')):
+                // Si el usuario tiene programas Dumi asociados (etiquetas de ruteo institucional
+                // sin usuarios/techo propio, ver GastoControlador::resolverDependenciaRemitente()),
+                // "Gastos" se vuelve un desplegable (mismo patrón que Extensión/Postgrado arriba)
+                // con una opción por cada Dumi + la propia, para que sean visibles desde la
+                // navegación en vez de perderse en el buscador de dependencias del formulario —
+                // ver plan el-techo-no-deberia-kind-candle. Sin Dumi asociados, sigue siendo el
+                // mismo enlace plano de siempre.
+                $dumisGastosSidebar = [];
+                if (!empty($dependenciaActualSidebar)) {
+                    foreach ((new Dependencia())->obtenerDescendientesPlano((int) $dependenciaActualSidebar['id']) as $descendienteGastosSidebar) {
+                        if (($descendienteGastosSidebar['tipo'] ?? '') === 'Dumi') {
+                            $dumisGastosSidebar[] = $descendienteGastosSidebar;
+                        }
+                    }
+                }
+            ?>
+            <?php if (!empty($dumisGastosSidebar)):
+                $dependenciaGastosSidebar = $rutaActual === 'gastos' ? ($_GET['dependencia'] ?? '') : '';
+            ?>
+            <div class="menu-autogestion-item">
+                <button type="button" class="enlace-lateral-toggle<?= $rutaActual === 'gastos' ? ' activo' : '' ?>">
+                    <span>Gastos</span>
+                    <span class="menu-autogestion-item-flecha">▾</span>
+                </button>
+                <div class="menu-autogestion-item-dropdown<?= $rutaActual === 'gastos' ? ' abierto' : '' ?>">
+                    <a
+                        href="index.php?ruta=gastos"
+                        class="<?= $dependenciaGastosSidebar === '' ? 'activo' : '' ?>"
+                    ><?= htmlspecialchars(Dependencia::nombreVisible($dependenciaActualSidebar['nombre'])) ?></a>
+                    <?php foreach ($dumisGastosSidebar as $dumiGastosSidebar): ?>
+                    <a
+                        href="index.php?ruta=gastos&dependencia=<?= urlencode($dumiGastosSidebar['nombre']) ?>"
+                        class="<?= $dependenciaGastosSidebar === $dumiGastosSidebar['nombre'] ? 'activo' : '' ?>"
+                    ><?= htmlspecialchars(Dependencia::nombreVisible($dumiGastosSidebar['nombre'])) ?></a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php else: ?>
             <a href="index.php?ruta=gastos" class="<?= $rutaActual === 'gastos' ? 'activo' : '' ?>">Gastos</a>
+            <?php endif; ?>
             <?php endif; ?>
             <?php if ($puedeVerMenu('solicitudes')): ?>
             <a href="index.php?ruta=solicitudes" class="<?= $rutaActual === 'solicitudes' ? 'activo' : '' ?>">Solicitudes</a>

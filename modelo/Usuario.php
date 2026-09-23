@@ -52,7 +52,7 @@ class Usuario
     public function obtenerPorId(int $id): ?array
     {
         $consulta = $this->db->prepare(
-            'SELECT id, nombre, correo, rol, rol_id, dependencia_id, estamento_id, menu_personalizado, es_super_admin, creado_en FROM usuarios WHERE id = :id'
+            'SELECT id, nombre, correo, rol, rol_id, dependencia_id, estamento_id, menu_personalizado, techo_flexible, es_super_admin, creado_en FROM usuarios WHERE id = :id'
         );
         $consulta->execute(['id' => $id]);
         $fila = $consulta->fetch();
@@ -154,7 +154,7 @@ class Usuario
     public function obtenerPorRol(string $rol): array
     {
         $consulta = $this->db->prepare(
-            'SELECT u.id, u.nombre, u.correo, u.rol, u.rol_id, u.dependencia_id, u.estamento_id, u.menu_personalizado, u.es_super_admin, u.creado_en, u.ultimo_acceso, r.nombre AS rol_catalogo, r.color AS rol_color, d.nombre AS dependencia_nombre, d.tipo AS dependencia_tipo, e.nombre AS estamento_nombre
+            'SELECT u.id, u.nombre, u.correo, u.rol, u.rol_id, u.dependencia_id, u.estamento_id, u.menu_personalizado, u.techo_flexible, u.es_super_admin, u.creado_en, u.ultimo_acceso, r.nombre AS rol_catalogo, r.color AS rol_color, d.nombre AS dependencia_nombre, d.tipo AS dependencia_tipo, e.nombre AS estamento_nombre
              FROM usuarios u
              LEFT JOIN roles r ON r.id = u.rol_id
              LEFT JOIN dependencias d ON d.id = u.dependencia_id

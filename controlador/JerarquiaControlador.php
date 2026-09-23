@@ -4,6 +4,7 @@ require_once __DIR__ . '/../modelo/Jerarquia.php';
 require_once __DIR__ . '/../modelo/TipoDependenciaRol.php';
 require_once __DIR__ . '/../modelo/Rol.php';
 require_once __DIR__ . '/../modelo/MenuPermiso.php';
+require_once __DIR__ . '/../modelo/TechoFlexiblePermiso.php';
 
 class JerarquiaControlador
 {
@@ -11,6 +12,7 @@ class JerarquiaControlador
     private TipoDependenciaRol $modeloRolesPorTipo;
     private Rol $modeloRol;
     private MenuPermiso $modeloMenuPermiso;
+    private TechoFlexiblePermiso $modeloTechoFlexiblePermiso;
 
     public function __construct()
     {
@@ -18,6 +20,7 @@ class JerarquiaControlador
         $this->modeloRolesPorTipo = new TipoDependenciaRol();
         $this->modeloRol = new Rol();
         $this->modeloMenuPermiso = new MenuPermiso();
+        $this->modeloTechoFlexiblePermiso = new TechoFlexiblePermiso();
     }
 
     public function index(): void
@@ -78,6 +81,7 @@ class JerarquiaControlador
         $rolesPorTipo = $this->modeloRolesPorTipo->obtenerMapaCompleto();
         $itemsMenu = require __DIR__ . '/../config/menu_items.php';
         $menuPorTipo = $this->modeloMenuPermiso->obtenerPlantillasCompletas();
+        $techoFlexiblePorTipo = $this->modeloTechoFlexiblePermiso->obtenerDefaultsCompletos();
 
         require __DIR__ . '/../vista/jerarquias/index.php';
     }
@@ -88,12 +92,14 @@ class JerarquiaControlador
         $rolIdTexto = trim($_POST['rol_id'] ?? '');
         $rolId = $rolIdTexto !== '' ? (int) $rolIdTexto : null;
         $menuKeys = $_POST['menu'] ?? [];
+        $techoFlexibleActivo = !empty($_POST['techo_flexible']);
 
         if ($tipo === '') {
             return ['El tipo es inválido.', ''];
         }
 
         $this->modeloMenuPermiso->guardarPlantillaPorTipo($tipo, $rolId, $menuKeys);
+        $this->modeloTechoFlexiblePermiso->guardarDefaultPorTipo($tipo, $rolId, $techoFlexibleActivo);
 
         $rolNombre = null;
         if ($rolId !== null) {

@@ -13,6 +13,7 @@ require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/Usuario.php';
 require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
 require_once __DIR__ . '/../modelo/MenuPermiso.php';
+require_once __DIR__ . '/../modelo/TechoFlexiblePermiso.php';
 require_once __DIR__ . '/../modelo/Rol.php';
 require_once __DIR__ . '/../modelo/Mensaje.php';
 require_once __DIR__ . '/../modelo/TipoDependenciaRol.php';
@@ -34,6 +35,7 @@ class GastoControlador
     private Usuario $modeloUsuario;
     private PresupuestoDependencia $modeloPresupuestoDependencia;
     private MenuPermiso $modeloMenuPermiso;
+    private TechoFlexiblePermiso $modeloTechoFlexiblePermiso;
     private Rol $modeloRol;
     private Mensaje $modeloMensaje;
     private TipoDependenciaRol $modeloTipoDependenciaRol;
@@ -64,6 +66,7 @@ class GastoControlador
         $this->modeloUsuario = new Usuario();
         $this->modeloPresupuestoDependencia = new PresupuestoDependencia();
         $this->modeloMenuPermiso = new MenuPermiso();
+        $this->modeloTechoFlexiblePermiso = new TechoFlexiblePermiso();
         $this->modeloRol = new Rol();
         $this->modeloMensaje = new Mensaje();
         $this->modeloTipoDependenciaRol = new TipoDependenciaRol();
@@ -143,6 +146,15 @@ class GastoControlador
                 $dependenciasSugeridas[] = $descendiente['nombre'];
                 $dependenciasConTipo[] = ['nombre' => $descendiente['nombre'], 'tipo' => $descendiente['tipo'] ?? ''];
             }
+        }
+
+        // Al entrar desde el dropdown de "Gastos" del sidebar (una opción por cada Dumi + la
+        // propia, ver parciales/sidebar.php), preselecciona esa dependencia en el formulario. Solo
+        // se acepta si ya está en la lista permitida de arriba (propia + descendientes) — nunca un
+        // valor arbitrario de la URL.
+        $dependenciaPorUrl = trim($_GET['dependencia'] ?? '');
+        if ($dependenciaPorUrl !== '' && in_array($dependenciaPorUrl, $dependenciasSugeridas, true)) {
+            $dependenciaPorDefecto = $dependenciaPorUrl;
         }
 
         $anioSeleccionadoId = 0;
@@ -912,6 +924,13 @@ class GastoControlador
      * el techo de un ancestro lejano no es del usuario que envía. validarDependenciaPermitida()
      * ya garantiza, antes de llegar aquí, que la dependencia de la fila es la propia del usuario
      * o una descendiente suya.
+     *
+     * Una dependencia "Dumi" (programa institucional sin usuarios/techo propio, ver
+     * resolverDependenciaRemitente()) nunca tiene techo propio, así que siempre cae directo al
+     * segundo caso (dependencia del usuario que envía) — es, a propósito, el ÚNICO camino posible
+     * para un Dumi, y es el mismo sin importar el permiso "validación flexible de techo"
+     * (TechoFlexiblePermiso): ese permiso solo formaliza/gobierna este mismo criterio para
+     * dependencias normales, nunca lo cambia para un Dumi.
      */
     private function resolverDependenciaConTecho(array $dependenciaFila, array $presupuestosDependencia): ?array
     {
