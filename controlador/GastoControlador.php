@@ -153,8 +153,16 @@ class GastoControlador
         // se acepta si ya está en la lista permitida de arriba (propia + descendientes) — nunca un
         // valor arbitrario de la URL.
         $dependenciaPorUrl = trim($_GET['dependencia'] ?? '');
+        $dumiSeleccionado = null;
         if ($dependenciaPorUrl !== '' && in_array($dependenciaPorUrl, $dependenciasSugeridas, true)) {
             $dependenciaPorDefecto = $dependenciaPorUrl;
+
+            foreach ($descendientes ?? [] as $descendiente) {
+                if ($descendiente['nombre'] === $dependenciaPorUrl && ($descendiente['tipo'] ?? '') === 'Dumi') {
+                    $dumiSeleccionado = $descendiente;
+                    break;
+                }
+            }
         }
 
         $anioSeleccionadoId = 0;
@@ -195,6 +203,25 @@ class GastoControlador
         $gastadoPorDependenciaMapa = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioSeleccionadoId) : [];
         $propioYComprometidoPorDependencia = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesPropioYComprometidoPorDependencia($anioSeleccionadoId) : [];
 
+        // Al entrar desde el dropdown del sidebar por un Dumi específico, se resalta aparte su
+        // gastado — reutilizando los mismos mapas de arriba, sin consulta nueva. IMPORTANTE: en la
+        // práctica un Dumi SÍ puede tener techo propio asignado (ver TechosControlador::guardarTechos(),
+        // nada en el código lo impide, y varios Dumi reales de este sistema lo tienen) — no es
+        // cierto que "un Dumi nunca tiene techo". Por eso acá se distinguen los dos casos: si el
+        // Dumi seleccionado tiene su propio techo (>0), se compara contra ESE (independiente, igual
+        // que cualquier hija con techo — su gasto ya está afuera de $totalGastadoHeredado); si no,
+        // sí cuenta mezclado dentro de lo heredado del padre, como cualquier descendiente sin techo.
+        $techoDumiSeleccionado = null;
+        $totalGastadoDumiSeleccionado = null;
+        if ($dumiSeleccionado !== null) {
+            $techoPropioDumi = $presupuestosDependencia[(int) $dumiSeleccionado['id']]['techo'] ?? null;
+            $totalGastadoDumiSeleccionado = $gastadoPorDependenciaMapa[$dumiSeleccionado['nombre']] ?? 0.0;
+
+            if ($techoPropioDumi !== null && (float) $techoPropioDumi > 0) {
+                $techoDumiSeleccionado = (float) $techoPropioDumi;
+            }
+        }
+
         $techoDependencia = null;
         if ($dependenciaUsuarioId !== null && $anioSeleccionadoId > 0) {
             if ($dependenciaUsuarioEsRaiz) {
@@ -234,6 +261,39 @@ class GastoControlador
             ? max(0, min(100 - $porcentajeGastadoPropio - $porcentajeGastadoHeredado, ($totalGastadoHijasConTecho / $presupuestoAnio) * 100))
             : 0.0;
         $puedeEnviarTodo = $presupuestoAnio > 0 && $totalGastado >= $presupuestoAnio;
+
+        // Porcentaje a mostrar para el Dumi seleccionado en el dropdown del sidebar — dos casos
+        // (ver el bloque de arriba donde se calcula $techoDumiSeleccionado):
+        // - Si tiene techo propio: porcentaje INDEPENDIENTE contra SU PROPIO techo (no contra el
+        //   del padre) — su gasto ya está fuera de $totalGastadoHeredado, así que no tiene sentido
+        //   acotarlo por ese porcentaje.
+        // - Si no tiene techo propio: es la porción de "lo heredado" de arriba que le corresponde
+        //   (informativo, no es un segmento nuevo de la barra, ya va incluido en
+        //   $porcentajeGastadoHeredado).
+        if ($totalGastadoDumiSeleccionado === null) {
+            $porcentajeGastadoDumiSeleccionado = null;
+        } elseif ($techoDumiSeleccionado !== null) {
+            $porcentajeGastadoDumiSeleccionado = $techoDumiSeleccionado > 0
+                ? min(100, ($totalGastadoDumiSeleccionado / $techoDumiSeleccionado) * 100)
+                : 0.0;
+        } else {
+            $porcentajeGastadoDumiSeleccionado = $presupuestoAnio > 0
+                ? min($porcentajeGastadoHeredado, ($totalGastadoDumiSeleccionado / $presupuestoAnio) * 100)
+                : 0.0;
+        }
+
+        // Segmento morado del Dumi seleccionado DENTRO de la barra del padre (no solo en el chip):
+        // el % de arriba está relativo a SU PROPIO techo (si tiene) o ya acotado al heredado (si
+        // no) — acá se necesita, en cambio, relativo al techo del PADRE, para saber cuánto ancho
+        // quitarle al segmento de "Reasignado" o "Heredado" del que sale y pintarlo aparte.
+        $porcentajeGastadoDumiBarra = ($totalGastadoDumiSeleccionado !== null && $presupuestoAnio > 0)
+            ? min(100, ($totalGastadoDumiSeleccionado / $presupuestoAnio) * 100)
+            : 0.0;
+        if ($techoDumiSeleccionado !== null) {
+            $porcentajeGastadoConTecho = max(0, $porcentajeGastadoConTecho - $porcentajeGastadoDumiBarra);
+        } elseif ($totalGastadoDumiSeleccionado !== null) {
+            $porcentajeGastadoHeredado = max(0, $porcentajeGastadoHeredado - $porcentajeGastadoDumiBarra);
+        }
 
         $roles = $this->modeloRol->obtenerTodos();
         $rolesPorTipo = $this->modeloTipoDependenciaRol->obtenerMapaCompleto();
@@ -925,12 +985,15 @@ class GastoControlador
      * ya garantiza, antes de llegar aquí, que la dependencia de la fila es la propia del usuario
      * o una descendiente suya.
      *
-     * Una dependencia "Dumi" (programa institucional sin usuarios/techo propio, ver
-     * resolverDependenciaRemitente()) nunca tiene techo propio, así que siempre cae directo al
-     * segundo caso (dependencia del usuario que envía) — es, a propósito, el ÚNICO camino posible
-     * para un Dumi, y es el mismo sin importar el permiso "validación flexible de techo"
-     * (TechoFlexiblePermiso): ese permiso solo formaliza/gobierna este mismo criterio para
-     * dependencias normales, nunca lo cambia para un Dumi.
+     * Una dependencia "Dumi" (programa institucional sin usuarios propios, ver
+     * resolverDependenciaRemitente()) pasa por este MISMO método sin ninguna rama especial: si
+     * tiene techo propio asignado (nada en TechosControlador::guardarTechos() lo impide, y varios
+     * Dumi reales de este sistema sí lo tienen — ej. "CONCURSO DOCENTE" — para controlar por
+     * separado un rubro grande), se valida contra el suyo, igual que cualquier otra dependencia
+     * con techo; si no, cae al segundo caso (dependencia del usuario que envía), igual que
+     * cualquier descendiente sin techo. En ningún caso interviene el permiso "validación flexible
+     * de techo" (TechoFlexiblePermiso): este método no tiene ninguna rama que lo consulte, así que
+     * su resultado para un Dumi es idéntico esté el permiso activo o no.
      */
     private function resolverDependenciaConTecho(array $dependenciaFila, array $presupuestosDependencia): ?array
     {

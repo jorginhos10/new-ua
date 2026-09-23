@@ -27,6 +27,20 @@
     --color-gasto-heredado: #ff9500;
     --color-gasto-con-techo: #ffcc00;
     --color-gasto-pista: #48484a;
+    /* Versiones suaves (fondo pastel + texto oscuro a juego) de los 3 colores de arriba, para las
+       tarjetitas con ícono de la leyenda de Gastos — mismo criterio que --color-naranja-fondo/
+       --color-naranja-texto ya usan los badges de estado (.badge-borrador, etc.). */
+    --color-gasto-propio-fondo: #e8f2ff;
+    --color-gasto-propio-texto: #0058b0;
+    --color-gasto-heredado-fondo: #fff2e0;
+    --color-gasto-heredado-texto: #c96500;
+    --color-gasto-con-techo-fondo: #fff9d9;
+    --color-gasto-con-techo-texto: #8a6d00;
+    --color-gasto-techo-total-fondo: #f0f0f2;
+    --color-gasto-techo-total-texto: #48484a;
+    --color-gasto-dumi: #af52de;
+    --color-gasto-dumi-fondo: #f2e8ff;
+    --color-gasto-dumi-texto: #6b3fa0;
     --radio: 10px;
     --radio-chico: 6px;
     --sombra: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 6px rgba(0, 0, 0, 0.05);
@@ -1940,16 +1954,63 @@ a.barra-progreso:hover {
     background: var(--color-gasto-con-techo);
 }
 
-.progreso-presupuesto-leyenda .punto.gasto-propio {
-    background: var(--color-gasto-propio);
+.barra-progreso-segmento.gasto-dumi {
+    background: var(--color-gasto-dumi);
 }
 
-.progreso-presupuesto-leyenda .punto.gasto-heredado {
-    background: var(--color-gasto-heredado);
+/* Leyenda de la barra de Gastos (propio/heredado/reasignado + techo total): tarjetitas con ícono
+   y fondo suave, en vez del punto de color plano que usa .progreso-presupuesto-leyenda (esa clase
+   la siguen usando tal cual Extensión/Postgrado/Unisalud/Convenios para su propia leyenda de
+   costos/inversión/excedentes — no se toca, para no afectarlas). */
+.chips-gasto {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.6rem;
+    overflow-x: auto;
+    padding-bottom: 0.15rem;
 }
 
-.progreso-presupuesto-leyenda .punto.gasto-con-techo {
-    background: var(--color-gasto-con-techo);
+.chip-gasto {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 500;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.chip-gasto svg {
+    flex-shrink: 0;
+}
+
+.chip-gasto-techo-total {
+    background: var(--color-gasto-techo-total-fondo);
+    color: var(--color-gasto-techo-total-texto);
+}
+
+.chip-gasto-propio {
+    background: var(--color-gasto-propio-fondo);
+    color: var(--color-gasto-propio-texto);
+}
+
+.chip-gasto-heredado {
+    background: var(--color-gasto-heredado-fondo);
+    color: var(--color-gasto-heredado-texto);
+}
+
+.chip-gasto-con-techo {
+    background: var(--color-gasto-con-techo-fondo);
+    color: var(--color-gasto-con-techo-texto);
+}
+
+.chip-gasto-dumi {
+    background: var(--color-gasto-dumi-fondo);
+    color: var(--color-gasto-dumi-texto);
 }
 
 .progreso-presupuesto-leyenda {

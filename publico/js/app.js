@@ -698,7 +698,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
-['extension', 'postgrado', 'unisalud', 'sin-excedentes'].forEach(function (moduloAutogestion) {
+['extension', 'postgrado', 'unisalud', 'sin-excedentes', 'gastos'].forEach(function (moduloAutogestion) {
     document.addEventListener('DOMContentLoaded', function () {
         var botonImportar = document.getElementById('boton-importar-' + moduloAutogestion);
         var inputArchivo = document.getElementById('input-importar-' + moduloAutogestion);

@@ -53,6 +53,27 @@ require __DIR__ . '/../parciales/encabezado.php';
                 'disabled' => $modoEdicion || !$puedeEnviarTodo,
                 'titulo_disabled' => 'Disponible cuando se haya ejecutado el 100% del presupuesto',
             ],
+            [
+                'id' => 'boton-exportar-plantilla-gastos',
+                'icono' => 'exportar',
+                'etiqueta' => 'Exportar plantilla (.xlsx)',
+                'tipo' => 'a',
+                'href' => 'index.php?ruta=gastos-exportar-plantilla',
+            ],
+            [
+                'id' => 'boton-exportar-gastos',
+                'icono' => 'exportar',
+                'etiqueta' => 'Exportar gastos (.xlsx)',
+                'tipo' => 'a',
+                'href' => 'index.php?ruta=gastos-exportar' . ($anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : ''),
+            ],
+            [
+                'id' => 'boton-importar-gastos',
+                'icono' => 'importar',
+                'etiqueta' => 'Importar gastos (.xlsx)',
+                'disabled' => $modoEdicion,
+                'titulo_disabled' => 'No disponible mientras editas',
+            ],
         ];
         if ($modoEdicion) {
             $barraBotonesSecundarios[] = [
@@ -72,15 +93,10 @@ require __DIR__ . '/../parciales/encabezado.php';
         require __DIR__ . '/../parciales/barra-modulo.php';
         ?>
 
-        <div class="acciones-importar-exportar">
-            <a href="index.php?ruta=gastos-exportar-plantilla" class="boton-secundario">Exportar plantilla (.xlsx)</a>
-            <a href="index.php?ruta=gastos-exportar<?= $anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : '' ?>" class="boton-secundario">Exportar gastos (.xlsx)</a>
-            <form method="POST" action="index.php?ruta=gastos<?= $anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : '' ?>" enctype="multipart/form-data" class="form-importar">
-                <input type="hidden" name="accion" value="importar">
-                <input type="file" name="archivo" accept=".xlsx" required>
-                <button type="submit" class="boton-secundario">Importar</button>
-            </form>
-        </div>
+        <form method="POST" action="index.php?ruta=gastos<?= $anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : '' ?>" enctype="multipart/form-data" id="form-importar-gastos" style="display: none;">
+            <input type="hidden" name="accion" value="importar">
+            <input type="file" name="archivo" accept=".xlsx" id="input-importar-gastos">
+        </form>
 
         <?php if (!empty($error)): ?>
             <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
@@ -146,7 +162,8 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <?php
                 $segmentosBarraGastos = '<div class="barra-progreso-segmento gasto-propio" style="width: ' . number_format($porcentajeGastadoPropio, 2, '.', '') . '%;"></div>'
                     . '<div class="barra-progreso-segmento gasto-heredado" style="width: ' . number_format($porcentajeGastadoHeredado, 2, '.', '') . '%;"></div>'
-                    . '<div class="barra-progreso-segmento gasto-con-techo" style="width: ' . number_format($porcentajeGastadoConTecho, 2, '.', '') . '%;"></div>';
+                    . '<div class="barra-progreso-segmento gasto-con-techo" style="width: ' . number_format($porcentajeGastadoConTecho, 2, '.', '') . '%;"></div>'
+                    . '<div class="barra-progreso-segmento gasto-dumi" style="width: ' . number_format($porcentajeGastadoDumiBarra, 2, '.', '') . '%;"></div>';
                 ?>
                 <?php $claseTrackBarraGastos = 'barra-progreso barra-gastos' . ($totalGastado <= 0 ? ' sin-gastos' : ''); ?>
                 <?php if ($puedeVerTechos): ?>
@@ -154,14 +171,35 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <?php else: ?>
                 <div class="<?= $claseTrackBarraGastos ?>" title="Techo presupuestal (solo informativo)"><?= $segmentosBarraGastos ?></div>
                 <?php endif; ?>
-                <?php if ($totalGastadoHeredado > 0 || $totalGastadoHijasConTecho > 0): ?>
-                <div class="progreso-presupuesto-leyenda">
-                    <span><span class="punto gasto-propio"></span>Propio: $<?= number_format($totalGastadoPropio, 2, ',', '.') ?></span>
+                <?php
+                $iconoChipTechoTotal = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V10l7-7 7 7v11"></path><line x1="9" y1="21" x2="9" y2="14"></line><line x1="15" y1="21" x2="15" y2="14"></line></svg>';
+                $iconoChipPropio = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 7V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v2"></path><line x1="16" y1="14" x2="20" y2="14"></line></svg>';
+                $iconoChipHeredado = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>';
+                $iconoChipReasignado = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
+                ?>
+                <?php if ($presupuestoAnio > 0 || $totalGastadoHeredado > 0 || $totalGastadoHijasConTecho > 0 || $dumiSeleccionado !== null): ?>
+                <div class="chips-gasto">
+                    <?php if ($presupuestoAnio > 0): ?>
+                    <span class="chip-gasto chip-gasto-techo-total"><?= $iconoChipTechoTotal ?>Techo total: $<?= number_format($presupuestoAnio, 2, ',', '.') ?></span>
+                    <?php endif; ?>
+                    <span class="chip-gasto chip-gasto-propio"><?= $iconoChipPropio ?>Propio: $<?= number_format($totalGastadoPropio, 2, ',', '.') ?></span>
                     <?php if ($totalGastadoHeredado > 0): ?>
-                    <span><span class="punto gasto-heredado"></span>Heredado de hijas sin techo (cuenta contra este techo): $<?= number_format($totalGastadoHeredado, 2, ',', '.') ?></span>
+                    <span class="chip-gasto chip-gasto-heredado" title="Heredado de hijas sin techo — cuenta contra este techo"><?= $iconoChipHeredado ?>Heredado: $<?= number_format($totalGastadoHeredado, 2, ',', '.') ?></span>
                     <?php endif; ?>
                     <?php if ($totalGastadoHijasConTecho > 0): ?>
-                    <span><span class="punto gasto-con-techo"></span>Reasignado: $<?= number_format($totalGastadoHijasConTecho, 2, ',', '.') ?></span>
+                    <span class="chip-gasto chip-gasto-con-techo"><?= $iconoChipReasignado ?>Reasignado: $<?= number_format($totalGastadoHijasConTecho, 2, ',', '.') ?></span>
+                    <?php endif; ?>
+                    <?php if ($dumiSeleccionado !== null && $techoDumiSeleccionado !== null): ?>
+                    <span class="chip-gasto chip-gasto-dumi" title="Se valida de forma independiente, ya está afuera de lo Reasignado de arriba">
+                        <?= $iconoChipTechoTotal ?><?= htmlspecialchars(Dependencia::nombreVisible($dumiSeleccionado['nombre'])) ?>:
+                        $<?= number_format($totalGastadoDumiSeleccionado, 2, ',', '.') ?> / $<?= number_format($techoDumiSeleccionado, 2, ',', '.') ?>
+                        (<?= number_format($porcentajeGastadoDumiSeleccionado, 1) ?>%)
+                    </span>
+                    <?php elseif ($dumiSeleccionado !== null): ?>
+                    <span class="chip-gasto chip-gasto-dumi" title="Sin techo propio — cuenta contra el de <?= htmlspecialchars(Dependencia::nombreVisible($dependenciaUsuario['nombre'] ?? '')) ?>">
+                        <?= $iconoChipHeredado ?><?= htmlspecialchars(Dependencia::nombreVisible($dumiSeleccionado['nombre'])) ?>:
+                        $<?= number_format($totalGastadoDumiSeleccionado, 2, ',', '.') ?> (<?= number_format($porcentajeGastadoDumiSeleccionado, 1) ?>% del techo)
+                    </span>
                     <?php endif; ?>
                 </div>
                 <?php endif; ?>
