@@ -63,6 +63,17 @@ class PeticionesControlador
     private Motor $modeloMotor;
     private Proyecto $modeloProyecto;
 
+    // Caches de una sola petición HTTP (nunca persisten entre requests): evitan volver a consultar
+    // lo mismo fila por fila cuando el landing de Peticiones lista cientos/miles de ítems — ver
+    // obtenerRegistroGastoCacheado(), obtenerUsuarioActualCacheado() y esSuperAdminRaiz().
+    private array $cacheRegistroPorClave = [];
+    private bool $usuarioActualCargado = false;
+    private ?array $usuarioActualCache = null;
+    private ?bool $cacheEsSuperAdminRaiz = null;
+    private bool $dependenciaUsuarioActualCargada = false;
+    private ?array $dependenciaUsuarioActualCache = null;
+    private ?array $nombresDescendientesUsuarioActualCache = null;
+
     private const VISTAS = ['pendientes', 'consolidado', 'archivar', 'enviadas'];
 
     private const ORIGENES_GASTO = ['gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes'];
@@ -560,6 +571,36 @@ class PeticionesControlador
         $camposEditables = self::CAMPOS_EDITABLES[$origen] ?? [];
         $rutaVolver = 'index.php?ruta=peticiones&vista=' . ($estado === 'pendiente' ? 'pendientes' : ($estado === 'aprobada' ? 'consolidado' : ($estado === 'archivada' ? 'archivar' : 'enviadas')));
 
+        // Ancho inicial por columna (se puede arrastrar después): ~8px por carácter del valor más
+        // largo (encabezado incluido), entre 90 y 320px — mismo criterio que el prototipo Dev >
+        // Tabla, para que el ancho de partida ya muestre el contenido sin truncar.
+        $anchosColumna = [];
+        foreach ($columnas as $indice => $columna) {
+            $clave = $clavesFila[$indice];
+            $maxLargo = mb_strlen($columna);
+            foreach ($filasCompletas as $filaCompleta) {
+                $valorLargo = $filaCompleta[$clave] ?? '';
+                if (is_float($valorLargo)) {
+                    $valorLargo = number_format($valorLargo, 2, ',', '.');
+                }
+                $maxLargo = max($maxLargo, mb_strlen((string) $valorLargo));
+            }
+            $anchosColumna[$indice] = max(90, min(320, $maxLargo * 8 + 40));
+        }
+
+        // La tabla de Gasto (ORIGENES_GASTO) tiene 14 columnas — de entrada oculta las que menos
+        // se consultan (Línea estratégica/Motor de desarrollo/Cantidad/Costo unitario/Techo
+        // presupuestal, ya implícitas en Valor total) para ganar espacio; el usuario las puede
+        // volver a mostrar desde "Mostrar u ocultar columnas" igual que cualquier otra.
+        $indicesOcultosPorDefecto = [];
+        if (in_array($origen, self::ORIGENES_GASTO, true)) {
+            $clavesOcultasPorDefecto = ['linea', 'motor', 'cantidad', 'costo_unitario', 'techo'];
+            $indicesOcultosPorDefecto = array_values(array_intersect_key(
+                array_flip($clavesFila),
+                array_flip($clavesOcultasPorDefecto)
+            ));
+        }
+
         require __DIR__ . '/../vista/peticiones/tipo-detalle.php';
     }
 
@@ -978,21 +1019,20 @@ class PeticionesControlador
 
         $presupuestosPorDependenciaId = $anioPresupuestalId > 0 ? $this->modeloPresupuestoDependencia->obtenerPorAnio($anioPresupuestalId) : [];
 
-        $modelosGasto = [
-            'gasto_principal' => $this->modeloGasto,
-            'gasto_extension' => $this->modeloGastoExtension,
-            'gasto_postgrado' => $this->modeloGastoPostgrado,
-            'gasto_unisalud' => $this->modeloGastoUnisalud,
-            'gasto_sin_excedentes' => $this->modeloGastoSinExcedentes,
-        ];
+        // Precargado una sola vez (en vez de un obtenerPorNombre() por fila): con cientos/miles de
+        // filas, resolver la dependencia de cada una disparaba esa misma cantidad de consultas.
+        $dependenciasPorNombre = [];
+        foreach ($this->modeloDependencia->obtenerTodas() as $dependenciaCatalogo) {
+            $dependenciasPorNombre[$dependenciaCatalogo['nombre']] = $dependenciaCatalogo;
+        }
 
         $filas = [];
 
         foreach ($aprobados as $item) {
             $gastoOriginal = null;
 
-            if (in_array($item['origen'], self::ORIGENES_GASTO, true) && isset($modelosGasto[$item['origen']])) {
-                $gastoOriginal = $modelosGasto[$item['origen']]->obtenerPorId((int) $item['origen_id']);
+            if (in_array($item['origen'], self::ORIGENES_GASTO, true)) {
+                $gastoOriginal = $this->obtenerRegistroPorOrigenCacheado($item['origen'], (int) $item['origen_id']);
             }
 
             // Se usa la dependencia de ORIGEN del gasto (a qué programa/dependencia pertenece el
@@ -1003,7 +1043,7 @@ class PeticionesControlador
             $dependenciaNombre = $gastoOriginal['dependencia'] ?? $gastoOriginal['dependencia_destino'] ?? $item['detalle'];
 
             $dependenciaOrigen = $dependenciaNombre !== null && $dependenciaNombre !== ''
-                ? $this->modeloDependencia->obtenerPorNombre($dependenciaNombre)
+                ? ($dependenciasPorNombre[$dependenciaNombre] ?? null)
                 : null;
             $techo = $dependenciaOrigen !== null ? ($presupuestosPorDependenciaId[(int) $dependenciaOrigen['id']]['techo'] ?? null) : null;
 
@@ -1063,20 +1103,41 @@ class PeticionesControlador
     }
 
     /**
+     * Usuario logueado, cacheado durante la petición — $_SESSION['usuario_id'] no cambia a mitad
+     * de un mismo request, así que no hay razón para volver a consultarlo fila por fila (esto se
+     * llama una vez por cada ítem al calcular 'puede_editar' en listados de cientos de filas).
+     */
+    private function obtenerUsuarioActualCacheado(): ?array
+    {
+        if (!$this->usuarioActualCargado) {
+            $this->usuarioActualCache = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+            $this->usuarioActualCargado = true;
+        }
+
+        return $this->usuarioActualCache;
+    }
+
+    /**
      * Determina si la dependencia del usuario actual es la dependencia raíz del superadministrador.
+     * Cacheado por la misma razón que obtenerUsuarioActualCacheado(): el resultado no cambia a
+     * mitad de un request.
      */
     private function esSuperAdminRaiz(): bool
     {
-        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+        if ($this->cacheEsSuperAdminRaiz !== null) {
+            return $this->cacheEsSuperAdminRaiz;
+        }
+
+        $usuarioActual = $this->obtenerUsuarioActualCacheado();
         $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
 
         if ($dependenciaUsuarioId === null) {
-            return false;
+            return $this->cacheEsSuperAdminRaiz = false;
         }
 
         $dependenciaUsuario = $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId);
 
-        return $dependenciaUsuario !== null && !empty($dependenciaUsuario['es_raiz_superadmin']);
+        return $this->cacheEsSuperAdminRaiz = ($dependenciaUsuario !== null && !empty($dependenciaUsuario['es_raiz_superadmin']));
     }
 
     /**
@@ -1276,11 +1337,13 @@ class PeticionesControlador
             return false;
         }
 
-        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+        $usuarioActual = $this->obtenerUsuarioActualCacheado();
 
         if ($usuarioActual === null) {
             return false;
         }
+
+        $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
 
         if ($this->esContribucionPostgrado($item)) {
             if ((int) ($usuarioActual['es_super_admin'] ?? 0) === 1) {
@@ -1291,21 +1354,18 @@ class PeticionesControlador
                 return false;
             }
 
-            $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
-            $dependenciaUsuario = $dependenciaUsuarioId !== null ? $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId) : null;
+            $dependenciaUsuario = $dependenciaUsuarioId !== null ? $this->obtenerDependenciaUsuarioActualCacheada($dependenciaUsuarioId) : null;
 
             return $dependenciaUsuario !== null
                 && $dependenciaUsuario['nombre'] === 'DEPARTAMENTO DE POSTGRADOS'
                 && ($dependenciaUsuario['tipo'] ?? null) === 'Departamento';
         }
 
-        $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
-
         if ($dependenciaUsuarioId === null) {
             return false;
         }
 
-        $dependenciaUsuario = $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId);
+        $dependenciaUsuario = $this->obtenerDependenciaUsuarioActualCacheada($dependenciaUsuarioId);
 
         if ($dependenciaUsuario === null) {
             return false;
@@ -1315,9 +1375,78 @@ class PeticionesControlador
             return true;
         }
 
-        $nombresDescendientes = array_column($this->modeloDependencia->obtenerDescendientesPlano($dependenciaUsuarioId), 'nombre');
+        $nombresDescendientes = $this->obtenerNombresDescendientesUsuarioActualCacheados($dependenciaUsuarioId);
 
         return in_array($dependenciaActual, $nombresDescendientes, true);
+    }
+
+    /**
+     * Dependencia del usuario actual, cacheada durante la petición — misma razón que
+     * obtenerUsuarioActualCacheado(): el id no cambia entre filas.
+     */
+    private function obtenerDependenciaUsuarioActualCacheada(int $dependenciaUsuarioId): ?array
+    {
+        if (!$this->dependenciaUsuarioActualCargada) {
+            $this->dependenciaUsuarioActualCache = $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId);
+            $this->dependenciaUsuarioActualCargada = true;
+        }
+
+        return $this->dependenciaUsuarioActualCache;
+    }
+
+    /**
+     * Nombres de las dependencias descendientes de la del usuario actual, cacheados durante la
+     * petición. obtenerDescendientesPlano() recorre TODO el árbol de dependencias (con su propia
+     * consulta completa a la tabla) — sin este cache, un listado de cientos/miles de filas volvía
+     * a recorrer el árbol entero una vez POR FILA, siendo con diferencia el costo más alto de
+     * generar el landing de Peticiones.
+     */
+    private function obtenerNombresDescendientesUsuarioActualCacheados(int $dependenciaUsuarioId): array
+    {
+        if ($this->nombresDescendientesUsuarioActualCache === null) {
+            $this->nombresDescendientesUsuarioActualCache = array_column(
+                $this->modeloDependencia->obtenerDescendientesPlano($dependenciaUsuarioId),
+                'nombre'
+            );
+        }
+
+        return $this->nombresDescendientesUsuarioActualCache;
+    }
+
+    /**
+     * Registro crudo de un ítem por origen/id, cacheado durante la petición (misma razón que
+     * obtenerUsuarioActualCacheado()): el mismo ítem se vuelve a pedir en varios puntos
+     * (construirFilasDetalleCompleto, esPropietarioActualDeItem, esContribucionPostgrado) al
+     * listar cientos/miles de filas en el landing de Peticiones — sin este cache, cada fila
+     * disparaba varias consultas repetidas por el mismo id.
+     */
+    private function obtenerRegistroPorOrigenCacheado(string $origen, int $origenId): ?array
+    {
+        $clave = $origen . ':' . $origenId;
+
+        if (array_key_exists($clave, $this->cacheRegistroPorClave)) {
+            return $this->cacheRegistroPorClave[$clave];
+        }
+
+        $modelosPorOrigen = [
+            'arl' => $this->modeloSolicitud,
+            'monitores' => $this->modeloMonitor,
+            'ops' => $this->modeloOps,
+            'necesidad' => $this->modeloNecesidad,
+            'gasto_principal' => $this->modeloGasto,
+            'gasto_extension' => $this->modeloGastoExtension,
+            'gasto_postgrado' => $this->modeloGastoPostgrado,
+            'gasto_unisalud' => $this->modeloGastoUnisalud,
+            'gasto_sin_excedentes' => $this->modeloGastoSinExcedentes,
+            'ingreso_extension' => $this->modeloIngresoExtension,
+            'ingreso_postgrado' => $this->modeloIngresoPostgrado,
+            'ingreso_unisalud' => $this->modeloIngresoUnisalud,
+            'ingreso_sin_excedentes' => $this->modeloIngresoSinExcedentes,
+        ];
+
+        $modelo = $modelosPorOrigen[$origen] ?? null;
+
+        return $this->cacheRegistroPorClave[$clave] = ($modelo !== null ? $modelo->obtenerPorId($origenId) : null);
     }
 
     private function esContribucionPostgrado(array $item): bool
@@ -1326,35 +1455,35 @@ class PeticionesControlador
             return false;
         }
 
-        $registro = $this->modeloGastoPostgrado->obtenerPorId((int) $item['origen_id']);
+        $registro = $this->obtenerRegistroPorOrigenCacheado('gasto_postgrado', (int) $item['origen_id']);
 
         return $registro !== null && ($registro['tipo_automatico'] ?? null) === 'contrib_postgrado';
     }
 
     private function resolverDependenciaActualItem(array $item): ?string
     {
-        $modelosConDependencia = [
-            'arl' => [$this->modeloSolicitud, 'facultad'],
-            'monitores' => [$this->modeloMonitor, 'dependencia'],
-            'ops' => [$this->modeloOps, 'dependencia'],
-            'necesidad' => [$this->modeloNecesidad, 'dependencia_destino'],
-            'gasto_principal' => [$this->modeloGasto, 'dependencia_destino'],
-            'gasto_extension' => [$this->modeloGastoExtension, 'dependencia_destino'],
-            'gasto_postgrado' => [$this->modeloGastoPostgrado, 'dependencia_destino'],
-            'gasto_unisalud' => [$this->modeloGastoUnisalud, 'dependencia_destino'],
-            'gasto_sin_excedentes' => [$this->modeloGastoSinExcedentes, 'dependencia_destino'],
-            'ingreso_extension' => [$this->modeloIngresoExtension, 'dependencia_destino'],
-            'ingreso_postgrado' => [$this->modeloIngresoPostgrado, 'dependencia_destino'],
-            'ingreso_unisalud' => [$this->modeloIngresoUnisalud, 'dependencia_destino'],
-            'ingreso_sin_excedentes' => [$this->modeloIngresoSinExcedentes, 'dependencia_destino'],
+        $camposDependenciaPorOrigen = [
+            'arl' => 'facultad',
+            'monitores' => 'dependencia',
+            'ops' => 'dependencia',
+            'necesidad' => 'dependencia_destino',
+            'gasto_principal' => 'dependencia_destino',
+            'gasto_extension' => 'dependencia_destino',
+            'gasto_postgrado' => 'dependencia_destino',
+            'gasto_unisalud' => 'dependencia_destino',
+            'gasto_sin_excedentes' => 'dependencia_destino',
+            'ingreso_extension' => 'dependencia_destino',
+            'ingreso_postgrado' => 'dependencia_destino',
+            'ingreso_unisalud' => 'dependencia_destino',
+            'ingreso_sin_excedentes' => 'dependencia_destino',
         ];
 
-        if (!isset($modelosConDependencia[$item['origen']])) {
+        if (!isset($camposDependenciaPorOrigen[$item['origen']])) {
             return $item['detalle'] ?? null;
         }
 
-        [$modelo, $campo] = $modelosConDependencia[$item['origen']];
-        $registro = $modelo->obtenerPorId((int) $item['origen_id']);
+        $campo = $camposDependenciaPorOrigen[$item['origen']];
+        $registro = $this->obtenerRegistroPorOrigenCacheado($item['origen'], (int) $item['origen_id']);
 
         if ($registro === null || empty($registro[$campo])) {
             return $item['detalle'] ?? null;

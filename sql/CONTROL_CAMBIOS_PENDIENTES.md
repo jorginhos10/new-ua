@@ -143,6 +143,27 @@ de datos antes de correrlo.
   aplicó saltándose esa línea. En Configuraciones > Autogestión, el tope de Extensión/Postgrado
   ahora se edita en un solo campo arriba de la tabla de ítems (acción `guardar_tope`), no por fila.
 
+---
+
+## 2026-09-22 — Índice en `gastos(anio_presupuestal_id, dependencia)` (rendimiento)
+
+- **Archivo:** `sql/gastos_indice_dependencia_anio.sql`
+- **Cambio:** `ALTER TABLE gastos ADD INDEX idx_gastos_anio_dependencia (anio_presupuestal_id, dependencia);`
+  — solo un índice nuevo, no toca datos ni estructura de columnas.
+- **Motivo:** La página de Gastos (`GastoControlador::index()`) tardaba ~3 segundos en cargar.
+  `Gasto::obtenerTotalesPropioYComprometidoPorDependencia()` tiene una subconsulta `EXISTS`
+  correlacionada que filtra por `(anio_presupuestal_id, dependencia)` por cada fila candidata —
+  sin este índice, MySQL escaneaba linealmente ~800 filas por cada una de las ~1600 filas de
+  `gastos` (confirmado con `EXPLAIN`: `DEPENDENT SUBQUERY ... rows=814`). Con el índice, esa misma
+  subconsulta pasó a `rows=19` y la página de Gastos bajó de ~3s a ~0.15s. No cambia ningún
+  resultado (un índice nunca altera lo que devuelve un SELECT, solo cómo lo busca) — verificado
+  comparando los totales por dependencia antes/después.
+- **Aplicado en local:** Sí (2026-09-22).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Seguro de volver a correr (`ADD INDEX` con ese nombre falla si ya existe, pero no rompe
+  nada — solo hay que confirmar el nombre `idx_gastos_anio_dependencia` no esté ya usado). No
+  requiere downtime perceptible: es solo una reconstrucción de índice sobre ~1600-2000 filas.
+
 <!--
 Plantilla para la próxima entrada:
 

@@ -182,6 +182,37 @@ document.addEventListener('DOMContentLoaded', function () {
         fijarAnchoColumna(indice, anchosGuardados[indice]);
     });
 
+    // --- Ancho de la tabla: si las columnas visibles no llenan el contenedor, reparte el espacio
+    // sobrante entre ellas (proporcional a su ancho) para no dejar zona muerta a la derecha; si no
+    // caben, no toca nada y aparece el scroll horizontal normal de .tabla-scroll. "anchosBase"
+    // guarda el ancho de cada columna ANTES de repartir (el guardado/por defecto), para no ir
+    // agrandándolas de más cada vez que se recalcula (el CSS 'width: 100%' no sirve para esto:
+    // con table-layout fixed los navegadores no liberan el espacio de una columna oculta con
+    // visibility: collapse). ---
+    var anchosBase = {};
+    tabla.querySelectorAll('colgroup col[id^="tdt-col-"]').forEach(function (col) {
+        var indice = col.id.replace('tdt-col-', '');
+        anchosBase[indice] = parseInt(anchosGuardados[indice], 10) || parseInt(col.style.width, 10) || 90;
+    });
+    var contenedorScroll = tabla.closest('.tabla-scroll');
+    var anchoColSeleccion = 34;
+
+    function ajustarAnchoTabla() {
+        if (!contenedorScroll) { return; }
+        var indicesVisibles = Object.keys(anchosBase).filter(function (indice) {
+            var col = document.getElementById('tdt-col-' + indice);
+            return col && col.style.visibility !== 'collapse';
+        });
+        var sumaBase = indicesVisibles.reduce(function (total, indice) { return total + anchosBase[indice]; }, 0);
+        if (sumaBase === 0) { return; }
+        var disponible = contenedorScroll.clientWidth - anchoColSeleccion;
+        var factor = disponible > sumaBase ? disponible / sumaBase : 1;
+        indicesVisibles.forEach(function (indice) {
+            fijarAnchoColumna(indice, Math.round(anchosBase[indice] * factor));
+        });
+    }
+    window.addEventListener('resize', ajustarAnchoTabla);
+
     tabla.querySelectorAll('.redimensionador-columna').forEach(function (manija) {
         var col = document.getElementById('tdt-col-' + manija.dataset.indice);
         if (!col) { return; }
@@ -204,6 +235,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 document.removeEventListener('mousemove', mover);
                 document.removeEventListener('mouseup', soltar);
                 guardarAncho(manija.dataset.indice, anchoFinal);
+                anchosBase[manija.dataset.indice] = anchoFinal;
+                ajustarAnchoTabla();
             }
             document.addEventListener('mousemove', mover);
             document.addEventListener('mouseup', soltar);
@@ -242,6 +275,7 @@ document.addEventListener('DOMContentLoaded', function () {
             casilla.addEventListener('change', function () {
                 aplicarVisibilidadColumna(casilla.dataset.indice, casilla.checked);
                 guardarOcultas(indicesOcultosActuales());
+                ajustarAnchoTabla();
             });
         });
 
@@ -255,6 +289,10 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+
+    // Recién aquí quedó aplicado el estado inicial completo de columnas ocultas (por defecto desde
+    // el servidor y las guardadas en localStorage), así que el primer reparto de ancho se hace acá.
+    ajustarAnchoTabla();
 
     // --- Filtros por columna (ocultos hasta pulsar "Filtrar") ---
     var filaEncabezados = tabla.querySelector('tr.fila-encabezados');
@@ -956,9 +994,6 @@ document.addEventListener('DOMContentLoaded', function () {
         panelExpandidoNombre = null;
         if (botonVistaTabla) { botonVistaTabla.classList.add('activo'); botonVistaTabla.setAttribute('aria-pressed', 'true'); }
         if (botonVistaGrafica) { botonVistaGrafica.classList.remove('activo'); botonVistaGrafica.setAttribute('aria-pressed', 'false'); }
-
-        // En modo tabla el botón "Filtrar" vuelve a controlar si la fila de filtros se ve o no.
-        if (botonFiltrar) { botonFiltrar.disabled = false; }
     }
 
     function activarVistaGrafica() {
@@ -968,10 +1003,11 @@ document.addEventListener('DOMContentLoaded', function () {
         if (botonVistaTabla) { botonVistaTabla.classList.remove('activo'); botonVistaTabla.setAttribute('aria-pressed', 'false'); }
 
         // La gráfica se filtra con los mismos combos por columna que la tabla (aplicarFiltros()
-        // ya llama a actualizarGrafica()); acá forzamos que la fila quede visible y fija mientras
-        // se está en este modo, en vez de depender del toggle "Filtrar" de la tabla.
+        // ya llama a actualizarGrafica()); acá solo forzamos que la fila arranque visible al
+        // entrar a este modo — el botón "Filtrar" sigue habilitado para poder ocultarla igual
+        // que en modo tabla.
         if (filaFiltros) { filaFiltros.classList.add('visible'); }
-        if (botonFiltrar) { botonFiltrar.classList.add('activo'); botonFiltrar.disabled = true; }
+        if (botonFiltrar) { botonFiltrar.classList.add('activo'); }
 
         actualizarGrafica();
     }

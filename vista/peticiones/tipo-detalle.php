@@ -7,14 +7,43 @@
  * memoria del prototipo), reutilizando el modelo real de cada origen vía
  * PeticionesControlador::procesarAccionCeldaTipoDetalle().
  *
- * Variables esperadas del controlador: $columnas, $clavesFila, $filasCompletas, $resaltarId,
- * $origen, $estado, $anioSeleccionadoId, $tituloPagina, $rutaVolver, $camposEditables, $error,
- * $dependenciaFiltro (si "Ver" vino de una fila-grupo de Pendientes, ej. Gastos por dependencia).
+ * Variables esperadas del controlador: $columnas, $clavesFila, $filasCompletas, $anchosColumna,
+ * $indicesOcultosPorDefecto, $resaltarId, $origen, $estado, $anioSeleccionadoId, $tituloPagina,
+ * $rutaVolver, $camposEditables, $error, $dependenciaFiltro (si "Ver" vino de una fila-grupo de
+ * Pendientes, ej. Gastos por dependencia).
  */
 require __DIR__ . '/../parciales/encabezado.php';
 
 $idTabla = 'tabla-' . $origen . '-' . $estado;
 ?>
+
+<style>
+    /* Cadena de alto (html/body → layout → contenido → área → tarjeta → tabla) fijada a 100vh para
+       que esta página no haga scroll completo: el único scroll debe ser el interno de
+       .tabla-scroll, con su propia barra — mismo patrón ya usado en el prototipo
+       vista/dev/pruebas/tabla.php. Estilo local a esta vista, no toca estilo.css ni el resto del
+       sistema. */
+    html, body {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .layout {
+        height: 100vh;
+        min-height: 0;
+    }
+
+    .contenido-principal {
+        min-height: 0;
+    }
+
+    .area-contenido {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1;
+    }
+</style>
 
 <div class="tarjeta tarjeta-tabla">
     <div class="tabla-topbar">
@@ -46,7 +75,7 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
                     <div class="combo-tarjeta columnas-tarjeta" id="tdt-columnas-tarjeta">
                         <?php foreach ($columnas as $indice => $columna): ?>
                         <label class="columnas-tarjeta-item">
-                            <input type="checkbox" class="columnas-checkbox" data-indice="<?= $indice ?>" checked>
+                            <input type="checkbox" class="columnas-checkbox" data-indice="<?= $indice ?>"<?= in_array($indice, $indicesOcultosPorDefecto, true) ? '' : ' checked' ?>>
                             <?= htmlspecialchars($columna) ?>
                         </label>
                         <?php endforeach; ?>
@@ -89,7 +118,7 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
             <colgroup>
                 <col style="width: 34px;">
                 <?php foreach ($columnas as $indice => $columna): ?>
-                <col id="tdt-col-<?= $indice ?>" style="width: 150px;">
+                <col id="tdt-col-<?= $indice ?>" style="width: <?= $anchosColumna[$indice] ?>px;<?= in_array($indice, $indicesOcultosPorDefecto, true) ? ' visibility: collapse;' : '' ?>">
                 <?php endforeach; ?>
             </colgroup>
             <thead>

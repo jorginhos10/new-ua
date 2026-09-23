@@ -3,9 +3,9 @@
 class Conexion
 {
     private static $host = 'localhost';
-    private static $bd = 'jorginho_presupuestos';
-    private static $usuario = 'jorginho_presupuestos';
-    private static $password = 'jorginho10.';
+    private static $bd = 'again';
+    private static $usuario = 'root';
+    private static $password = '';
     private static $pdo = null;
 
     public static function obtener(): PDO

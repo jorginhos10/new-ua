@@ -75,22 +75,68 @@ class UsuarioControlador
         // de Tipo para esta pestaña (Tipo y Rol quedan fijos en "Formulador").
         $dependenciasInvitados = $this->modeloDependencia->obtenerPorTipos(['Facultad']);
 
+        // Precargado una sola vez para resolverMenuEfectivo(): MenuPermiso::calcularPermitidoParaUsuario()
+        // hacía obtenerPorId() de la dependencia por cada usuario de las 3 listas de abajo (hasta
+        // 2 consultas más a tipo_dependencia_menu encima) — con Usuarios/Formulador creciendo a un
+        // ritmo de uno por facultad/persona, esto disparaba varias consultas idénticas repetidas
+        // decenas de veces por carga de esta página.
+        $dependenciasPorId = [];
+        foreach ($this->modeloDependencia->obtenerTodas() as $dependenciaCatalogo) {
+            $dependenciasPorId[(int) $dependenciaCatalogo['id']] = $dependenciaCatalogo;
+        }
+
         foreach ($administradores as &$admin) {
-            $admin['menu_efectivo'] = $this->modeloMenuPermiso->calcularPermitidoParaUsuario($admin) ?? [];
+            $admin['menu_efectivo'] = $this->resolverMenuEfectivo($admin, $dependenciasPorId, $menuPorTipo);
         }
         unset($admin);
 
         foreach ($consejoSuperior as &$miembro) {
-            $miembro['menu_efectivo'] = $this->modeloMenuPermiso->calcularPermitidoParaUsuario($miembro) ?? [];
+            $miembro['menu_efectivo'] = $this->resolverMenuEfectivo($miembro, $dependenciasPorId, $menuPorTipo);
         }
         unset($miembro);
 
         foreach ($invitados as &$invitado) {
-            $invitado['menu_efectivo'] = $this->modeloMenuPermiso->calcularPermitidoParaUsuario($invitado) ?? [];
+            $invitado['menu_efectivo'] = $this->resolverMenuEfectivo($invitado, $dependenciasPorId, $menuPorTipo);
         }
         unset($invitado);
 
         require __DIR__ . '/../vista/usuarios/index.php';
+    }
+
+    /**
+     * Misma lógica que MenuPermiso::calcularPermitidoParaUsuario(), pero contra los mapas
+     * ($dependenciasPorId, $menuPorTipo) ya precargados una sola vez en index() en vez de volver a
+     * consultar la dependencia y las plantillas de tipo_dependencia_menu por cada usuario listado.
+     * Los usuarios con menú personalizado (menu_personalizado=1) siguen consultando su propia fila
+     * de usuario_menu, ya que eso sí varía usuario por usuario y normalmente son pocos.
+     */
+    private function resolverMenuEfectivo(array $usuario, array $dependenciasPorId, array $menuPorTipo): array
+    {
+        if ((int) ($usuario['menu_personalizado'] ?? 0) === 1) {
+            return $this->modeloMenuPermiso->obtenerMenuUsuario((int) $usuario['id']);
+        }
+
+        if (empty($usuario['dependencia_id'])) {
+            return [];
+        }
+
+        $dependencia = $dependenciasPorId[(int) $usuario['dependencia_id']] ?? null;
+
+        if ($dependencia === null || empty($dependencia['tipo'])) {
+            return [];
+        }
+
+        $rolId = !empty($usuario['rol_id']) ? (int) $usuario['rol_id'] : null;
+
+        if ($rolId !== null) {
+            $plantillaPorRol = $menuPorTipo[$dependencia['tipo']][(string) $rolId] ?? [];
+
+            if (!empty($plantillaPorRol)) {
+                return $plantillaPorRol;
+            }
+        }
+
+        return $menuPorTipo[$dependencia['tipo']]['general'] ?? [];
     }
 
     /**
