@@ -4504,19 +4504,6 @@ body.tabla-redimensionando-cursor * {
     outline-offset: -2px;
 }
 
-.tabla-dev-datos td[data-editable] {
-    cursor: default;
-}
-
-.tabla-dev-datos td.celda-editando input {
-    width: 100%;
-    padding: 0.2rem 0.35rem;
-    border: 1px solid var(--color-primario);
-    border-radius: 4px;
-    font-size: inherit;
-    font-family: inherit;
-}
-
 /* --- Combobox propio (buscar/filtrar): predicción en gris dentro del mismo input, y tarjeta
    desplegable con los valores únicos solo para Filtrar --- */
 .combo-envoltorio {

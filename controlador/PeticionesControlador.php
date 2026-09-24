@@ -373,26 +373,6 @@ class PeticionesControlador
     }
 
     /**
-     * Metadata de campos realmente editables in-place (texto/número, sin selects de FK) para el
-     * landing de "Ver" (tabla real idéntica a Dev > Tabla). Solo puede haber Editar sobre una
-     * columna que la propia tabla ya muestra (ver $columnas/$clavesFila en tipoDetalle()) — hoy esas
-     * columnas son las de Gasto (dependencia/sede/línea/motor/proyecto/rubro/actividad/insumo/
-     * cantidad/costo/valor/meses/techo), así que solo gasto_principal tiene edición in-place por
-     * ahora; el resto de orígenes (incluida Necesidad, cuyos campos propios como nombre/descripción/
-     * justificación no forman parte de ese set de columnas) queda de solo lectura aquí.
-     */
-    private const CAMPOS_EDITABLES = [
-        'gasto_principal' => [
-            ['clave' => 'insumo', 'etiqueta' => 'Insumo', 'tipo' => 'text', 'requerido' => true],
-            ['clave' => 'actividad', 'etiqueta' => 'Actividad', 'tipo' => 'text', 'requerido' => true],
-            ['clave' => 'objeto_proyecto_paa', 'etiqueta' => 'Contratos comunes', 'tipo' => 'text', 'requerido' => false],
-            ['clave' => 'cantidad', 'etiqueta' => 'Cantidad', 'tipo' => 'number', 'requerido' => true],
-            ['clave' => 'costo_unitario', 'etiqueta' => 'Costo unitario', 'tipo' => 'number', 'requerido' => true],
-            ['clave' => 'meses', 'etiqueta' => 'Meses (separados por coma, 1-12)', 'tipo' => 'text', 'requerido' => false],
-        ],
-    ];
-
-    /**
      * Devuelve el modelo de origen (ya instanciado en el constructor) correspondiente, para las
      * acciones genéricas de Editar/Eliminar del landing de "Ver".
      */
@@ -535,7 +515,17 @@ class PeticionesControlador
                 static fn (array $item): bool => ($item['dependencia_origen'] ?? $item['detalle'] ?? null) === $dependenciaFiltro
             ));
         }
-        $resultado = $this->construirFilasPorOrigen($origen, $itemsCrudos, $anioSeleccionadoId, $estado);
+
+        // Deja el botón "Volver" del formulario de edición real apuntando de regreso a este mismo
+        // landing (mismo estado/año/filtro de dependencia con el que se entró), no al índice plano
+        // del módulo.
+        $rutaVolverEditar = 'index.php?ruta=peticiones-tipo-detalle&estado=' . urlencode($estado) . '&origen=' . urlencode($origen)
+            . '&anio_id=' . $anioSeleccionadoId . '&resaltar_id=' . $resaltarId;
+        if ($dependenciaFiltro !== '') {
+            $rutaVolverEditar .= '&dependencia=' . urlencode($dependenciaFiltro);
+        }
+
+        $resultado = $this->construirFilasPorOrigen($origen, $itemsCrudos, $anioSeleccionadoId, $estado, $rutaVolverEditar);
         $columnas = $resultado['columnas'];
         $clavesFila = $resultado['claves'];
         $filasCompletas = $resultado['filas'];
@@ -568,7 +558,6 @@ class PeticionesControlador
             $tituloPagina .= ' — ' . $dependenciaFiltro;
         }
 
-        $camposEditables = self::CAMPOS_EDITABLES[$origen] ?? [];
         $rutaVolver = 'index.php?ruta=peticiones&vista=' . ($estado === 'pendiente' ? 'pendientes' : ($estado === 'aprobada' ? 'consolidado' : ($estado === 'archivada' ? 'archivar' : 'enviadas')));
 
         // Ancho inicial por columna (se puede arrastrar después): ~8px por carácter del valor más
@@ -611,13 +600,13 @@ class PeticionesControlador
      * Otros: concepto/semestres; Necesidad: sus propios campos), consultados con el modelo real de
      * cada uno (obtenerModeloPorOrigen()) — nunca se fuerza un origen a las columnas de otro.
      */
-    private function construirFilasPorOrigen(string $origen, array $itemsCrudos, int $anioPresupuestalId, string $estado): array
+    private function construirFilasPorOrigen(string $origen, array $itemsCrudos, int $anioPresupuestalId, string $estado, string $rutaVolverEditar = 'index.php?ruta=peticiones'): array
     {
         if (in_array($origen, self::ORIGENES_GASTO, true)) {
             return [
                 'columnas' => ['Dependencia', 'Sede', 'Línea estratégica', 'Motor de desarrollo', 'Proyecto PDI', 'Objeto/Proyecto (PAA)', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Meses', 'Techo presupuestal'],
                 'claves' => ['dependencia', 'sede', 'linea', 'motor', 'proyecto', 'objeto_proyecto_paa', 'actividad', 'rubro', 'insumo', 'cantidad', 'costo_unitario', 'valor_total', 'meses', 'techo'],
-                'filas' => $this->construirFilasDetalleCompleto($itemsCrudos, $anioPresupuestalId, $estado),
+                'filas' => $this->construirFilasDetalleCompleto($itemsCrudos, $anioPresupuestalId, $estado, $rutaVolverEditar),
             ];
         }
 
@@ -639,6 +628,7 @@ class PeticionesControlador
                 'tipo' => $item['tipo'] ?? $registro['tipo'] ?? '',
                 'ruta_ver' => $this->construirRutaVer($origen, (int) $item['origen_id'], $estado),
                 'ruta_origen' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones',
+                'ruta_editar' => $this->construirRutaEditar($origen, (int) $item['origen_id'], $rutaVolverEditar),
                 'puede_editar' => $this->esPropietarioActualDeItem($item) || $this->esSuperAdminRaiz(),
             ];
 
@@ -740,11 +730,11 @@ class PeticionesControlador
     }
 
     /**
-     * Guarda o elimina, de verdad, el ítem editado in-place en el landing de "Ver" — solo si quien
-     * actúa es su propio dueño (mismo criterio que ya usa Perfil de proyectos: usuario_id de la
-     * sesión igual al usuario_id del registro), o el superadministrador. Reutiliza el modelo real
-     * de cada origen (Gasto::actualizar()/eliminar(), Necesidad::actualizar()/eliminar()), nunca
-     * reescribe esa lógica.
+     * Elimina, de verdad, el ítem seleccionado en el landing de "Ver" — solo si quien actúa es su
+     * propio dueño (mismo criterio que ya usa Perfil de proyectos: usuario_id de la sesión igual al
+     * usuario_id del registro), o el superadministrador. Reutiliza el modelo real de cada origen
+     * (Gasto::eliminar(), Necesidad::eliminar(), etc.), nunca reescribe esa lógica. La edición ya no
+     * es in-place aquí: "Editar" navega al formulario real del módulo dueño (ver construirRutaEditar()).
      */
     private function procesarAccionCeldaTipoDetalle(string $origen): string
     {
@@ -766,42 +756,11 @@ class PeticionesControlador
             return 'No tienes permiso para modificar este ítem.';
         }
 
-        if (($_POST['accion'] ?? '') === 'eliminar_celda') {
-            if (!method_exists($modelo, 'eliminar')) {
-                return 'Este origen no admite eliminar desde aquí.';
-            }
-            $modelo->eliminar($id);
-
-            return '';
+        if (!method_exists($modelo, 'eliminar')) {
+            return 'Este origen no admite eliminar desde aquí.';
         }
 
-        $definicion = self::CAMPOS_EDITABLES[$origen] ?? [];
-        if (empty($definicion) || !method_exists($modelo, 'actualizar')) {
-            return 'Este origen no admite edición desde aquí.';
-        }
-
-        // Se parte del registro real completo (todos sus campos, incluidos los FK/fijos que
-        // actualizar() exige pero que este landing no edita) y solo se sobrescriben los campos
-        // realmente editables — evita reconstruir a mano cada campo fijo por origen.
-        $datos = $registro;
-
-        foreach ($definicion as $campo) {
-            $valor = trim((string) ($_POST[$campo['clave']] ?? ''));
-            if ($campo['requerido'] && $valor === '') {
-                return 'El campo "' . $campo['etiqueta'] . '" es obligatorio.';
-            }
-            $datos[$campo['clave']] = $campo['tipo'] === 'number' ? (float) str_replace(',', '.', $valor) : $valor;
-        }
-
-        if (isset($datos['cantidad'], $datos['costo_unitario']) && $origen === 'gasto_principal') {
-            $datos['valor_total'] = $datos['cantidad'] * $datos['costo_unitario'];
-        }
-
-        if (($datos['rubro_id'] ?? null) === '' || ($datos['rubro_id'] ?? null) === 0) {
-            $datos['rubro_id'] = null;
-        }
-
-        $modelo->actualizar($id, $datos);
+        $modelo->eliminar($id);
 
         return '';
     }
@@ -985,7 +944,7 @@ class PeticionesControlador
         return $fila[$campo] ?? null;
     }
 
-    private function construirFilasDetalleCompleto(array $aprobados, int $anioPresupuestalId, string $estado = 'aprobada'): array
+    private function construirFilasDetalleCompleto(array $aprobados, int $anioPresupuestalId, string $estado = 'aprobada', string $rutaVolverEditar = 'index.php?ruta=peticiones'): array
     {
         // El PAC (línea de "Meses" en la vista de gráfica del landing) agrupa por nombre de mes,
         // no por el número crudo que guarda la tabla — sin esta conversión "1,2,3" nunca calzaría
@@ -1067,6 +1026,7 @@ class PeticionesControlador
                 'techo' => $techo !== null ? (float) $techo : null,
                 'ruta_ver' => $this->construirRutaVer($item['origen'], (int) $item['origen_id'], $estado),
                 'ruta_origen' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones',
+                'ruta_editar' => $this->construirRutaEditar($item['origen'], (int) $item['origen_id'], $rutaVolverEditar),
                 'puede_editar' => $this->esPropietarioActualDeItem($item) || $this->esSuperAdminRaiz(),
             ];
 
@@ -1080,11 +1040,6 @@ class PeticionesControlador
                 $fila['insumo'] = $gastoOriginal['insumo'] ?? '—';
                 $fila['cantidad'] = isset($gastoOriginal['cantidad']) ? (float) $gastoOriginal['cantidad'] : $fila['cantidad'];
                 $fila['costo_unitario'] = isset($gastoOriginal['costo_unitario']) ? (float) $gastoOriginal['costo_unitario'] : null;
-                // 'meses_crudo' (los números tal cual los guarda la BD, ej. "1,2,3") es lo que
-                // necesita el formulario de edición in-place; 'meses' (Ene, Feb, Mar) es solo para
-                // mostrar en la tabla y para que el PAC de la vista de gráfica pueda agrupar por
-                // nombre de mes.
-                $fila['meses_crudo'] = $gastoOriginal['meses'] ?? '';
                 $fila['meses'] = $gastoOriginal['meses'] !== ''
                     ? implode(', ', array_map(static fn ($mes) => $nombresMeses[(int) $mes] ?? $mes, explode(',', $gastoOriginal['meses'])))
                     : '—';
@@ -2295,6 +2250,36 @@ class PeticionesControlador
         ];
 
         return $mapa[$origen] ?? 'index.php?ruta=peticiones';
+    }
+
+    /**
+     * URL al formulario de edición REAL del módulo dueño de este origen (mismo `?editar_id=` que
+     * ya usa cada controlador real: Gasto, Extensión, Postgrado, Unisalud, Convenios, Solicitudes,
+     * Perfil de proyectos) — no una edición in-place de celdas. `$rutaVolver` deja el botón "Volver"
+     * de ese formulario apuntando de regreso a este mismo landing (tipo-detalle), no al índice
+     * plano del módulo.
+     */
+    private function construirRutaEditar(string $origen, int $origenId, string $rutaVolver): string
+    {
+        $volver = '&volver=' . urlencode($rutaVolver);
+
+        return match ($origen) {
+            'gasto_principal' => 'index.php?ruta=gastos&editar_id=' . $origenId . $volver,
+            'gasto_extension' => 'index.php?ruta=extension&editar_id=' . $origenId . '&tab=egresos' . $volver,
+            'ingreso_extension' => 'index.php?ruta=extension&editar_id=' . $origenId . '&tab=ingresos' . $volver,
+            'gasto_postgrado' => 'index.php?ruta=postgrado&editar_id=' . $origenId . '&tab=egresos' . $volver,
+            'ingreso_postgrado' => 'index.php?ruta=postgrado&editar_id=' . $origenId . '&tab=ingresos' . $volver,
+            'gasto_unisalud' => 'index.php?ruta=unisalud&editar_id=' . $origenId . '&tab=egresos' . $volver,
+            'ingreso_unisalud' => 'index.php?ruta=unisalud&editar_id=' . $origenId . '&tab=ingresos' . $volver,
+            'gasto_sin_excedentes' => 'index.php?ruta=sin-excedentes&editar_id=' . $origenId . '&tab=egresos' . $volver,
+            'ingreso_sin_excedentes' => 'index.php?ruta=sin-excedentes&editar_id=' . $origenId . '&tab=ingresos' . $volver,
+            'arl' => 'index.php?ruta=solicitudes&editar_id=' . $origenId . '&tipo_solicitud=arl&tab=arl' . $volver,
+            'monitores' => 'index.php?ruta=solicitudes&editar_id=' . $origenId . '&tipo_solicitud=monitores&tab=monitores' . $volver,
+            'ops' => 'index.php?ruta=solicitudes&editar_id=' . $origenId . '&tipo_solicitud=ops&tab=ops' . $volver,
+            'otros' => 'index.php?ruta=solicitudes&editar_id=' . $origenId . '&tipo_solicitud=otros&tab=otros' . $volver,
+            'necesidad' => 'index.php?ruta=perfil-proyectos&editar_id=' . $origenId . $volver,
+            default => $this->construirRutaOrigen($origen),
+        };
     }
 
     private function rechazarRedireccion(): array

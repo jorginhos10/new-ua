@@ -1015,14 +1015,13 @@ document.addEventListener('DOMContentLoaded', function () {
     if (botonVistaTabla) { botonVistaTabla.addEventListener('click', activarVistaTabla); }
     if (botonVistaGrafica) { botonVistaGrafica.addEventListener('click', activarVistaGrafica); }
 
-    // --- Selección de fila + Editar/Eliminar reales (in-place, sin modal) ---
+    // --- Selección de fila + Editar (navega al formulario real) / Eliminar (real) ---
     var casillaSeleccionarTodo = document.getElementById('tdt-seleccionar-todo');
     var botonEditar = document.getElementById('tdt-boton-editar');
     var botonEliminar = document.getElementById('tdt-boton-eliminar');
     var formAccion = document.getElementById('tdt-form-accion');
     var formAccionValor = document.getElementById('tdt-form-accion-valor');
     var formOrigenId = document.getElementById('tdt-form-origen-id');
-    var editando = false;
 
     function filaSeleccionadaUnica() {
         var seleccionadas = cuerpo.querySelectorAll('.tabla-seleccion-fila:checked');
@@ -1031,9 +1030,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function actualizarBotonesSeleccion() {
         var fila = filaSeleccionadaUnica();
-        var tieneEditables = fila && fila.querySelector('td[data-editable]') && (tdtCamposEditables || []).length > 0;
-        botonEditar.disabled = editando ? false : !tieneEditables;
-        botonEliminar.disabled = editando ? false : !fila;
+        var puedeEditar = fila && fila.dataset.puedeEditar === '1' && fila.dataset.rutaEditar;
+        botonEditar.disabled = !puedeEditar;
+        botonEliminar.disabled = !fila;
         cuerpo.querySelectorAll('tr').forEach(function (tr) {
             tr.classList.toggle('fila-seleccionada', tr.querySelector('.tabla-seleccion-fila:checked') !== null);
         });
@@ -1058,90 +1057,21 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    function infoCampo(clave) {
-        return (tdtCamposEditablesInfo || []).find(function (c) { return c.clave === clave; });
-    }
-
-    function iniciarEdicion(fila) {
-        editando = true;
-        actualizarBotonesSeleccion();
-
-        fila.querySelectorAll('td[data-editable]').forEach(function (celda) {
-            var clave = celda.dataset.editable;
-            var info = infoCampo(clave);
-            var valorActual = celda.textContent;
-            // Algunos campos se muestran formateados (ej. "meses" como Ene/Feb) pero se editan en
-            // su forma cruda real (ej. "1,2") — data-valor-crudo trae ese valor cuando difiere.
-            var valorParaEditar = celda.dataset.valorCrudo !== undefined ? celda.dataset.valorCrudo : valorActual;
-            celda.dataset.valorOriginal = valorActual;
-            celda.classList.add('celda-editando');
-
-            var input = document.createElement(info && info.tipo === 'textarea' ? 'textarea' : 'input');
-            if (input.tagName === 'INPUT') {
-                input.type = (info && info.tipo === 'number') ? 'number' : 'text';
-                if (info && info.tipo === 'number') { input.step = 'any'; }
-            }
-            input.value = valorParaEditar === '—' ? '' : valorParaEditar;
-            celda.textContent = '';
-            celda.appendChild(input);
-        });
-
-        var primerInput = fila.querySelector('td.celda-editando input, td.celda-editando textarea');
-        if (primerInput) { primerInput.focus(); }
-
-        // Los botones Editar/Eliminar de la topbar se reutilizan como Guardar/Cancelar mientras
-        // se edita, para no introducir una barra de acciones aparte.
-        botonEditar.title = 'Guardar cambios';
-        botonEliminar.title = 'Cancelar edición';
-    }
-
-    function guardarEdicion(fila) {
-        formAccionValor.value = 'guardar_celda';
-        formOrigenId.value = fila.dataset.origenId;
-        fila.querySelectorAll('td.celda-editando').forEach(function (celda) {
-            var clave = celda.dataset.editable;
-            var input = celda.querySelector('input, textarea');
-            var campoOculto = document.getElementById('tdt-form-campo-' + clave);
-            if (campoOculto && input) { campoOculto.value = input.value; }
-        });
-        formAccion.submit();
-    }
-
-    function cancelarEdicion(fila) {
-        fila.querySelectorAll('td.celda-editando').forEach(function (celda) {
-            celda.classList.remove('celda-editando');
-            celda.textContent = celda.dataset.valorOriginal || '';
-        });
-        editando = false;
-        botonEditar.title = 'Editar';
-        botonEliminar.title = 'Eliminar';
-        actualizarBotonesSeleccion();
-    }
-
     if (botonEditar) {
         botonEditar.addEventListener('click', function () {
             var fila = filaSeleccionadaUnica();
-            if (!fila) { return; }
+            if (!fila || botonEditar.disabled) { return; }
 
-            if (editando) {
-                guardarEdicion(fila);
-            } else if (!botonEditar.disabled) {
-                iniciarEdicion(fila);
-            }
+            window.location.href = fila.dataset.rutaEditar;
         });
     }
 
     if (botonEliminar) {
         botonEliminar.addEventListener('click', function () {
             var fila = filaSeleccionadaUnica();
-            if (!fila) { return; }
+            if (!fila || botonEliminar.disabled) { return; }
 
-            if (editando) {
-                cancelarEdicion(fila);
-                return;
-            }
-
-            if (botonEliminar.disabled || !window.confirm('¿Eliminar este ítem? No se puede deshacer.')) {
+            if (!window.confirm('¿Eliminar este ítem? No se puede deshacer.')) {
                 return;
             }
 

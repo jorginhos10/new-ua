@@ -3111,7 +3111,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var botonVer = document.getElementById('boton-consolidado-ver');
-    var botonEditar = document.getElementById('boton-consolidado-editar');
     var botonRedireccionar = document.getElementById('boton-consolidado-redireccionar');
     var botonArchivar = document.getElementById('boton-consolidado-archivar');
     var botonDesconsolidar = document.getElementById('boton-consolidado-desconsolidar');
@@ -3120,7 +3119,6 @@ document.addEventListener('DOMContentLoaded', function () {
     var anioIdConsolidado = barraAccionesConsolidado ? barraAccionesConsolidado.dataset.anioId : '';
 
     var modalVerConsolidado = document.getElementById('modal-ver-consolidado');
-    var modalEditarConsolidado = document.getElementById('modal-editar-consolidado');
     var modalRedireccionarConsolidado = document.getElementById('modal-redireccionar-consolidado');
 
     function obtenerSeleccionados() {
@@ -3160,15 +3158,8 @@ document.addEventListener('DOMContentLoaded', function () {
         var seleccionados = obtenerSeleccionados();
         var hay = seleccionados.length > 0;
 
-        var todosEditables = hay && seleccionados.every(function (casilla) {
-            return casilla.dataset.puedeEditar === '1';
-        });
-
         if (botonVer) {
             botonVer.disabled = !hay;
-        }
-        if (botonEditar) {
-            botonEditar.disabled = !todosEditables;
         }
         if (botonRedireccionar) {
             botonRedireccionar.disabled = !hay;
@@ -3353,97 +3344,6 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // ---- Editar (uno o varios grupos a la vez): lista con un enlace "Editar" por ítem, que
-    // navega al formulario real de su módulo de origen (con el ítem pre-cargado) y vuelve aquí. ----
-    if (botonEditar && modalEditarConsolidado) {
-        var botonCerrarEditarConsolidado = document.getElementById('boton-cerrar-modal-editar-consolidado');
-        var campoEditarTipoTexto = document.getElementById('editar-consolidado-tipo-texto');
-        var cuerpoEditarConsolidado = document.getElementById('editar-consolidado-cuerpo');
-
-        var cerrarEditarConsolidado = function () {
-            modalEditarConsolidado.classList.remove('abierto');
-        };
-
-        botonEditar.addEventListener('click', function () {
-            if (botonEditar.disabled) {
-                return;
-            }
-
-            var seleccionados = obtenerSeleccionados();
-            var items = itemsDeSeleccion(seleccionados);
-            var tipos = tiposDeSeleccion(seleccionados);
-            var volver = encodeURIComponent(window.location.href);
-
-            campoEditarTipoTexto.textContent = tipos.join(', ');
-            cuerpoEditarConsolidado.innerHTML = '';
-
-            if (items.length === 0) {
-                var filaVacia = document.createElement('tr');
-                filaVacia.innerHTML = '<td colspan="4">No hay elementos.</td>';
-                cuerpoEditarConsolidado.appendChild(filaVacia);
-            }
-
-            items.forEach(function (item) {
-                var fila = document.createElement('tr');
-
-                var celdaTipo = document.createElement('td');
-                celdaTipo.textContent = item.tipo || '—';
-                fila.appendChild(celdaTipo);
-
-                var celdaDetalle = document.createElement('td');
-                celdaDetalle.textContent = item.dependencia || item.detalle || '—';
-                fila.appendChild(celdaDetalle);
-
-                var celdaValor = document.createElement('td');
-                celdaValor.textContent = item.valor !== null && item.valor !== undefined && item.valor !== ''
-                    ? '$ ' + Number(item.valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                    : '—';
-                fila.appendChild(celdaValor);
-
-                var celdaAccion = document.createElement('td');
-
-                if (item.puede_editar) {
-                    var mapaTab = {
-                        gasto_extension: 'egresos', ingreso_extension: 'ingresos',
-                        gasto_postgrado: 'egresos', ingreso_postgrado: 'ingresos',
-                        gasto_unisalud: 'egresos', ingreso_unisalud: 'ingresos',
-                        gasto_sin_excedentes: 'egresos', ingreso_sin_excedentes: 'ingresos',
-                    };
-                    var mapaTipoSolicitud = { arl: 'arl', monitores: 'monitores', ops: 'ops', otros: 'otros' };
-
-                    var enlace = document.createElement('a');
-                    var rutaOrigen = item.ruta_origen || 'index.php?ruta=peticiones';
-                    var separador = rutaOrigen.indexOf('?') === -1 ? '?' : '&';
-                    enlace.href = rutaOrigen + separador + 'editar_id=' + encodeURIComponent(item.origen_id)
-                        + '&volver=' + volver
-                        + (mapaTab[item.origen] ? '&tab=' + mapaTab[item.origen] : '')
-                        + (mapaTipoSolicitud[item.origen] ? '&tipo_solicitud=' + mapaTipoSolicitud[item.origen] : '');
-                    enlace.className = 'boton-accion boton-accion-editar';
-                    enlace.textContent = 'Editar';
-                    celdaAccion.appendChild(enlace);
-                } else {
-                    celdaAccion.textContent = '—';
-                }
-
-                fila.appendChild(celdaAccion);
-
-                cuerpoEditarConsolidado.appendChild(fila);
-            });
-
-            modalEditarConsolidado.classList.add('abierto');
-        });
-
-        if (botonCerrarEditarConsolidado) {
-            botonCerrarEditarConsolidado.addEventListener('click', cerrarEditarConsolidado);
-        }
-
-        modalEditarConsolidado.addEventListener('click', function (evento) {
-            if (evento.target === modalEditarConsolidado) {
-                cerrarEditarConsolidado();
-            }
-        });
-    }
-
     // ---- Redireccionar (uno o varios grupos a la vez) ----
     if (botonRedireccionar && modalRedireccionarConsolidado) {
         var botonCerrarRedireccionarConsolidado = document.getElementById('boton-cerrar-modal-redireccionar-consolidado');
@@ -3594,7 +3494,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (evento.key !== 'Escape') {
             return;
         }
-        [modalVerConsolidado, modalEditarConsolidado, modalRedireccionarConsolidado].forEach(function (modal) {
+        [modalVerConsolidado, modalRedireccionarConsolidado].forEach(function (modal) {
             if (modal) {
                 modal.classList.remove('abierto');
             }

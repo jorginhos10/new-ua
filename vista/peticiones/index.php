@@ -40,7 +40,6 @@ require __DIR__ . '/../parciales/encabezado.php';
             <?php if ($vista === 'consolidado'): ?>
             <div class="grupo-acciones-encabezado" id="barra-acciones-consolidado" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
                 <button type="button" id="boton-consolidado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
-                <button type="button" id="boton-consolidado-editar" class="boton-accion boton-accion-editar" disabled>Editar</button>
                 <button type="button" id="boton-consolidado-desconsolidar" class="boton-accion boton-accion-eliminar" disabled>Desconsolidar</button>
                 <button type="button" id="boton-consolidado-archivar" class="boton-accion boton-accion-editar" disabled>Archivar</button>
                 <button type="button" id="boton-consolidado-redireccionar" class="boton-agregar" disabled>Enviar</button>
@@ -287,7 +286,6 @@ require __DIR__ . '/../parciales/encabezado.php';
                                 data-tipo="<?= htmlspecialchars($grupo['tipo']) ?>"
                                 data-anio-id="<?= (int) $anioSeleccionadoId ?>"
                                 data-items="<?= htmlspecialchars(json_encode($grupo['items'])) ?>"
-                                data-puede-editar="<?= $grupo['puede_editar'] ? '1' : '0' ?>"
                                 data-vista-agrupada="1"
                             >
                         </td>
@@ -439,31 +437,6 @@ require __DIR__ . '/../parciales/encabezado.php';
                         </tr>
                     </thead>
                     <tbody id="ver-consolidado-cuerpo"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div id="modal-editar-consolidado" class="modal-fondo" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
-        <div class="modal-caja">
-            <div class="modal-cabecera">
-                <h2>Editar <span id="editar-consolidado-tipo-texto"></span></h2>
-                <button type="button" id="boton-cerrar-modal-editar-consolidado" class="modal-cerrar" aria-label="Cerrar">&times;</button>
-            </div>
-
-            <p class="texto-atenuado">Cada ítem se edita en el formulario real de su módulo de origen, con todos sus campos. Solo puedes editar los ítems que hoy son tuyos (o cualquiera si eres superadmin).</p>
-
-            <div class="tabla-scroll">
-                <table class="tabla-usuarios tabla-consolidado-detalle">
-                    <thead>
-                        <tr>
-                            <th>Tipo</th>
-                            <th>Detalle</th>
-                            <th>Valor</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="editar-consolidado-cuerpo"></tbody>
                 </table>
             </div>
         </div>

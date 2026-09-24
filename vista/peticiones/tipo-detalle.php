@@ -3,14 +3,15 @@
  * Landing único de "Ver" en Peticiones: la tabla real de un origen (mismo estado/bandeja en la
  * que estaba el ítem clicado), con esa fila resaltada. Estructura y mecánica (buscar, filtrar por
  * columna, ordenar, ocultar/redimensionar columnas, vista de gráfica) portadas literalmente del
- * prototipo Dev > Tabla (vista/dev/pruebas/tabla.php) — con Editar/Eliminar reales (no el demo en
- * memoria del prototipo), reutilizando el modelo real de cada origen vía
+ * prototipo Dev > Tabla (vista/dev/pruebas/tabla.php). "Editar" navega al formulario real del
+ * módulo dueño de la fila (ruta_editar, con ?editar_id= y volver de regreso a este landing);
+ * "Eliminar" sí actúa aquí mismo, reutilizando el modelo real de cada origen vía
  * PeticionesControlador::procesarAccionCeldaTipoDetalle().
  *
- * Variables esperadas del controlador: $columnas, $clavesFila, $filasCompletas, $anchosColumna,
- * $indicesOcultosPorDefecto, $resaltarId, $origen, $estado, $anioSeleccionadoId, $tituloPagina,
- * $rutaVolver, $camposEditables, $error, $dependenciaFiltro (si "Ver" vino de una fila-grupo de
- * Pendientes, ej. Gastos por dependencia).
+ * Variables esperadas del controlador: $columnas, $clavesFila, $filasCompletas (cada fila incluye
+ * 'ruta_editar' y 'puede_editar'), $anchosColumna, $indicesOcultosPorDefecto, $resaltarId, $origen,
+ * $estado, $anioSeleccionadoId, $tituloPagina, $rutaVolver, $error, $dependenciaFiltro (si "Ver"
+ * vino de una fila-grupo de Pendientes, ej. Gastos por dependencia).
  */
 require __DIR__ . '/../parciales/encabezado.php';
 
@@ -152,22 +153,19 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
                 <?php foreach ($filasCompletas as $filaCompleta): ?>
                 <tr
                     data-origen-id="<?= (int) $filaCompleta['origen_id'] ?>"
+                    data-ruta-editar="<?= htmlspecialchars($filaCompleta['ruta_editar'] ?? '') ?>"
+                    data-puede-editar="<?= !empty($filaCompleta['puede_editar']) ? '1' : '0' ?>"
                     class="<?= (int) $filaCompleta['origen_id'] === (int) $resaltarId ? 'fila-resaltada' : '' ?>"
                 >
                     <td class="col-seleccion"><input type="checkbox" class="tabla-seleccion-fila"></td>
                     <?php foreach ($clavesFila as $indice => $clave): ?>
                     <?php
                     $valorCelda = $filaCompleta[$clave] ?? '—';
-                    $esEditable = !empty($camposEditables) && in_array($clave, array_column($camposEditables, 'clave'), true);
                     if (is_float($valorCelda)) {
                         $valorCelda = number_format($valorCelda, 2, ',', '.');
                     }
-                    // Algunos campos se muestran formateados para lectura/gráfica (ej. "meses" como
-                    // Ene/Feb) pero deben editarse en su forma cruda (ej. "1,2") — 'meses_crudo' es
-                    // ese valor real, si existe para esta clave.
-                    $valorCrudo = $filaCompleta[$clave . '_crudo'] ?? $valorCelda;
                     ?>
-                    <td<?= $esEditable ? ' data-editable="' . htmlspecialchars($clave) . '" data-valor-crudo="' . htmlspecialchars((string) $valorCrudo) . '"' : '' ?>><?= htmlspecialchars((string) $valorCelda) ?></td>
+                    <td><?= htmlspecialchars((string) $valorCelda) ?></td>
                     <?php endforeach; ?>
                 </tr>
                 <?php endforeach; ?>
@@ -187,14 +185,9 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
 <form method="POST" id="tdt-form-accion" action="index.php?ruta=peticiones-tipo-detalle&estado=<?= urlencode($estado) ?>&origen=<?= urlencode($origen) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&resaltar_id=<?= (int) $resaltarId ?><?= $dependenciaFiltro !== '' ? '&dependencia=' . urlencode($dependenciaFiltro) : '' ?>" style="display:none;">
     <input type="hidden" name="accion" id="tdt-form-accion-valor" value="">
     <input type="hidden" name="origen_id" id="tdt-form-origen-id" value="">
-    <?php foreach ($camposEditables as $campo): ?>
-    <input type="hidden" name="<?= htmlspecialchars($campo['clave']) ?>" id="tdt-form-campo-<?= htmlspecialchars($campo['clave']) ?>" value="">
-    <?php endforeach; ?>
 </form>
 
 <script>
-var tdtCamposEditables = <?php echo json_encode(array_column($camposEditables, 'clave')); ?>;
-var tdtCamposEditablesInfo = <?php echo json_encode($camposEditables, JSON_UNESCAPED_UNICODE); ?>;
 var tdtColumnas = <?php echo json_encode($columnas, JSON_UNESCAPED_UNICODE); ?>;
 var tdtClavesFila = <?php echo json_encode($clavesFila, JSON_UNESCAPED_UNICODE); ?>;
 var tdtNamespace = <?php echo json_encode($origen . '_' . $estado); ?>;
