@@ -159,7 +159,11 @@ class Gasto
         $consulta = $this->db->prepare(
             "SELECT COALESCE(SUM(valor_total), 0) FROM gastos
              WHERE anio_presupuestal_id = :anio_presupuestal_id
-                AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')"
+                AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = gastos.id AND pa.accion = 'expediente'
+                )"
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
 
@@ -169,8 +173,12 @@ class Gasto
     public function obtenerTotalPorAnioYDependencia(int $anioPresupuestalId, string $dependenciaNombre): float
     {
         $consulta = $this->db->prepare(
-            'SELECT COALESCE(SUM(valor_total), 0) FROM gastos
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND dependencia = :dependencia'
+            "SELECT COALESCE(SUM(valor_total), 0) FROM gastos
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND dependencia = :dependencia
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = gastos.id AND pa.accion = 'expediente'
+                )"
         );
         $consulta->execute([
             'anio_presupuestal_id' => $anioPresupuestalId,
@@ -183,9 +191,13 @@ class Gasto
     public function obtenerTotalesPorDependencia(int $anioPresupuestalId): array
     {
         $consulta = $this->db->prepare(
-            'SELECT dependencia, COALESCE(SUM(valor_total), 0) AS total FROM gastos
+            "SELECT dependencia, COALESCE(SUM(valor_total), 0) AS total FROM gastos
              WHERE anio_presupuestal_id = :anio_presupuestal_id
-             GROUP BY dependencia'
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = gastos.id AND pa.accion = 'expediente'
+                )
+             GROUP BY dependencia"
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
 
@@ -221,6 +233,10 @@ class Gasto
              FROM gastos g
              LEFT JOIN dependencias dh ON dh.id = g.dependencia_hija_id
              WHERE g.anio_presupuestal_id = :anio_presupuestal_id
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion = 'expediente'
+                )
              GROUP BY g.dependencia"
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
@@ -258,6 +274,10 @@ class Gasto
              FROM gastos g
              LEFT JOIN dependencias dh ON dh.id = g.dependencia_hija_id
              WHERE g.anio_presupuestal_id = :anio_presupuestal_id
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion = 'expediente'
+                )
              GROUP BY g.dependencia"
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
@@ -294,7 +314,11 @@ class Gasto
                 ), 0)
              FROM gastos g
              LEFT JOIN dependencias dh ON dh.id = g.dependencia_hija_id
-             WHERE g.anio_presupuestal_id = :anio_presupuestal_id AND g.dependencia = :dependencia"
+             WHERE g.anio_presupuestal_id = :anio_presupuestal_id AND g.dependencia = :dependencia
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion = 'expediente'
+                )"
         );
         $consulta->execute([
             'anio_presupuestal_id' => $anioPresupuestalId,

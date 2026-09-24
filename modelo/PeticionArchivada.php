@@ -124,6 +124,24 @@ class PeticionArchivada
     }
 
     /**
+     * Cambia el `accion` de una fila ya existente sin tocar el resto de sus datos — usado para
+     * "Mandar a Expediente" (archivada -> expediente) y para el "Restaurar" del superadmin sobre un
+     * ítem en Expediente (expediente -> archivada, vuelve al Archivado del dueño original).
+     */
+    public function cambiarAccion(string $origen, int $origenId, string $nuevaAccion): bool
+    {
+        $consulta = $this->db->prepare(
+            'UPDATE peticiones_archivadas SET accion = :accion WHERE origen = :origen AND origen_id = :origen_id'
+        );
+
+        return $consulta->execute([
+            'accion' => $nuevaAccion,
+            'origen' => $origen,
+            'origen_id' => $origenId,
+        ]);
+    }
+
+    /**
      * Redirecciona ítems puntuales (por origen+origen_id), en vez de un tipo completo — permite
      * redireccionar una selección arbitraria de ítems consolidados, de uno o varios tipos a la vez.
      */

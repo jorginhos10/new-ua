@@ -1201,6 +1201,61 @@ input[type="file"]::-webkit-file-upload-button:hover {
     color: var(--color-exito-texto);
 }
 
+.badge-archivado {
+    background: var(--color-gris-fondo);
+    color: var(--color-gris-texto);
+}
+
+.badge-expediente {
+    background: var(--color-naranja-fondo);
+    color: var(--color-naranja-texto);
+}
+
+/* Filtro de texto de las tarjetas agrupadas de Archivados/Enviadas: vive en la zona 3 de
+   barra-modulo.php (ver $barraAccionesExtra), a la izquierda de los botones de ícono — no en su
+   propia fila, para no quitarle espacio a la tabla. */
+.campo-filtro-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 2.1rem;
+    padding: 0 0.65rem;
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-chico);
+    color: var(--color-texto-tenue);
+}
+
+.campo-filtro-inline svg {
+    flex-shrink: 0;
+}
+
+.campo-filtro-inline input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.8rem;
+    font-family: inherit;
+    color: var(--color-texto);
+    width: 190px;
+}
+
+/* Trunca con "…" en vez de estirar la columna — usado junto con table-layout: fixed en las tablas
+   agrupadas de Archivados/Enviadas, cuyas columnas ya tienen ancho fijo por <colgroup>. */
+.celda-truncar {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Sin esto, .tabla-usuarios (table-layout: auto, sin anchos propios) deja que el navegador reparta
+   el ancho sobrante de forma dispareja entre Dependencia/Remitente/Estado cuando hay poco texto —
+   huecos enormes entre columnas. table-layout: fixed + el <colgroup> de cada tabla reparte el ancho
+   de forma predecible. */
+#tabla-archivado-agrupado,
+#tabla-enviado-agrupado {
+    table-layout: fixed;
+}
+
 /* Formulario de necesidades */
 
 .form-necesidad {

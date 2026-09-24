@@ -80,6 +80,19 @@ class PeticionesControlador
 
     private const ORIGENES_AUTOGESTION = ['gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes', 'necesidad'];
 
+    /**
+     * Pares gasto/ingreso de un mismo módulo de Autogestión (Extensión/Postgrado/Unisalud/
+     * Convenios) — el landing de "Ver" (tipoDetalle()) los muestra en pestañas Egresos/Ingresos
+     * dentro de una sola página, igual que ya hace el módulo real (ej. index.php?ruta=extension&
+     * tab=egresos|ingresos), en vez de ser dos orígenes sin relación entre sí.
+     */
+    private const PARES_GASTO_INGRESO = [
+        'gasto_extension' => 'ingreso_extension',
+        'gasto_postgrado' => 'ingreso_postgrado',
+        'gasto_unisalud' => 'ingreso_unisalud',
+        'gasto_sin_excedentes' => 'ingreso_sin_excedentes',
+    ];
+
     private const TABLAS_ORIGEN = [
         'arl' => 'solicitudes_arl',
         'monitores' => 'solicitudes_monitores',
@@ -229,6 +242,14 @@ class PeticionesControlador
                 [$errorEnviarArch, $exitoEnviarArch] = $this->enviarArchivadoGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorEnviarArch;
                 $_SESSION['peticiones_flash_exito'] = $exitoEnviarArch;
+            } elseif ($accion === 'restaurar_archivado_grupo') {
+                [$errorRestaurarArch, $exitoRestaurarArch] = $this->restaurarArchivadoGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorRestaurarArch;
+                $_SESSION['peticiones_flash_exito'] = $exitoRestaurarArch;
+            } elseif ($accion === 'mandar_expediente_grupo') {
+                [$errorExpediente, $exitoExpediente] = $this->mandarExpedienteGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorExpediente;
+                $_SESSION['peticiones_flash_exito'] = $exitoExpediente;
             } elseif ($accion === 'consolidar_enviado') {
                 [$errorConsolidarEnv, $exitoConsolidarEnv] = $this->consolidarEnviadoGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorConsolidarEnv;
@@ -353,16 +374,41 @@ class PeticionesControlador
             ? $this->construirConsolidadoUnificado($aprobados, $anioSeleccionadoId)
             : [];
 
-        $archivados = $vista === 'archivar' ? $this->modeloArchivada->obtenerPorAccion('archivada') : [];
-        $archivados = $this->filtrarPorDependencia($archivados, $dependenciasPermitidas);
-        foreach ($archivados as &$itemArchivado) {
-            $itemArchivado['ruta_ver'] = $this->construirRutaVer($itemArchivado['origen'], (int) $itemArchivado['origen_id'], 'archivada');
+        // Fuera de "Auditar", el superadmin solo ve SU propia dependencia en Archivados/Enviadas —
+        // igual que cualquier otro usuario — más, exclusivamente en Archivados, todo lo que esté "En
+        // Expediente" (un registro centralizado que no depende de dependencia). Con Auditar
+        // encendido, ve todo, como ya pasa hoy en Pendientes/Consolidado.
+        $dependenciasArchivoEnviado = ($esSuperAdminRaiz && !$modoJerarquia)
+            ? $this->obtenerDependenciaPropiaSolamente()
+            : $dependenciasPermitidas;
+
+        $archivados = [];
+        if ($vista === 'archivar') {
+            $archivados = $this->modeloArchivada->obtenerPorAccion('archivada');
+            $archivados = $this->filtrarPorDependencia($archivados, $dependenciasArchivoEnviado);
+            foreach ($archivados as &$itemArchivado) {
+                $itemArchivado['estado_archivo'] = 'archivada';
+                $itemArchivado['ruta_ver'] = $this->construirRutaVer($itemArchivado['origen'], (int) $itemArchivado['origen_id'], 'archivada');
+            }
+            unset($itemArchivado);
+
+            if ($esSuperAdminRaiz) {
+                $expediente = $this->modeloArchivada->obtenerPorAccion('expediente');
+                foreach ($expediente as &$itemExpediente) {
+                    $itemExpediente['estado_archivo'] = 'expediente';
+                    $itemExpediente['ruta_ver'] = $this->construirRutaVer($itemExpediente['origen'], (int) $itemExpediente['origen_id'], 'expediente');
+                }
+                unset($itemExpediente);
+                $archivados = array_merge($archivados, $expediente);
+            }
         }
-        unset($itemArchivado);
 
         $enviadas = ($vista === 'enviadas' && $anioSeleccionadoId > 0)
-            ? $this->construirEnviadas($anioSeleccionadoId, $dependenciasPermitidas)
+            ? $this->construirEnviadas($anioSeleccionadoId, $dependenciasArchivoEnviado)
             : [];
+
+        $archivadosPorGrupo = $vista === 'archivar' ? $this->agruparPorTipoDependenciaYRemitente($archivados, 'archivada') : [];
+        $enviadasPorGrupo = $vista === 'enviadas' ? $this->agruparPorTipoDependenciaYRemitente($enviadas, 'enviada') : [];
 
         $dependenciasSugeridas = $this->modeloDependencia->obtenerActivasParaEnvio();
         $roles = $this->modeloRol->obtenerTodos();
@@ -408,6 +454,14 @@ class PeticionesControlador
         if ($estado === 'aprobada' || $estado === 'archivada') {
             $items = $this->modeloArchivada->obtenerPorAccion($estado);
             $items = $this->filtrarPorDependencia($items, $dependenciasPermitidas);
+
+            return array_values(array_filter($items, static fn (array $item): bool => $item['origen'] === $origen));
+        }
+
+        // "En Expediente" es un registro centralizado (ver tipoDetalle(), ya validado que solo el
+        // superadmin llega aquí) — nunca se filtra por dependencia.
+        if ($estado === 'expediente') {
+            $items = $this->modeloArchivada->obtenerPorAccion('expediente');
 
             return array_values(array_filter($items, static fn (array $item): bool => $item['origen'] === $origen));
         }
@@ -481,14 +535,43 @@ class PeticionesControlador
         // grupo — no todos los pendientes del origen mezclados con los de otras dependencias.
         $dependenciaFiltro = trim($_GET['dependencia'] ?? '');
 
-        if (!in_array($estado, ['pendiente', 'aprobada', 'archivada', 'enviada'], true) || !isset(self::TABLAS_ORIGEN[$origen])) {
+        if (!in_array($estado, ['pendiente', 'aprobada', 'archivada', 'enviada', 'expediente'], true) || !isset(self::TABLAS_ORIGEN[$origen])) {
             header('Location: index.php?ruta=peticiones');
             exit;
         }
 
+        // "En Expediente" es un registro centralizado exclusivo del superadmin — cualquier otro
+        // usuario pidiendo esto se trata igual que un origen inválido.
+        if ($estado === 'expediente' && !$this->esSuperAdminRaiz()) {
+            header('Location: index.php?ruta=peticiones');
+            exit;
+        }
+
+        // Si el origen pedido es uno de los pares gasto/ingreso de Autogestión, esta página se ve
+        // con pestañas Egresos/Ingresos (igual que el módulo real) — $origenGasto/$origenIngreso
+        // quedan fijos para construir esos dos enlaces; $origen se resuelve al lado activo según
+        // ?tab= (o, si no viene, según por cuál de los dos se entró).
+        $origenGasto = isset(self::PARES_GASTO_INGRESO[$origen]) ? $origen : (array_search($origen, self::PARES_GASTO_INGRESO, true) ?: null);
+        $origenIngreso = $origenGasto !== null ? self::PARES_GASTO_INGRESO[$origenGasto] : null;
+        $tabActivo = null;
+
+        if ($origenGasto !== null) {
+            $tabSolicitado = $_GET['tab'] ?? null;
+            $tabActivo = $tabSolicitado === 'ingresos' || $tabSolicitado === 'egresos'
+                ? $tabSolicitado
+                : ($origen === $origenIngreso ? 'ingresos' : 'egresos');
+            $origen = $tabActivo === 'ingresos' ? $origenIngreso : $origenGasto;
+        }
+
         $aniosActivos = $this->modeloAnio->obtenerActivos();
         $anioSeleccionadoId = (int) ($_GET['anio_id'] ?? ($aniosActivos[0]['id'] ?? 0));
-        $dependenciasPermitidas = $this->obtenerDependenciasPermitidas();
+
+        // Mismo límite que ya aplican las tarjetas de Archivados/Enviadas (ver index()): el
+        // superadmin, con Auditar apagado, solo puede "Ver" lo de su propia dependencia — así "Ver"
+        // nunca revela más de lo que la tarjeta ya mostró.
+        $dependenciasPermitidas = (in_array($estado, ['archivada', 'enviada'], true) && $this->esSuperAdminRaiz() && empty($_SESSION['modo_auditoria']))
+            ? $this->obtenerDependenciaPropiaSolamente()
+            : $this->obtenerDependenciasPermitidas();
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = $this->procesarAccionCeldaTipoDetalle($origen);
@@ -545,7 +628,7 @@ class PeticionesControlador
         }
 
         $usuarioActual = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
-        $etiquetasEstado = ['pendiente' => 'Pendientes', 'aprobada' => 'Consolidado', 'archivada' => 'Archivados', 'enviada' => 'Enviadas'];
+        $etiquetasEstado = ['pendiente' => 'Pendientes', 'aprobada' => 'Consolidado', 'archivada' => 'Archivados', 'enviada' => 'Enviadas', 'expediente' => 'Expediente'];
         $etiquetasOrigen = [
             'arl' => 'ARL', 'monitores' => 'Monitores', 'ops' => 'OPS', 'otros' => 'Petición',
             'necesidad' => 'Perfil de proyectos', 'gasto_principal' => 'Gasto', 'gasto_extension' => 'Extensión',
@@ -558,7 +641,29 @@ class PeticionesControlador
             $tituloPagina .= ' — ' . $dependenciaFiltro;
         }
 
-        $rutaVolver = 'index.php?ruta=peticiones&vista=' . ($estado === 'pendiente' ? 'pendientes' : ($estado === 'aprobada' ? 'consolidado' : ($estado === 'archivada' ? 'archivar' : 'enviadas')));
+        $rutaVolver = 'index.php?ruta=peticiones&vista=' . match ($estado) {
+            'pendiente' => 'pendientes',
+            'aprobada' => 'consolidado',
+            'archivada', 'expediente' => 'archivar',
+            default => 'enviadas',
+        };
+
+        // Pestañas Egresos/Ingresos cuando el origen es uno de los pares de Autogestión (ver
+        // PARES_GASTO_INGRESO) — mismos parámetros de la página (estado/año/resaltado/dependencia),
+        // solo cambia el origen + tab.
+        $pestanasGastoIngreso = null;
+        if ($origenGasto !== null) {
+            $baseTab = 'index.php?ruta=peticiones-tipo-detalle&estado=' . urlencode($estado)
+                . '&anio_id=' . $anioSeleccionadoId . '&resaltar_id=' . $resaltarId;
+            if ($dependenciaFiltro !== '') {
+                $baseTab .= '&dependencia=' . urlencode($dependenciaFiltro);
+            }
+            $pestanasGastoIngreso = [
+                'egresos' => $baseTab . '&origen=' . $origenGasto . '&tab=egresos',
+                'ingresos' => $baseTab . '&origen=' . $origenIngreso . '&tab=ingresos',
+                'activo' => $tabActivo,
+            ];
+        }
 
         // Ancho inicial por columna (se puede arrastrar después): ~8px por carácter del valor más
         // largo (encabezado incluido), entre 90 y 320px — mismo criterio que el prototipo Dev >
@@ -859,6 +964,30 @@ class PeticionesControlador
     }
 
     /**
+     * Registra en el historial una acción masiva sobre varios ítems a la vez (aprobar/archivar/
+     * consolidar/duplicar/enviar/restaurar/desconsolidar/rechazar N ítems de un solo golpe) como UN
+     * SOLO evento por tipo afectado, en vez de N filas idénticas sin relación entre sí. Cada item de
+     * $itemsAfectados es ['origen', 'origen_id', 'tipo'] (+ 'detalle' opcional, si ese ítem puntual
+     * necesita su propio texto distinto al resumen del lote — ej. duplicar guarda el nuevo id de
+     * cada copia). Si la selección mezcló más de un tipo, se crea un lote separado por cada tipo
+     * presente (cada lote solo agrupa ítems homogéneos).
+     */
+    private function registrarConLote(string $accion, string $detalle, array $itemsAfectados): void
+    {
+        $porTipo = [];
+        foreach ($itemsAfectados as $item) {
+            $porTipo[$item['tipo']][] = $item;
+        }
+
+        foreach ($porTipo as $tipo => $items) {
+            $loteId = $this->modeloHistorial->registrarLote($tipo, $accion, $detalle, count($items));
+            foreach ($items as $item) {
+                $this->modeloHistorial->registrar($item['origen'], (int) $item['origen_id'], $accion, $item['detalle'] ?? $detalle, $loteId);
+            }
+        }
+    }
+
+    /**
      * Log de auditoría (solo lectura) de una bandeja: todo lo que le pasó a sus ítems desde que
      * llegaron a Peticiones (aprobar/archivar/editar/redireccionar/rechazar/duplicar/eliminar). No
      * incluye el momento "Enviado" (eso ocurre en el módulo de origen, fuera de este controlador).
@@ -892,6 +1021,77 @@ class PeticionesControlador
         $eventos = $this->modeloHistorial->obtenerPorOrigenYId($origen, $origenId);
 
         require __DIR__ . '/../vista/peticiones/historial-item.php';
+    }
+
+    /**
+     * Historial "por tabla" (por tipo): lista los lotes (acciones masivas) que alguna vez tocaron
+     * ítems de este tipo — ej. todos los eventos de archivar/consolidar/enviar/restaurar ocurridos
+     * sobre Gastos, sin importar cuándo ni sobre cuáles ítems puntuales. Complementario al historial
+     * por ítem individual (historialItem()), no lo reemplaza.
+     */
+    public function historialPorTipo(): void
+    {
+        if (empty($_SESSION['usuario_id'])) {
+            header('Location: index.php?ruta=login');
+            exit;
+        }
+
+        if ($_SESSION['usuario_rol'] !== 'administrador') {
+            header('Location: index.php?ruta=dashboard');
+            exit;
+        }
+
+        $tipo = trim($_GET['tipo'] ?? '');
+        $volver = trim($_GET['volver'] ?? '') !== '' ? $_GET['volver'] : 'index.php?ruta=peticiones';
+
+        if ($tipo === '') {
+            header('Location: index.php?ruta=peticiones');
+            exit;
+        }
+
+        $lotes = $this->modeloHistorial->obtenerLotesPorTipo($tipo);
+
+        require __DIR__ . '/../vista/peticiones/historial-tipo.php';
+    }
+
+    /**
+     * Detalle de un lote (una acción masiva puntual): cada ítem que afectó, con la misma tabla
+     * Fecha/Actor/Acción/Detalle que historial-item.php, más una columna "Ítem" (un lote puede tocar
+     * varios origen/origen_id distintos). Se filtra fila por fila con el mismo criterio de
+     * visibilidad que ya usa el historial por ítem — si el usuario actual no podría ver un ítem
+     * puntual hoy, esa fila tampoco aparece acá, aunque el lote sí exista.
+     */
+    public function historialLote(): void
+    {
+        if (empty($_SESSION['usuario_id'])) {
+            header('Location: index.php?ruta=login');
+            exit;
+        }
+
+        if ($_SESSION['usuario_rol'] !== 'administrador') {
+            header('Location: index.php?ruta=dashboard');
+            exit;
+        }
+
+        $loteId = (int) ($_GET['lote_id'] ?? 0);
+        $volver = trim($_GET['volver'] ?? '') !== '' ? $_GET['volver'] : 'index.php?ruta=peticiones';
+
+        if ($loteId <= 0) {
+            header('Location: index.php?ruta=peticiones');
+            exit;
+        }
+
+        $eventos = array_values(array_filter(
+            $this->modeloHistorial->obtenerPorLote($loteId),
+            fn (array $evento): bool => $this->puedeVerHistorialItem($evento['origen'], (int) $evento['origen_id'])
+        ));
+
+        foreach ($eventos as &$evento) {
+            $evento['ruta_origen'] = $this->construirRutaOrigen($evento['origen']);
+        }
+        unset($evento);
+
+        require __DIR__ . '/../vista/peticiones/historial-lote.php';
     }
 
     /**
@@ -1491,9 +1691,12 @@ class PeticionesControlador
             }
         }
 
+        $aprobadosPorClave = $this->obtenerPorAccionYClave('aprobada');
         $pares = [];
         foreach ($origenes as $indice => $origen) {
-            $pares[] = ['origen' => trim((string) $origen), 'origen_id' => (int) ($origenIds[$indice] ?? 0)];
+            $origen = trim((string) $origen);
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+            $pares[] = ['origen' => $origen, 'origen_id' => $origenId, 'tipo' => $aprobadosPorClave[$origen . ':' . $origenId]['tipo'] ?? $origen];
         }
 
         // Se guarda quién es exactamente el destinatario (único con ese rol, o desambiguado
@@ -1507,9 +1710,7 @@ class PeticionesControlador
             return ['No hay ítems seleccionados para redireccionar.', ''];
         }
 
-        foreach ($pares as $par) {
-            $this->modeloHistorial->registrar($par['origen'], $par['origen_id'], 'redireccionada', 'Redireccionado a ' . $dependenciaNombre);
-        }
+        $this->registrarConLote('redireccionada', 'Redireccionado a ' . $dependenciaNombre, $pares);
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
         $asunto = 'Petición consolidada redireccionada';
@@ -1538,7 +1739,7 @@ class PeticionesControlador
         }
 
         $aprobadosPorClave = $this->obtenerPorAccionYClave('aprobada');
-        $archivados = 0;
+        $itemsAfectados = [];
 
         foreach ($origenes as $indice => $origen) {
             $origen = trim((string) $origen);
@@ -1563,16 +1764,16 @@ class PeticionesControlador
                 'ruta_origen' => $item['ruta_origen'],
             ]);
 
-            $this->modeloHistorial->registrar($item['origen'], (int) $item['origen_id'], 'archivada', 'Archivado desde Consolidado');
-
-            $archivados++;
+            $itemsAfectados[] = ['origen' => $item['origen'], 'origen_id' => (int) $item['origen_id'], 'tipo' => $item['tipo']];
         }
 
-        if ($archivados === 0) {
+        if (empty($itemsAfectados)) {
             return ['No se pudo archivar ningún ítem.', ''];
         }
 
-        return ['', 'Se archivaron ' . $archivados . ' ítem(s).'];
+        $this->registrarConLote('archivada', 'Archivado desde Consolidado', $itemsAfectados);
+
+        return ['', 'Se archivaron ' . count($itemsAfectados) . ' ítem(s).'];
     }
 
     /**
@@ -1606,7 +1807,7 @@ class PeticionesControlador
         }
 
         $aprobadosPorClave = $this->obtenerPorAccionYClave('aprobada');
-        $desconsolidados = 0;
+        $itemsAfectados = [];
 
         foreach ($origenes as $indice => $origen) {
             $origen = trim((string) $origen);
@@ -1619,14 +1820,17 @@ class PeticionesControlador
 
             $this->modeloArchivada->eliminarPorOrigen($origen, $origenId);
             $this->reasignarDestinatarioAUsuarioActual($origen, $origenId);
-            $this->modeloHistorial->registrar($origen, $origenId, 'desconsolidada', 'Desconsolidado desde Consolidado, vuelve a Pendientes de quien lo desconsolidó');
 
-            $desconsolidados++;
+            $itemsAfectados[] = ['origen' => $origen, 'origen_id' => $origenId, 'tipo' => $aprobadosPorClave[$clave]['tipo']];
         }
 
-        if ($desconsolidados === 0) {
+        if (empty($itemsAfectados)) {
             return ['No se pudo desconsolidar ningún ítem.', ''];
         }
+
+        $this->registrarConLote('desconsolidada', 'Desconsolidado desde Consolidado, vuelve a Pendientes de quien lo desconsolidó', $itemsAfectados);
+
+        $desconsolidados = count($itemsAfectados);
 
         return ['', 'Se desconsolidaron ' . $desconsolidados . ' ítem(s). Vuelven a tu bandeja de Pendientes.'];
     }
@@ -1688,7 +1892,7 @@ class PeticionesControlador
         }
 
         $archivadosPorClave = $this->obtenerPorAccionYClave('archivada');
-        $consolidados = 0;
+        $itemsAfectados = [];
 
         foreach ($origenes as $indice => $origen) {
             $origen = trim((string) $origen);
@@ -1713,16 +1917,16 @@ class PeticionesControlador
                 'ruta_origen' => $item['ruta_origen'],
             ]);
 
-            $this->modeloHistorial->registrar($item['origen'], (int) $item['origen_id'], 'aprobada', 'Consolidado desde Archivo');
-
-            $consolidados++;
+            $itemsAfectados[] = ['origen' => $item['origen'], 'origen_id' => (int) $item['origen_id'], 'tipo' => $item['tipo']];
         }
 
-        if ($consolidados === 0) {
+        if (empty($itemsAfectados)) {
             return ['No se pudo consolidar ningún ítem.', ''];
         }
 
-        return ['', 'Se consolidaron ' . $consolidados . ' ítem(s).'];
+        $this->registrarConLote('aprobada', 'Consolidado desde Archivo', $itemsAfectados);
+
+        return ['', 'Se consolidaron ' . count($itemsAfectados) . ' ítem(s).'];
     }
 
     /**
@@ -1751,7 +1955,7 @@ class PeticionesControlador
             }
         }
 
-        $duplicados = 0;
+        $itemsAfectados = [];
 
         foreach ($itemsValidados as $item) {
             $nuevoId = $this->duplicarRegistroOrigen($item['origen'], (int) $item['origen_id']);
@@ -1768,18 +1972,25 @@ class PeticionesControlador
                 'detalle' => $item['detalle'],
                 'cantidad' => $item['cantidad'],
                 'valor' => $item['valor'],
-                'ruta_ver' => $this->construirRutaVer($item['origen'], $nuevoId),
+                'ruta_ver' => $this->construirRutaVer($item['origen'], $nuevoId, 'archivada'),
                 'ruta_origen' => $this->construirRutaOrigen($item['origen']),
             ]);
 
-            $this->modeloHistorial->registrar($item['origen'], (int) $item['origen_id'], 'duplicada', 'Se duplicó desde Archivo, nuevo id ' . $nuevoId);
-
-            $duplicados++;
+            $itemsAfectados[] = [
+                'origen' => $item['origen'],
+                'origen_id' => (int) $item['origen_id'],
+                'tipo' => $item['tipo'],
+                'detalle' => 'Se duplicó desde Archivo, nuevo id ' . $nuevoId,
+            ];
         }
 
-        if ($duplicados === 0) {
+        if (empty($itemsAfectados)) {
             return ['No se pudo duplicar ningún ítem.', ''];
         }
+
+        $this->registrarConLote('duplicada', 'Se duplicaron ' . count($itemsAfectados) . ' ítem(s) desde Archivo', $itemsAfectados);
+
+        $duplicados = count($itemsAfectados);
 
         return ['', 'Se duplicaron ' . $duplicados . ' ítem(s).'];
     }
@@ -1827,9 +2038,12 @@ class PeticionesControlador
             }
         }
 
+        $archivadosPorClave = $this->obtenerPorAccionYClave('archivada');
         $pares = [];
         foreach ($origenes as $indice => $origen) {
-            $pares[] = ['origen' => trim((string) $origen), 'origen_id' => (int) ($origenIds[$indice] ?? 0)];
+            $origen = trim((string) $origen);
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+            $pares[] = ['origen' => $origen, 'origen_id' => $origenId, 'tipo' => $archivadosPorClave[$origen . ':' . $origenId]['tipo'] ?? $origen];
         }
 
         // Se guarda quién es exactamente el destinatario (único con ese rol, o desambiguado
@@ -1843,9 +2057,7 @@ class PeticionesControlador
             return ['No hay ítems seleccionados para enviar.', ''];
         }
 
-        foreach ($pares as $par) {
-            $this->modeloHistorial->registrar($par['origen'], $par['origen_id'], 'redireccionada', 'Enviado desde Archivo a ' . $dependenciaNombre);
-        }
+        $this->registrarConLote('redireccionada', 'Enviado desde Archivo a ' . $dependenciaNombre, $pares);
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
         $asunto = 'Petición archivada enviada';
@@ -1856,6 +2068,105 @@ class PeticionesControlador
         }
 
         return ['', 'Se enviaron ' . $cantidadItems . ' ítem(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaNombre . '").'];
+    }
+
+    /**
+     * Restaura en bloque una selección de ítems — sirve para los dos casos según el estado real de
+     * cada ítem: uno simplemente archivado se restaura como siempre (elimina su fila, vuelve a
+     * Pendientes); uno En Expediente (solo lo maneja el superadmin) vuelve al Archivado del dueño
+     * original, sin pasar por Pendientes.
+     */
+    private function restaurarArchivadoGrupo(): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem para restaurar.', ''];
+        }
+
+        $archivadosPorClave = $this->obtenerPorAccionYClave('archivada');
+        $expedientePorClave = $this->obtenerPorAccionYClave('expediente');
+        $itemsAfectados = [];
+        $restauradosAPendientes = 0;
+
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+            $clave = $origen . ':' . $origenId;
+
+            if (isset($expedientePorClave[$clave])) {
+                $item = $expedientePorClave[$clave];
+                $this->modeloArchivada->cambiarAccion($item['origen'], (int) $item['origen_id'], 'archivada');
+            } elseif (isset($archivadosPorClave[$clave])) {
+                $item = $archivadosPorClave[$clave];
+                $this->modeloArchivada->restaurar((int) $item['id']);
+                $restauradosAPendientes++;
+            } else {
+                continue;
+            }
+
+            $itemsAfectados[] = ['origen' => $item['origen'], 'origen_id' => (int) $item['origen_id'], 'tipo' => $item['tipo']];
+        }
+
+        if (empty($itemsAfectados)) {
+            return ['No se pudo restaurar ningún ítem.', ''];
+        }
+
+        $this->registrarConLote('restaurada', 'Restaurado', $itemsAfectados);
+
+        $mensaje = 'Se restauraron ' . count($itemsAfectados) . ' ítem(s).';
+        if ($restauradosAPendientes > 0 && $restauradosAPendientes < count($itemsAfectados)) {
+            $mensaje .= ' ' . $restauradosAPendientes . ' volvieron a Pendientes, el resto volvió al Archivado de su dueño.';
+        } elseif ($restauradosAPendientes > 0) {
+            $mensaje .= ' Vuelven a tu bandeja de Pendientes.';
+        } else {
+            $mensaje .= ' Vuelven al Archivado de su dueño.';
+        }
+
+        return ['', $mensaje];
+    }
+
+    /**
+     * "Mandar a Expediente" — saca ítems archivados de la lista de Archivados de su dueño hacia un
+     * registro centralizado que solo el superadmin ve/gestiona (ver tipoDetalle() estado=expediente
+     * y construirArchivadosVisibles() en index()). Solo el superadmin puede devolverlos con
+     * "Restaurar" (ver restaurarArchivadoGrupo()).
+     */
+    private function mandarExpedienteGrupo(): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem para mandar a Expediente.', ''];
+        }
+
+        $archivadosPorClave = $this->obtenerPorAccionYClave('archivada');
+        $itemsAfectados = [];
+
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+            $clave = $origen . ':' . $origenId;
+
+            if (!isset($archivadosPorClave[$clave])) {
+                continue;
+            }
+
+            $item = $archivadosPorClave[$clave];
+            $this->modeloArchivada->cambiarAccion($item['origen'], (int) $item['origen_id'], 'expediente');
+
+            $itemsAfectados[] = ['origen' => $item['origen'], 'origen_id' => (int) $item['origen_id'], 'tipo' => $item['tipo']];
+        }
+
+        if (empty($itemsAfectados)) {
+            return ['No se pudo mandar a Expediente ningún ítem.', ''];
+        }
+
+        $this->registrarConLote('expediente', 'Enviado a Expediente', $itemsAfectados);
+
+        return ['', 'Se mandaron ' . count($itemsAfectados) . ' ítem(s) a Expediente.'];
     }
 
     /**
@@ -1911,6 +2222,8 @@ class PeticionesControlador
             return ['No seleccionaste ningún ítem para consolidar.', ''];
         }
 
+        $itemsAfectados = [];
+
         foreach ($items as $item) {
             $this->modeloArchivada->archivar([
                 'origen' => $item['origen'],
@@ -1924,8 +2237,10 @@ class PeticionesControlador
                 'ruta_origen' => $this->construirRutaOrigen($item['origen']),
             ]);
 
-            $this->modeloHistorial->registrar($item['origen'], $item['origen_id'], 'aprobada', 'Consolidado desde Enviadas');
+            $itemsAfectados[] = ['origen' => $item['origen'], 'origen_id' => (int) $item['origen_id'], 'tipo' => $item['tipo']];
         }
+
+        $this->registrarConLote('aprobada', 'Consolidado desde Enviadas', $itemsAfectados);
 
         return ['', 'Se consolidaron ' . count($items) . ' ítem(s).'];
     }
@@ -1943,7 +2258,7 @@ class PeticionesControlador
             return ['No seleccionaste ningún ítem para duplicar.', ''];
         }
 
-        $duplicados = 0;
+        $itemsAfectados = [];
 
         foreach ($items as $item) {
             $nuevoId = $this->duplicarRegistroOrigen($item['origen'], $item['origen_id']);
@@ -1961,21 +2276,26 @@ class PeticionesControlador
                     'detalle' => $item['detalle'],
                     'cantidad' => $item['cantidad'],
                     'valor' => $item['valor'],
-                    'ruta_ver' => $this->construirRutaVer($item['origen'], $nuevoId),
+                    'ruta_ver' => $this->construirRutaVer($item['origen'], $nuevoId, $item['accion_actual']),
                     'ruta_origen' => $this->construirRutaOrigen($item['origen']),
                 ]);
             }
 
-            $this->modeloHistorial->registrar($item['origen'], $item['origen_id'], 'duplicada', 'Se duplicó desde Enviadas, nuevo id ' . $nuevoId);
-
-            $duplicados++;
+            $itemsAfectados[] = [
+                'origen' => $item['origen'],
+                'origen_id' => (int) $item['origen_id'],
+                'tipo' => $item['tipo'],
+                'detalle' => 'Se duplicó desde Enviadas, nuevo id ' . $nuevoId,
+            ];
         }
 
-        if ($duplicados === 0) {
+        if (empty($itemsAfectados)) {
             return ['No se pudo duplicar ningún ítem.', ''];
         }
 
-        return ['', 'Se duplicaron ' . $duplicados . ' ítem(s).'];
+        $this->registrarConLote('duplicada', 'Se duplicaron ' . count($itemsAfectados) . ' ítem(s) desde Enviadas', $itemsAfectados);
+
+        return ['', 'Se duplicaron ' . count($itemsAfectados) . ' ítem(s).'];
     }
 
     /**
@@ -2026,6 +2346,8 @@ class PeticionesControlador
         // no solo la persona elegida.
         $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
 
+        $itemsAfectados = [];
+
         foreach ($items as $item) {
             $this->modeloArchivada->redireccionarDirecto([
                 'origen' => $item['origen'],
@@ -2038,8 +2360,10 @@ class PeticionesControlador
                 'ruta_origen' => $this->construirRutaOrigen($item['origen']),
             ], $dependenciaNombre, $rolDestinatarioId, $usuarioDestinatarioResuelto);
 
-            $this->modeloHistorial->registrar($item['origen'], $item['origen_id'], 'redireccionada', 'Enviado desde Enviadas a ' . $dependenciaNombre);
+            $itemsAfectados[] = ['origen' => $item['origen'], 'origen_id' => (int) $item['origen_id'], 'tipo' => $item['tipo']];
         }
+
+        $this->registrarConLote('redireccionada', 'Enviado desde Enviadas a ' . $dependenciaNombre, $itemsAfectados);
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
         $asunto = 'Petición enviada';
@@ -2098,7 +2422,7 @@ class PeticionesControlador
         }
 
         $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
-        $enviados = 0;
+        $itemsAfectados = [];
 
         foreach ($items as $item) {
             $origen = $item['origen'];
@@ -2120,14 +2444,16 @@ class PeticionesControlador
                 'ruta_origen' => $item['ruta_origen'],
             ], $dependenciaNombre, $rolDestinatarioId, $usuarioDestinatarioResuelto);
 
-            $this->modeloHistorial->registrar($origen, $origenId, 'redireccionada', 'Enviado desde Pendientes a ' . $dependenciaNombre);
-
-            $enviados++;
+            $itemsAfectados[] = ['origen' => $origen, 'origen_id' => (int) $origenId, 'tipo' => $item['tipo']];
         }
 
-        if ($enviados === 0) {
+        if (empty($itemsAfectados)) {
             return ['No se pudo enviar ningún ítem.', ''];
         }
+
+        $this->registrarConLote('redireccionada', 'Enviado desde Pendientes a ' . $dependenciaNombre, $itemsAfectados);
+
+        $enviados = count($itemsAfectados);
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
         $asunto = 'Petición enviada';
@@ -2404,6 +2730,27 @@ class PeticionesControlador
         return $permitidas;
     }
 
+    /**
+     * Igual que obtenerDependenciasPermitidas(), pero SIN descendientes — para el superadmin (raíz
+     * del árbol de flujo_id), "con descendientes" significa literalmente todo el sistema, así que
+     * esta versión es la que de verdad significa "lo mío" en Archivados/Enviadas cuando Auditar está
+     * apagado (ver PARTE B del plan el-techo-no-deberia-kind-candle). Para un usuario normal esto
+     * sería más restrictivo que su visibilidad habitual, así que solo se usa para el superadmin.
+     */
+    private function obtenerDependenciaPropiaSolamente(): array
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+        $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
+
+        if ($dependenciaUsuarioId === null) {
+            return [];
+        }
+
+        $dependenciaUsuario = $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId);
+
+        return $dependenciaUsuario !== null ? [$dependenciaUsuario['nombre']] : [];
+    }
+
     private function filtrarPorDependencia(array $items, array $dependenciasPermitidas): array
     {
         $rolUsuarioActual = $this->obtenerRolUsuarioActual();
@@ -2479,6 +2826,8 @@ class PeticionesControlador
             return ['No hay proyectos pendientes para procesar.', ''];
         }
 
+        $itemsAfectados = [];
+
         foreach ($visibles as $fila) {
             $this->modeloArchivada->archivar([
                 'origen' => 'necesidad',
@@ -2491,13 +2840,14 @@ class PeticionesControlador
                 'ruta_ver' => $this->construirRutaVer('necesidad', (int) $fila['id'], $accionArchivada),
                 'ruta_origen' => 'index.php?ruta=perfil-proyectos',
             ]);
-            $this->modeloHistorial->registrar(
-                'necesidad',
-                (int) $fila['id'],
-                $accionArchivada,
-                $accionArchivada === 'aprobada' ? 'Consolidado (aceptar todos)' : 'Archivado (archivar todos)'
-            );
+            $itemsAfectados[] = ['origen' => 'necesidad', 'origen_id' => (int) $fila['id'], 'tipo' => 'Perfil de proyectos'];
         }
+
+        $this->registrarConLote(
+            $accionArchivada,
+            $accionArchivada === 'aprobada' ? 'Consolidado (aceptar todos)' : 'Archivado (archivar todos)',
+            $itemsAfectados
+        );
 
         $verbo = $accionArchivada === 'aprobada' ? 'aceptaron' : 'archivaron';
 
@@ -2567,8 +2917,8 @@ class PeticionesControlador
             return ['No seleccionaste ningún ítem pendiente.', ''];
         }
 
-        $procesados = 0;
         $mensajesExtra = [];
+        $itemsAfectados = [];
 
         foreach ($items as $item) {
             $origen = $item['origen'];
@@ -2595,20 +2945,22 @@ class PeticionesControlador
                 'ruta_origen' => $item['ruta_origen'],
             ]);
 
-            $this->modeloHistorial->registrar(
-                $origen,
-                $origenId,
-                $accionArchivada,
-                $accionArchivada === 'aprobada' ? 'Consolidado (aceptar seleccionados)' : 'Archivado (archivar seleccionados)'
-            );
-
-            $procesados++;
+            $itemsAfectados[] = ['origen' => $origen, 'origen_id' => (int) $origenId, 'tipo' => $item['tipo']];
         }
 
-        if ($procesados === 0 && empty($mensajesExtra)) {
+        if (empty($itemsAfectados) && empty($mensajesExtra)) {
             return ['No se pudo procesar ningún ítem.', ''];
         }
 
+        if (!empty($itemsAfectados)) {
+            $this->registrarConLote(
+                $accionArchivada,
+                $accionArchivada === 'aprobada' ? 'Consolidado (aceptar seleccionados)' : 'Archivado (archivar seleccionados)',
+                $itemsAfectados
+            );
+        }
+
+        $procesados = count($itemsAfectados);
         $verbo = $accionArchivada === 'aprobada' ? 'aceptaron' : 'archivaron';
         $mensaje = $procesados > 0 ? 'Se ' . $verbo . ' ' . $procesados . ' ítem(s) pendiente(s).' : '';
 
@@ -2816,6 +3168,107 @@ class PeticionesControlador
     }
 
     /**
+     * Usuario que registró originalmente el ítem en su módulo real (el "remitente"), resuelto en
+     * vivo desde la tabla de origen — peticiones_archivadas no guarda quién lo envió, solo
+     * origen/origen_id. Reutiliza obtenerRegistroPorOrigenCacheado() (memoizado) para no repetir la
+     * misma consulta si el ítem ya se resolvió antes en esta misma request.
+     */
+    private function resolverUsuarioRemitente(string $origen, int $origenId): ?int
+    {
+        $registro = $origen === 'otros'
+            ? $this->modeloPeticion->obtenerPorId($origenId)
+            : $this->obtenerRegistroPorOrigenCacheado($origen, $origenId);
+
+        return $registro !== null && isset($registro['usuario_id']) ? (int) $registro['usuario_id'] : null;
+    }
+
+    /**
+     * Agrupa Archivados/Enviadas por tipo + dependencia (mismo campo 'detalle' que ya se mostraba,
+     * origen para Archivados / destino "Enviado a" para Enviadas) + remitente — sin estas dos claves
+     * extra, una sola fila "Gasto — 40 ítems" mezclaría cosas de dependencias y personas distintas,
+     * imposibles de distinguir una vez agrupadas. 'otros' se mantiene sin fusionar (cada petición es
+     * distinta entre sí), igual criterio que ya usa $consolidado. El gasto y el ingreso de un mismo
+     * ítem de Autogestión (ver PARES_GASTO_INGRESO) se fusionan en UNA sola tarjeta — "Ver" entra a
+     * esa misma tabla con pestañas Egresos/Ingresos (ver tipoDetalle()), así que no hace falta una
+     * tarjeta separada por cada lado.
+     */
+    private function agruparPorTipoDependenciaYRemitente(array $items, string $estadoDefault): array
+    {
+        $origenesIngreso = array_flip(self::PARES_GASTO_INGRESO);
+        $nombresPorUsuarioId = [];
+        $grupos = [];
+
+        foreach ($items as $item) {
+            $remitenteId = $this->resolverUsuarioRemitente($item['origen'], (int) $item['origen_id']);
+
+            if ($remitenteId !== null && !isset($nombresPorUsuarioId[$remitenteId])) {
+                $usuarioRemitente = $this->modeloUsuario->obtenerPorId($remitenteId);
+                $nombresPorUsuarioId[$remitenteId] = $usuarioRemitente['nombre'] ?? 'Usuario eliminado';
+            }
+
+            $dependencia = $item['detalle'];
+            $remitenteNombre = $remitenteId !== null ? $nombresPorUsuarioId[$remitenteId] : '—';
+            // Los ítems de Archivados traen su propio estado (archivada/expediente); los de
+            // Enviadas no, así que caen todos al $estadoDefault ('enviada') sin distinción.
+            $estadoItem = $item['estado_archivo'] ?? $estadoDefault;
+
+            // "Educación continua (ingreso)" -> "Educación continua", solo para el lado ingreso de
+            // un par conocido — así cae en la misma tarjeta que su gasto hermano.
+            $tipoNormalizado = isset($origenesIngreso[$item['origen']])
+                ? preg_replace('/\s*\(ingreso\)\s*$/u', '', $item['tipo'])
+                : $item['tipo'];
+
+            // El estado entra en la clave para que una tarjeta nunca mezcle Archivado con En
+            // Expediente (mismo tipo+dependencia+remitente, pero son cosas distintas de gestionar).
+            $claveGrupo = $item['origen'] === 'otros'
+                ? $item['tipo'] . '#' . $item['origen_id']
+                : $tipoNormalizado . '#' . $dependencia . '#' . $remitenteId . '#' . $estadoItem;
+
+            if (!isset($grupos[$claveGrupo])) {
+                // "Ver" de un grupo debe mostrar SOLO sus ítems, no la tabla completa de ese origen
+                // (mismo criterio que ya usa agruparPendientesPorDependencia()): se filtra tipo-detalle
+                // por dependencia. 'otros' no se agrupa (cada petición es su propia fila), así que ahí
+                // sí interesa resaltar el ítem puntual en vez de filtrar por dependencia (no tiene).
+                // "expediente" es un registro centralizado, sin filtro de dependencia (ver
+                // obtenerItemsCrudosPorEstado()).
+                $rutaVerGrupo = match (true) {
+                    $item['origen'] === 'otros' => $this->construirRutaVer($item['origen'], (int) $item['origen_id'], $estadoItem),
+                    $estadoItem === 'expediente' => $this->construirRutaVer($item['origen'], 0, $estadoItem),
+                    default => $this->construirRutaVer($item['origen'], 0, $estadoItem) . '&dependencia=' . urlencode($dependencia),
+                };
+
+                $grupos[$claveGrupo] = [
+                    'tipo' => $tipoNormalizado,
+                    'dependencia' => $dependencia,
+                    'remitente' => $remitenteNombre,
+                    'estado' => $estadoItem,
+                    'cantidad' => 0,
+                    'ruta_ver' => $rutaVerGrupo,
+                    'items' => [],
+                ];
+            }
+
+            $grupos[$claveGrupo]['cantidad']++;
+            $grupos[$claveGrupo]['items'][] = [
+                'origen' => $item['origen'],
+                'origen_id' => (int) $item['origen_id'],
+                'tipo' => $item['tipo'],
+                'detalle' => $item['detalle'],
+                'cantidad' => $item['cantidad'],
+                'valor' => $item['valor'],
+                'ruta_ver' => $item['ruta_ver'],
+                'ruta_origen' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones',
+                // Solo presente en ítems de Enviadas (accion_actual en peticiones_archivadas); en
+                // Archivados queda null — leerSnapshotEnviados() en el servidor lo necesita para las
+                // acciones masivas de Enviadas, que pueden operar sobre ítems sin fila propia todavía.
+                'accion_actual' => $item['accion_actual'] ?? null,
+            ];
+        }
+
+        return array_values($grupos);
+    }
+
+    /**
      * Construye la vista "Peticiones Enviadas": todo lo que la dependencia del usuario actual (o
      * alguna de sus hijas) ya envió, sin importar el estado en el que se encuentre ahora (pendiente,
      * consolidado, archivado o redireccionado) — es de solo lectura para el emisor, complementaria a
@@ -2840,6 +3293,7 @@ class PeticionesControlador
             $estado = match ($accion) {
                 'aprobada' => 'Consolidado',
                 'archivada' => 'Archivado',
+                'expediente' => 'En Expediente',
                 'redireccionada' => 'Redireccionado a ' . ($redireccionadas[$clave] ?? '—'),
                 default => 'Pendiente de revisión',
             };

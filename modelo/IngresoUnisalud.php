@@ -45,11 +45,16 @@ class IngresoUnisalud
         return $ingresos;
     }
 
+    private const EXCLUIR_EXPEDIENTE_INGRESO_UNISALUD = "AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'ingreso_unisalud' AND pa.origen_id = ingresos_unisalud.id AND pa.accion = 'expediente'
+                )";
+
     public function obtenerTotalPorAnio(int $anioPresupuestalId): float
     {
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM ingresos_unisalud
-             WHERE anio_presupuestal_id = :anio_presupuestal_id'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id ' . self::EXCLUIR_EXPEDIENTE_INGRESO_UNISALUD
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
 
@@ -77,7 +82,7 @@ class IngresoUnisalud
 
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM ingresos_unisalud
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND dependencia IN (' . implode(', ', $marcadores) . ')'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND dependencia IN (' . implode(', ', $marcadores) . ') ' . self::EXCLUIR_EXPEDIENTE_INGRESO_UNISALUD
         );
         $consulta->execute($parametros);
 

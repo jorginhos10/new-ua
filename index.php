@@ -52,6 +52,8 @@ $rutaAMenuKey = [
     'peticiones-tipo-detalle' => 'peticiones',
     'consolidado-autogestion' => 'peticiones',
     'peticiones-historial-item' => 'peticiones',
+    'peticiones-historial-tipo' => 'peticiones',
+    'peticiones-historial-lote' => 'peticiones',
     'extension' => 'extension',
     'extension-exportar-plantilla' => 'extension',
     'extension-exportar' => 'extension',
@@ -314,6 +316,14 @@ switch ($ruta) {
 
     case 'peticiones-historial-item':
         (new PeticionesControlador())->historialItem();
+        break;
+
+    case 'peticiones-historial-tipo':
+        (new PeticionesControlador())->historialPorTipo();
+        break;
+
+    case 'peticiones-historial-lote':
+        (new PeticionesControlador())->historialLote();
         break;
 
     case 'jerarquias':

@@ -5,6 +5,19 @@ require __DIR__ . '/../parciales/encabezado.php';
 
     <div class="tarjeta">
         <?php
+        // El filtro de Archivados/Enviadas vive en la fila del título (espacio que antes quedaba en
+        // blanco a la derecha de "Peticiones recibidas"), no en una fila propia — ver
+        // $barraAccionesExtra en barra-modulo.php.
+        $barraAccionesExtra = null;
+        $iconoLupaFiltro = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>';
+        if ($vista === 'archivar' && !empty($archivadosPorGrupo)) {
+            $barraAccionesExtra = '<div class="campo-filtro-inline">' . $iconoLupaFiltro
+                . '<input type="text" id="filtro-archivado" placeholder="Filtrar tarjetas…" autocomplete="off"></div>';
+        } elseif ($vista === 'enviadas' && !empty($enviadasPorGrupo)) {
+            $barraAccionesExtra = '<div class="campo-filtro-inline">' . $iconoLupaFiltro
+                . '<input type="text" id="filtro-enviado" placeholder="Filtrar tarjetas…" autocomplete="off"></div>';
+        }
+
         $barraTitulo = 'Peticiones recibidas';
         $barraBotonesSecundarios = [];
         $barraBotonPrincipal = null;
@@ -26,7 +39,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <a href="index.php?ruta=peticiones&vista=pendientes" class="pestana<?= $vista === 'pendientes' ? ' activa' : '' ?>">Pendientes</a>
                 <a href="index.php?ruta=peticiones&vista=consolidado" class="pestana<?= $vista === 'consolidado' ? ' activa' : '' ?>">Consolidado por tipo</a>
                 <a href="index.php?ruta=peticiones&vista=archivar" class="pestana<?= $vista === 'archivar' ? ' activa' : '' ?>">Archivados</a>
-                <a href="index.php?ruta=peticiones&vista=enviadas" class="pestana<?= $vista === 'enviadas' ? ' activa' : '' ?>">Enviadas</a>
+                <a href="index.php?ruta=peticiones&vista=enviadas" class="pestana<?= $vista === 'enviadas' ? ' activa' : '' ?>" title="Lo que tu dependencia (o sus hijas) ya envió, con su estado actual.">Enviadas</a>
             </div>
             <?php if ($vista === 'pendientes'): ?>
             <div class="grupo-acciones-encabezado" id="barra-acciones-pendientes" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
@@ -47,24 +60,57 @@ require __DIR__ . '/../parciales/encabezado.php';
             <?php endif; ?>
             <?php if ($vista === 'archivar'): ?>
             <div class="grupo-acciones-encabezado" id="barra-acciones-archivar" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
-                <button type="button" id="boton-archivado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
-                <button type="button" id="boton-archivado-duplicar" class="boton-accion boton-accion-editar" disabled>Duplicar</button>
-                <button type="button" id="boton-archivado-consolidar" class="boton-accion boton-accion-enviar" disabled>Consolidar</button>
-                <button type="button" id="boton-archivado-enviar" class="boton-agregar" disabled>Enviar</button>
+                <button type="button" id="boton-archivado-ver" class="boton-icono-accion" data-tooltip="Ver" title="Ver" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+                <button type="button" id="boton-archivado-restaurar" class="boton-icono-accion" data-tooltip="Restaurar" title="Restaurar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                </button>
+                <?php if (!$esSuperAdminRaiz): ?>
+                <button type="button" id="boton-archivado-expediente" class="boton-icono-accion" data-tooltip="Mandar a Expediente" title="Mandar a Expediente" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"></path><path d="M1 3h22v5H1z"></path><path d="M10 12h4"></path></svg>
+                </button>
+                <?php endif; ?>
+                <button type="button" id="boton-archivado-duplicar" class="boton-icono-accion" data-tooltip="Duplicar" title="Duplicar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+                <button type="button" id="boton-archivado-consolidar" class="boton-icono-accion" data-tooltip="Consolidar" title="Consolidar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </button>
+                <button type="button" id="boton-archivado-enviar" class="boton-icono-accion" data-tooltip="Enviar" title="Enviar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+                <button type="button" id="boton-archivado-historial" class="boton-icono-accion" data-tooltip="Ver historial" title="Ver historial" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </button>
             </div>
             <?php endif; ?>
             <?php if ($vista === 'enviadas'): ?>
             <div class="grupo-acciones-encabezado" id="barra-acciones-enviadas" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
-                <button type="button" id="boton-enviado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
-                <button type="button" id="boton-enviado-duplicar" class="boton-accion boton-accion-editar" disabled>Duplicar</button>
-                <button type="button" id="boton-enviado-consolidar" class="boton-accion boton-accion-enviar" disabled>Consolidar</button>
-                <button type="button" id="boton-enviado-enviar" class="boton-agregar" disabled>Enviar</button>
+                <button type="button" id="boton-enviado-ver" class="boton-icono-accion" data-tooltip="Ver" title="Ver" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+                <button type="button" id="boton-enviado-duplicar" class="boton-icono-accion" data-tooltip="Duplicar" title="Duplicar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+                <button type="button" id="boton-enviado-consolidar" class="boton-icono-accion" data-tooltip="Consolidar" title="Consolidar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </button>
+                <button type="button" id="boton-enviado-enviar" class="boton-icono-accion" data-tooltip="Enviar" title="Enviar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+                <button type="button" id="boton-enviado-historial" class="boton-icono-accion" data-tooltip="Ver historial" title="Ver historial" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </button>
             </div>
             <?php endif; ?>
         </div>
 
         <?php if ($modoJerarquia && ($vista === 'pendientes' || $vista === 'consolidado')): ?>
-        <p class="texto-atenuado">Auditando: viendo todo lo pendiente de tu árbol de dependencias (activado en el interruptor "Auditar" del encabezado), no solo lo dirigido a ti.</p>
+        <?php /* Auditando: viendo todo lo pendiente de tu árbol de dependencias (activado en el
+                 interruptor "Auditar" del encabezado), no solo lo dirigido a ti. Insignia compacta
+                 en vez de un <p> completo, para no quitarle espacio a la tabla. */ ?>
+        <span class="badge-rol badge-borrador" tabindex="0" title="Auditando: viendo todo lo pendiente de tu árbol de dependencias (activado en el interruptor &quot;Auditar&quot; del encabezado), no solo lo dirigido a ti.">Auditando</span>
         <?php endif; ?>
 
         <?php if (empty($aniosActivos)): ?>
@@ -303,109 +349,105 @@ require __DIR__ . '/../parciales/encabezado.php';
         </div>
         <?php elseif ($vista === 'archivar'): ?>
         <div class="tabla-scroll">
-            <table class="tabla-usuarios">
+            <table class="tabla-usuarios" id="tabla-archivado-agrupado">
+                <colgroup>
+                    <col style="width: 34px;">
+                    <col style="width: 20%;">
+                    <col style="width: 28%;">
+                    <col style="width: 25%;">
+                    <col style="width: 17%;">
+                    <col style="width: 10%;">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th><input type="checkbox" id="checkbox-archivado-todos" <?= empty($archivados) ? 'disabled' : '' ?>></th>
+                        <th><input type="checkbox" id="checkbox-archivado-todos" <?= empty($archivadosPorGrupo) ? 'disabled' : '' ?>></th>
                         <th>Tipo</th>
-                        <th>Origen</th>
+                        <th>Dependencia</th>
+                        <th>Remitente</th>
+                        <th>Estado</th>
                         <th>Cantidad</th>
-                        <th>Valor</th>
-                        <th>Archivada</th>
-                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($archivados as $item): ?>
-                    <tr>
+                    <?php foreach ($archivadosPorGrupo as $grupo): ?>
+                    <tr class="fila-filtrable" data-texto-filtro="<?= htmlspecialchars(mb_strtolower($grupo['tipo'] . ' ' . $grupo['dependencia'] . ' ' . $grupo['remitente'] . ' ' . ($grupo['estado'] === 'expediente' ? 'en expediente' : 'archivado'))) ?>">
                         <td>
                             <input
                                 type="checkbox"
                                 class="checkbox-archivado"
-                                data-origen="<?= htmlspecialchars($item['origen']) ?>"
-                                data-origen-id="<?= (int) $item['origen_id'] ?>"
-                                data-tipo="<?= htmlspecialchars($item['tipo']) ?>"
-                                data-detalle="<?= htmlspecialchars($item['detalle']) ?>"
-                                data-cantidad="<?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '' ?>"
-                                data-valor="<?= $item['valor'] !== null ? (float) $item['valor'] : '' ?>"
-                                data-ruta-ver="<?= htmlspecialchars($item['ruta_ver']) ?>"
+                                data-tipo="<?= htmlspecialchars($grupo['tipo']) ?>"
+                                data-anio-id="<?= (int) $anioSeleccionadoId ?>"
+                                data-items="<?= htmlspecialchars(json_encode($grupo['items'])) ?>"
+                                data-ruta-ver="<?= htmlspecialchars($grupo['ruta_ver']) ?>"
+                                data-estado="<?= htmlspecialchars($grupo['estado']) ?>"
+                                data-vista-agrupada="1"
                             >
                         </td>
-                        <td><?= htmlspecialchars($item['tipo']) ?></td>
-                        <td><?= htmlspecialchars($item['detalle']) ?></td>
-                        <td><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
-                        <td><?= $item['valor'] !== null ? '$ ' . number_format((float) $item['valor'], 2, ',', '.') : '—' ?></td>
-                        <td><?= htmlspecialchars($item['archivado_en']) ?></td>
-                        <td class="celda-acciones">
-                            <div class="acciones-fila">
-                                <a href="<?= htmlspecialchars($item['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>
-                                <form method="POST" action="index.php?ruta=peticiones">
-                                    <input type="hidden" name="accion" value="restaurar">
-                                    <input type="hidden" name="vista" value="archivar">
-                                    <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
-                                    <input type="hidden" name="id" value="<?= (int) $item['id'] ?>">
-                                    <button type="submit" class="boton-accion boton-accion-editar">Restaurar</button>
-                                </form>
-                            </div>
+                        <td class="celda-truncar" title="<?= htmlspecialchars($grupo['tipo']) ?>"><?= htmlspecialchars($grupo['tipo']) ?></td>
+                        <td class="celda-truncar" title="<?= htmlspecialchars($grupo['dependencia']) ?>"><?= htmlspecialchars($grupo['dependencia']) ?></td>
+                        <td class="celda-truncar" title="<?= htmlspecialchars($grupo['remitente']) ?>"><?= htmlspecialchars($grupo['remitente']) ?></td>
+                        <td>
+                            <?php if ($grupo['estado'] === 'expediente'): ?>
+                            <span class="badge-rol badge-expediente">En Expediente</span>
+                            <?php else: ?>
+                            <span class="badge-rol badge-archivado">Archivado</span>
+                            <?php endif; ?>
                         </td>
+                        <td><?= (int) $grupo['cantidad'] ?></td>
                     </tr>
                     <?php endforeach; ?>
-                    <?php if (empty($archivados)): ?>
+                    <?php if (empty($archivadosPorGrupo)): ?>
                     <tr>
-                        <td colspan="7">No hay peticiones archivadas.</td>
+                        <td colspan="6">No hay peticiones archivadas.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
             </table>
         </div>
         <?php else: ?>
-        <p class="texto-atenuado">Lo que tu dependencia (o sus hijas) ya envió, con su estado actual.</p>
+        <?php /* "Lo que tu dependencia (o sus hijas) ya envió, con su estado actual." — texto movido
+                 al title de la pestaña "Enviadas" (arriba) para no quitarle espacio a la tabla. */ ?>
         <div class="tabla-scroll">
-            <table class="tabla-usuarios">
+            <table class="tabla-usuarios" id="tabla-enviado-agrupado">
+                <colgroup>
+                    <col style="width: 34px;">
+                    <col style="width: 24%;">
+                    <col style="width: 34%;">
+                    <col style="width: 30%;">
+                    <col style="width: 12%;">
+                </colgroup>
                 <thead>
                     <tr>
-                        <th><input type="checkbox" id="checkbox-enviado-todos" <?= empty($enviadas) ? 'disabled' : '' ?>></th>
+                        <th><input type="checkbox" id="checkbox-enviado-todos" <?= empty($enviadasPorGrupo) ? 'disabled' : '' ?>></th>
                         <th>Tipo</th>
                         <th>Enviado a</th>
-                        <th>Estado</th>
+                        <th>Remitente</th>
                         <th>Cantidad</th>
-                        <th>Valor</th>
-                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($enviadas as $item): ?>
-                    <tr>
+                    <?php foreach ($enviadasPorGrupo as $grupo): ?>
+                    <tr class="fila-filtrable" data-texto-filtro="<?= htmlspecialchars(mb_strtolower($grupo['tipo'] . ' ' . $grupo['dependencia'] . ' ' . $grupo['remitente'])) ?>">
                         <td>
                             <input
                                 type="checkbox"
                                 class="checkbox-enviado"
-                                data-origen="<?= htmlspecialchars($item['origen']) ?>"
-                                data-origen-id="<?= (int) $item['origen_id'] ?>"
-                                data-tipo="<?= htmlspecialchars($item['tipo']) ?>"
-                                data-detalle="<?= htmlspecialchars($item['detalle']) ?>"
-                                data-cantidad="<?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '' ?>"
-                                data-valor="<?= $item['valor'] !== null ? (float) $item['valor'] : '' ?>"
-                                data-ruta-ver="<?= htmlspecialchars($item['ruta_ver']) ?>"
-                                data-accion-actual="<?= $item['accion_actual'] !== null ? htmlspecialchars($item['accion_actual']) : '' ?>"
+                                data-tipo="<?= htmlspecialchars($grupo['tipo']) ?>"
+                                data-anio-id="<?= (int) $anioSeleccionadoId ?>"
+                                data-items="<?= htmlspecialchars(json_encode($grupo['items'])) ?>"
+                                data-ruta-ver="<?= htmlspecialchars($grupo['ruta_ver']) ?>"
+                                data-vista-agrupada="1"
                             >
                         </td>
-                        <td><?= htmlspecialchars($item['tipo']) ?></td>
-                        <td><?= htmlspecialchars($item['detalle']) ?></td>
-                        <td><?= htmlspecialchars($item['estado_enviada']) ?></td>
-                        <td><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
-                        <td><?= $item['valor'] !== null ? '$ ' . number_format((float) $item['valor'], 2, ',', '.') : '—' ?></td>
-                        <td class="celda-acciones">
-                            <div class="acciones-fila">
-                                <a href="<?= htmlspecialchars($item['ruta_ver']) ?>" class="boton-accion boton-accion-ver">Ver</a>
-                                <a href="index.php?ruta=peticiones-historial-item&origen=<?= urlencode($item['origen']) ?>&origen_id=<?= (int) $item['origen_id'] ?>&volver=<?= urlencode('index.php?ruta=peticiones&vista=enviadas&anio_id=' . $anioSeleccionadoId) ?>" class="boton-accion boton-accion-editar">Historial</a>
-                            </div>
-                        </td>
+                        <td class="celda-truncar" title="<?= htmlspecialchars($grupo['tipo']) ?>"><?= htmlspecialchars($grupo['tipo']) ?></td>
+                        <td class="celda-truncar" title="<?= htmlspecialchars($grupo['dependencia']) ?>"><?= htmlspecialchars($grupo['dependencia']) ?></td>
+                        <td class="celda-truncar" title="<?= htmlspecialchars($grupo['remitente']) ?>"><?= htmlspecialchars($grupo['remitente']) ?></td>
+                        <td><?= (int) $grupo['cantidad'] ?></td>
                     </tr>
                     <?php endforeach; ?>
-                    <?php if (empty($enviadas)): ?>
+                    <?php if (empty($enviadasPorGrupo)): ?>
                     <tr>
-                        <td colspan="7">No has enviado nada todavía.</td>
+                        <td colspan="5">No has enviado nada todavía.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>

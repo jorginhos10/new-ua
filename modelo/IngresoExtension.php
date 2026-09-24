@@ -62,11 +62,16 @@ class IngresoExtension
         return $ingresos;
     }
 
+    private const EXCLUIR_EXPEDIENTE_INGRESO_EXTENSION = "AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'ingreso_extension' AND pa.origen_id = ingresos_extension.id AND pa.accion = 'expediente'
+                )";
+
     public function obtenerTotalPorAnioYAutogestion(int $anioPresupuestalId, int $autogestionId): float
     {
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM ingresos_extension
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id ' . self::EXCLUIR_EXPEDIENTE_INGRESO_EXTENSION
         );
         $consulta->execute([
             'anio_presupuestal_id' => $anioPresupuestalId,
@@ -99,7 +104,7 @@ class IngresoExtension
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM ingresos_extension
              WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id
-                AND dependencia IN (' . implode(', ', $marcadores) . ')'
+                AND dependencia IN (' . implode(', ', $marcadores) . ') ' . self::EXCLUIR_EXPEDIENTE_INGRESO_EXTENSION
         );
         $consulta->execute($parametros);
 
@@ -109,7 +114,7 @@ class IngresoExtension
     public function obtenerTotalPorAnio(int $anioPresupuestalId): float
     {
         $consulta = $this->db->prepare(
-            'SELECT COALESCE(SUM(valor_total), 0) FROM ingresos_extension WHERE anio_presupuestal_id = :anio_presupuestal_id'
+            'SELECT COALESCE(SUM(valor_total), 0) FROM ingresos_extension WHERE anio_presupuestal_id = :anio_presupuestal_id ' . self::EXCLUIR_EXPEDIENTE_INGRESO_EXTENSION
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
 
@@ -118,9 +123,9 @@ class IngresoExtension
 
     /**
      * Igual que obtenerTotalPorAnio(), pero descarta los ingresos cuya petición ya fue archivada
-     * (rechazada/descartada en Peticiones > Archivados, ver peticiones_archivadas.accion) — usado
-     * por la tarjeta de Autogestión del Dashboard, que mide cumplimiento real contra el tope, no
-     * ingresos que ya se determinó que no cuentan.
+     * (rechazada/descartada en Peticiones > Archivados) o mandada a Expediente (ver
+     * peticiones_archivadas.accion) — usado por la tarjeta de Autogestión del Dashboard, que mide
+     * cumplimiento real contra el tope, no ingresos que ya se determinó que no cuentan.
      */
     public function obtenerTotalPorAnioSinArchivados(int $anioPresupuestalId): float
     {
@@ -129,7 +134,7 @@ class IngresoExtension
              WHERE i.anio_presupuestal_id = :anio_presupuestal_id
                 AND NOT EXISTS (
                     SELECT 1 FROM peticiones_archivadas pa
-                    WHERE pa.origen = 'ingreso_extension' AND pa.origen_id = i.id AND pa.accion = 'archivada'
+                    WHERE pa.origen = 'ingreso_extension' AND pa.origen_id = i.id AND pa.accion IN ('archivada', 'expediente')
                 )"
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);

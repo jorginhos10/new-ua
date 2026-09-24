@@ -187,6 +187,52 @@ de datos antes de correrlo.
   desde Usuarios → Permisos (campo "Validación flexible de techo"), o por tipo/rol desde
   Jerarquías > Mapa > ⚙ (checkbox nuevo en el mismo modal del menú).
 
+## 2026-09-23 — Historial por lote en Peticiones
+
+- **Archivo:** `sql/peticiones_historial_lotes.sql`
+- **Cambio:** Nueva tabla `peticiones_historial_lotes` (id, tipo, accion, detalle, cantidad_items,
+  usuario_id, creado_en); `ALTER TABLE peticiones_historial ADD COLUMN lote_id INT NULL, ADD INDEX
+  idx_lote (lote_id);`.
+- **Motivo:** Ver plan `el-techo-no-deberia-kind-candle`. Las acciones masivas de Peticiones
+  (aprobar/archivar/consolidar/duplicar/enviar/restaurar N ítems a la vez) grababan N filas casi
+  idénticas en `peticiones_historial`, una por ítem, sin ningún dato que las relacionara como una
+  sola acción real. Ahora esas filas comparten un `lote_id` que apunta a un único resumen en
+  `peticiones_historial_lotes`, permitiendo ver el historial agrupado "por tabla"/tipo (ej. todos
+  los eventos masivos que tocaron Gastos) además del historial por ítem individual que ya existía.
+- **Aplicado en local:** Sí (2026-09-23).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Las 4 acciones que ya eran sobre un solo ítem (aprobar/archivar uno, restaurar uno,
+  rechazar una redirección, eliminar un pendiente) siguen grabando con `lote_id = NULL` — no
+  necesitan agruparse, ya son atómicas. Esta ronda solo agrega el almacenamiento (`lote_id` +
+  `registrarConLote()`) y las vistas de lectura `peticiones-historial-tipo`/`peticiones-historial-lote`;
+  todavía NO hay ningún botón en Archivados/Enviadas que lleve a ellas (eso es la parte C del plan,
+  pospuesta explícitamente por el usuario) — por ahora solo se llega por URL directa.
+
+---
+
+## 2026-09-24 — Estado "En Expediente" en Archivados + visibilidad restringida del superadmin
+
+- **Archivo:** `sql/peticiones_archivadas_expediente.sql`
+- **Cambio:** `ALTER TABLE peticiones_archivadas MODIFY COLUMN accion ENUM('archivada','aprobada','redireccionada','expediente') NOT NULL DEFAULT 'archivada';`
+  — solo amplía el ENUM, no pierde ningún valor ni fila existente.
+- **Motivo:** Ver plan `el-techo-no-deberia-kind-candle`. El superadmin veía siempre TODO lo
+  archivado/enviado del sistema en esas dos pestañas, sin que el interruptor "Auditar" tuviera
+  ningún efecto ahí (solo afectaba Pendientes/Consolidado) — fácil de confundir con lo propio.
+  Ahora, con Auditar apagado, el superadmin solo ve su propia dependencia + un nuevo registro
+  centralizado "En Expediente" que cualquier usuario puede alimentar con el botón "Mandar a
+  Expediente" (saca el ítem de SU Archivado); solo el superadmin puede "Restaurar" desde Expediente,
+  lo que lo devuelve al Archivado del dueño original (no a Pendientes). Los ítems en Expediente
+  quedan excluidos de todas las barras de progreso/techos/metas de Gastos e Ingresos de Autogestión.
+- **Aplicado en local:** Sí (2026-09-24).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Acompañar esta migración con el despliegue del código de
+  `PeticionesControlador.php`/`PeticionArchivada.php` y con el barrido de exclusión `NOT EXISTS
+  (...accion = 'expediente')` en los métodos de totales de `Gasto`/`GastoExtension`/`GastoPostgrado`/
+  `GastoUnisalud`/`GastoSinExcedentes`/`IngresoExtension`/`IngresoPostgrado`/`IngresoUnisalud`/
+  `IngresoSinExcedentes` — sin ese código, la columna ampliada no tiene ningún efecto visible todavía.
+
+---
+
 <!--
 Plantilla para la próxima entrada:
 

@@ -22,6 +22,9 @@
  * - $barraBotonPrincipal (array|null, opcional): ['id'=>?, 'etiqueta'=>string, 'tipo'=>'button'|'a'
  *   (por defecto 'button'), 'href'=>?string, 'disabled'=>bool (por defecto false), 'form'=>?string
  *   (id de un <form> externo a enviar — usa type="submit" + form="..." en vez de un botón simple)]
+ * - $barraAccionesExtra (string|null, HTML crudo, opcional): contenido libre al inicio de la zona 3
+ *   (antes de los botones), ej. un campo de filtro — para cuando ese contenido no encaja en el
+ *   formato fijo de $barraBotonesSecundarios.
  */
 
 $barraEstado = $barraEstado ?? 'creacion';
@@ -30,6 +33,7 @@ $barraRutaVolver = $barraRutaVolver ?? null;
 $barraTextoVolver = $barraTextoVolver ?? 'Volver a Peticiones';
 $barraBotonesSecundarios = $barraBotonesSecundarios ?? [];
 $barraBotonPrincipal = $barraBotonPrincipal ?? null;
+$barraAccionesExtra = $barraAccionesExtra ?? null;
 
 $barraIconos = [
     'volver' => '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>',
@@ -62,6 +66,10 @@ $barraIconos = [
     </div>
 
     <div class="grupo-acciones-encabezado">
+        <?php if ($barraAccionesExtra !== null): ?>
+        <?= $barraAccionesExtra ?>
+        <?php endif; ?>
+
         <?php foreach ($barraBotonesSecundarios as $barraBotonSecundario): ?>
         <?php
         $barraBotonTipo = $barraBotonSecundario['tipo'] ?? 'button';
@@ -110,4 +118,4 @@ $barraIconos = [
         <?php endif; ?>
     </div>
 </div>
-<?php unset($barraTitulo, $barraTituloExtra, $barraEstado, $barraRutaVolver, $barraTextoVolver, $barraBotonesSecundarios, $barraBotonPrincipal, $barraIconos); ?>
+<?php unset($barraTitulo, $barraTituloExtra, $barraEstado, $barraRutaVolver, $barraTextoVolver, $barraBotonesSecundarios, $barraBotonPrincipal, $barraAccionesExtra, $barraIconos); ?>

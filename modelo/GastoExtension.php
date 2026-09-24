@@ -92,8 +92,12 @@ class GastoExtension
     public function obtenerTotalPorAnioYAutogestion(int $anioPresupuestalId, int $autogestionId): float
     {
         $consulta = $this->db->prepare(
-            'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_extension
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id'
+            "SELECT COALESCE(SUM(valor_total), 0) FROM gastos_extension
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_extension' AND pa.origen_id = gastos_extension.id AND pa.accion = 'expediente'
+                )"
         );
         $consulta->execute([
             'anio_presupuestal_id' => $anioPresupuestalId,
@@ -106,8 +110,12 @@ class GastoExtension
     public function obtenerTotalPorAnioAutogestionYCategoria(int $anioPresupuestalId, int $autogestionId, string $categoria): float
     {
         $consulta = $this->db->prepare(
-            'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_extension
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id AND categoria = :categoria'
+            "SELECT COALESCE(SUM(valor_total), 0) FROM gastos_extension
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id AND categoria = :categoria
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_extension' AND pa.origen_id = gastos_extension.id AND pa.accion = 'expediente'
+                )"
         );
         $consulta->execute([
             'anio_presupuestal_id' => $anioPresupuestalId,
@@ -137,9 +145,13 @@ class GastoExtension
         }
 
         $consulta = $this->db->prepare(
-            'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_extension
+            "SELECT COALESCE(SUM(valor_total), 0) FROM gastos_extension
              WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id
-                AND dependencia IN (' . implode(', ', $marcadores) . ')'
+                AND dependencia IN (" . implode(', ', $marcadores) . ")
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_extension' AND pa.origen_id = gastos_extension.id AND pa.accion = 'expediente'
+                )"
         );
         $consulta->execute($parametros);
 
@@ -165,9 +177,13 @@ class GastoExtension
         }
 
         $consulta = $this->db->prepare(
-            'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_extension
+            "SELECT COALESCE(SUM(valor_total), 0) FROM gastos_extension
              WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id AND categoria = :categoria
-                AND dependencia IN (' . implode(', ', $marcadores) . ')'
+                AND dependencia IN (" . implode(', ', $marcadores) . ")
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_extension' AND pa.origen_id = gastos_extension.id AND pa.accion = 'expediente'
+                )"
         );
         $consulta->execute($parametros);
 

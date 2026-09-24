@@ -65,11 +65,16 @@ class GastoUnisalud
         return $consulta->fetchAll();
     }
 
+    private const EXCLUIR_EXPEDIENTE_GASTO_UNISALUD = "AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_unisalud' AND pa.origen_id = gastos_unisalud.id AND pa.accion = 'expediente'
+                )";
+
     public function obtenerTotalPorAnio(int $anioPresupuestalId): float
     {
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_unisalud
-             WHERE anio_presupuestal_id = :anio_presupuestal_id'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id ' . self::EXCLUIR_EXPEDIENTE_GASTO_UNISALUD
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
 
@@ -80,7 +85,7 @@ class GastoUnisalud
     {
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_unisalud
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND categoria = :categoria'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND categoria = :categoria ' . self::EXCLUIR_EXPEDIENTE_GASTO_UNISALUD
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'categoria' => $categoria]);
 
@@ -108,7 +113,7 @@ class GastoUnisalud
 
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_unisalud
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND dependencia IN (' . implode(', ', $marcadores) . ')'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND dependencia IN (' . implode(', ', $marcadores) . ') ' . self::EXCLUIR_EXPEDIENTE_GASTO_UNISALUD
         );
         $consulta->execute($parametros);
 
@@ -134,7 +139,7 @@ class GastoUnisalud
 
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_unisalud
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND categoria = :categoria AND dependencia IN (' . implode(', ', $marcadores) . ')'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND categoria = :categoria AND dependencia IN (' . implode(', ', $marcadores) . ') ' . self::EXCLUIR_EXPEDIENTE_GASTO_UNISALUD
         );
         $consulta->execute($parametros);
 

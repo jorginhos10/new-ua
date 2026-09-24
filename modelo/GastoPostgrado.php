@@ -90,11 +90,16 @@ class GastoPostgrado
         return $fila !== false ? $fila : null;
     }
 
+    private const EXCLUIR_EXPEDIENTE_GASTO_POSTGRADO = "AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_postgrado' AND pa.origen_id = gastos_postgrado.id AND pa.accion = 'expediente'
+                )";
+
     public function obtenerTotalPorAnio(int $anioPresupuestalId): float
     {
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
-             WHERE anio_presupuestal_id = :anio_presupuestal_id'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id ' . self::EXCLUIR_EXPEDIENTE_GASTO_POSTGRADO
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
 
@@ -105,7 +110,7 @@ class GastoPostgrado
     {
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id ' . self::EXCLUIR_EXPEDIENTE_GASTO_POSTGRADO
         );
         $consulta->execute([
             'anio_presupuestal_id' => $anioPresupuestalId,
@@ -119,7 +124,7 @@ class GastoPostgrado
     {
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND categoria = :categoria'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND categoria = :categoria ' . self::EXCLUIR_EXPEDIENTE_GASTO_POSTGRADO
         );
         $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'categoria' => $categoria]);
 
@@ -130,7 +135,7 @@ class GastoPostgrado
     {
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id AND categoria = :categoria'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id AND categoria = :categoria ' . self::EXCLUIR_EXPEDIENTE_GASTO_POSTGRADO
         );
         $consulta->execute([
             'anio_presupuestal_id' => $anioPresupuestalId,
@@ -162,7 +167,7 @@ class GastoPostgrado
 
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND dependencia IN (' . implode(', ', $marcadores) . ')'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND dependencia IN (' . implode(', ', $marcadores) . ') ' . self::EXCLUIR_EXPEDIENTE_GASTO_POSTGRADO
         );
         $consulta->execute($parametros);
 
@@ -189,7 +194,7 @@ class GastoPostgrado
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
              WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id
-                AND dependencia IN (' . implode(', ', $marcadores) . ')'
+                AND dependencia IN (' . implode(', ', $marcadores) . ') ' . self::EXCLUIR_EXPEDIENTE_GASTO_POSTGRADO
         );
         $consulta->execute($parametros);
 
@@ -215,7 +220,7 @@ class GastoPostgrado
 
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND categoria = :categoria AND dependencia IN (' . implode(', ', $marcadores) . ')'
+             WHERE anio_presupuestal_id = :anio_presupuestal_id AND categoria = :categoria AND dependencia IN (' . implode(', ', $marcadores) . ') ' . self::EXCLUIR_EXPEDIENTE_GASTO_POSTGRADO
         );
         $consulta->execute($parametros);
 
@@ -243,7 +248,7 @@ class GastoPostgrado
         $consulta = $this->db->prepare(
             'SELECT COALESCE(SUM(valor_total), 0) FROM gastos_postgrado
              WHERE anio_presupuestal_id = :anio_presupuestal_id AND autogestion_id = :autogestion_id AND categoria = :categoria
-                AND dependencia IN (' . implode(', ', $marcadores) . ')'
+                AND dependencia IN (' . implode(', ', $marcadores) . ') ' . self::EXCLUIR_EXPEDIENTE_GASTO_POSTGRADO
         );
         $consulta->execute($parametros);
 

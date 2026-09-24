@@ -3502,6 +3502,34 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
+// Filtro de texto simple para las tarjetas agrupadas de Archivados/Enviadas: cada fila ya trae su
+// propio data-texto-filtro (tipo+dependencia+remitente[+estado], en minúsculas); escribir en el
+// campo de búsqueda oculta las filas que no lo contengan. No reemplaza el motor pesado de
+// tabla-real.js (pensado para una grilla plana de cientos de filas) — esto es solo para las pocas
+// tarjetas ya agrupadas de estas dos pestañas.
+document.addEventListener('DOMContentLoaded', function () {
+    [
+        { campo: 'filtro-archivado', tabla: 'tabla-archivado-agrupado' },
+        { campo: 'filtro-enviado', tabla: 'tabla-enviado-agrupado' },
+    ].forEach(function (config) {
+        var campoFiltro = document.getElementById(config.campo);
+        var tabla = document.getElementById(config.tabla);
+
+        if (!campoFiltro || !tabla) {
+            return;
+        }
+
+        campoFiltro.addEventListener('input', function () {
+            var texto = campoFiltro.value.trim().toLowerCase();
+
+            tabla.querySelectorAll('tbody tr.fila-filtrable').forEach(function (fila) {
+                var coincide = texto === '' || (fila.dataset.textoFiltro || '').indexOf(texto) !== -1;
+                fila.style.display = coincide ? '' : 'none';
+            });
+        });
+    });
+});
+
 document.addEventListener('DOMContentLoaded', function () {
     var checkboxesArchivado = document.querySelectorAll('.checkbox-archivado');
     var checkboxArchivadoTodos = document.getElementById('checkbox-archivado-todos');
@@ -3514,9 +3542,12 @@ document.addEventListener('DOMContentLoaded', function () {
     var anioIdArchivado = barraAccionesArchivar ? barraAccionesArchivar.dataset.anioId : '';
 
     var botonArchivadoVer = document.getElementById('boton-archivado-ver');
+    var botonArchivadoRestaurar = document.getElementById('boton-archivado-restaurar');
+    var botonArchivadoExpediente = document.getElementById('boton-archivado-expediente');
     var botonArchivadoDuplicar = document.getElementById('boton-archivado-duplicar');
     var botonArchivadoConsolidar = document.getElementById('boton-archivado-consolidar');
     var botonArchivadoEnviar = document.getElementById('boton-archivado-enviar');
+    var botonArchivadoHistorial = document.getElementById('boton-archivado-historial');
 
     var modalEnviarArchivado = document.getElementById('modal-enviar-archivado');
 
@@ -3526,12 +3557,41 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // Cada checkbox de Archivados ahora representa un GRUPO (mismo tipo+dependencia+remitente),
+    // no un solo ítem — data-items trae el JSON de todos los ítems reales de ese grupo. Aplanar
+    // la selección junta los ítems de todos los grupos marcados, igual que ya hace Consolidado.
+    function itemsDeSeleccionArchivado(seleccionados) {
+        var items = [];
+        seleccionados.forEach(function (casilla) {
+            var propios = [];
+            try {
+                propios = JSON.parse(casilla.dataset.items || '[]');
+            } catch (error) {
+                propios = [];
+            }
+            items = items.concat(propios);
+        });
+        return items;
+    }
+
     function actualizarBotonesArchivado() {
         var seleccionados = obtenerSeleccionadosArchivado();
         var hay = seleccionados.length > 0;
+        var unSoloGrupo = seleccionados.length === 1;
 
         if (botonArchivadoVer) {
-            botonArchivadoVer.disabled = seleccionados.length !== 1;
+            botonArchivadoVer.disabled = !unSoloGrupo;
+        }
+        if (botonArchivadoRestaurar) {
+            botonArchivadoRestaurar.disabled = !hay;
+        }
+        if (botonArchivadoExpediente) {
+            // Solo tiene sentido mandar a Expediente algo que hoy está simplemente Archivado — no
+            // un ítem que ya está en Expediente.
+            var todosArchivados = hay && seleccionados.every(function (casilla) {
+                return casilla.dataset.estado === 'archivada';
+            });
+            botonArchivadoExpediente.disabled = !todosArchivados;
         }
         if (botonArchivadoDuplicar) {
             botonArchivadoDuplicar.disabled = !hay;
@@ -3541,6 +3601,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (botonArchivadoEnviar) {
             botonArchivadoEnviar.disabled = !hay;
+        }
+        if (botonArchivadoHistorial) {
+            botonArchivadoHistorial.disabled = !unSoloGrupo;
         }
 
         if (checkboxArchivadoTodos) {
@@ -3563,8 +3626,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     actualizarBotonesArchivado();
 
-    // ---- Ver: exige exactamente un ítem seleccionado y navega directo a su tabla real
-    // (peticiones-tipo-detalle), sin popup intermedio — igual que ya hace Pendientes. ----
+    // ---- Ver: exige exactamente un grupo seleccionado y navega directo a la tabla real del
+    // primer ítem de ese grupo (peticiones-tipo-detalle), sin popup intermedio. ----
     if (botonArchivadoVer) {
         botonArchivadoVer.addEventListener('click', function () {
             if (botonArchivadoVer.disabled) {
@@ -3576,6 +3639,23 @@ document.addEventListener('DOMContentLoaded', function () {
             if (seleccionados.length === 1 && seleccionados[0].dataset.rutaVer) {
                 window.location.href = seleccionados[0].dataset.rutaVer;
             }
+        });
+    }
+
+    if (botonArchivadoHistorial) {
+        botonArchivadoHistorial.addEventListener('click', function () {
+            if (botonArchivadoHistorial.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosArchivado();
+            if (seleccionados.length !== 1) {
+                return;
+            }
+
+            var tipo = seleccionados[0].dataset.tipo || '';
+            window.location.href = 'index.php?ruta=peticiones-historial-tipo&tipo=' + encodeURIComponent(tipo)
+                + '&volver=' + encodeURIComponent(window.location.href);
         });
     }
 
@@ -3597,13 +3677,47 @@ document.addEventListener('DOMContentLoaded', function () {
         agregarCampo('vista', 'archivar');
         agregarCampo('anio_id', anioIdArchivado || '');
 
-        seleccionados.forEach(function (casilla) {
-            agregarCampo('item_origen[]', casilla.dataset.origen || '');
-            agregarCampo('item_origen_id[]', casilla.dataset.origenId || '');
+        itemsDeSeleccionArchivado(seleccionados).forEach(function (item) {
+            agregarCampo('item_origen[]', item.origen || '');
+            agregarCampo('item_origen_id[]', item.origen_id || '');
         });
 
         document.body.appendChild(formulario);
         formulario.submit();
+    }
+
+    if (botonArchivadoRestaurar) {
+        botonArchivadoRestaurar.addEventListener('click', function () {
+            if (botonArchivadoRestaurar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosArchivado();
+            var cantidad = itemsDeSeleccionArchivado(seleccionados).length;
+
+            if (!window.confirm('¿Restaurar ' + cantidad + ' ítem(s) seleccionado(s)? Lo simplemente archivado vuelve a Pendientes; lo que estaba en Expediente vuelve al Archivado de su dueño.')) {
+                return;
+            }
+
+            enviarFormularioArchivado('restaurar_archivado_grupo', seleccionados);
+        });
+    }
+
+    if (botonArchivadoExpediente) {
+        botonArchivadoExpediente.addEventListener('click', function () {
+            if (botonArchivadoExpediente.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosArchivado();
+            var cantidad = itemsDeSeleccionArchivado(seleccionados).length;
+
+            if (!window.confirm('¿Mandar ' + cantidad + ' ítem(s) seleccionado(s) a Expediente? Dejarán de verse en tu Archivado; solo el superadmin puede devolverlos.')) {
+                return;
+            }
+
+            enviarFormularioArchivado('mandar_expediente_grupo', seleccionados);
+        });
     }
 
     if (botonArchivadoDuplicar) {
@@ -3613,8 +3727,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             var seleccionados = obtenerSeleccionadosArchivado();
+            var cantidad = itemsDeSeleccionArchivado(seleccionados).length;
 
-            if (!window.confirm('¿Duplicar ' + seleccionados.length + ' ítem(s) seleccionado(s)? Se creará una copia de cada uno, también archivada.')) {
+            if (!window.confirm('¿Duplicar ' + cantidad + ' ítem(s) seleccionado(s)? Se creará una copia de cada uno, también archivada.')) {
                 return;
             }
 
@@ -3629,8 +3744,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             var seleccionados = obtenerSeleccionadosArchivado();
+            var cantidad = itemsDeSeleccionArchivado(seleccionados).length;
 
-            if (!window.confirm('¿Consolidar ' + seleccionados.length + ' ítem(s) seleccionado(s)? Pasarán a "Consolidado por tipo" y dejarán de estar archivados.')) {
+            if (!window.confirm('¿Consolidar ' + cantidad + ' ítem(s) seleccionado(s)? Pasarán a "Consolidado por tipo" y dejarán de estar archivados.')) {
                 return;
             }
 
@@ -3656,17 +3772,17 @@ document.addEventListener('DOMContentLoaded', function () {
             var seleccionados = obtenerSeleccionadosArchivado();
             contenedorCamposItemsEnviarArchivado.innerHTML = '';
 
-            seleccionados.forEach(function (casilla) {
+            itemsDeSeleccionArchivado(seleccionados).forEach(function (item) {
                 var campoOrigen = document.createElement('input');
                 campoOrigen.type = 'hidden';
                 campoOrigen.name = 'item_origen[]';
-                campoOrigen.value = casilla.dataset.origen || '';
+                campoOrigen.value = item.origen || '';
                 contenedorCamposItemsEnviarArchivado.appendChild(campoOrigen);
 
                 var campoOrigenId = document.createElement('input');
                 campoOrigenId.type = 'hidden';
                 campoOrigenId.name = 'item_origen_id[]';
-                campoOrigenId.value = casilla.dataset.origenId || '';
+                campoOrigenId.value = item.origen_id || '';
                 contenedorCamposItemsEnviarArchivado.appendChild(campoOrigenId);
             });
 
@@ -3716,6 +3832,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var botonEnviadoDuplicar = document.getElementById('boton-enviado-duplicar');
     var botonEnviadoConsolidar = document.getElementById('boton-enviado-consolidar');
     var botonEnviadoEnviar = document.getElementById('boton-enviado-enviar');
+    var botonEnviadoHistorial = document.getElementById('boton-enviado-historial');
 
     var modalEnviarEnviado = document.getElementById('modal-enviar-enviado');
 
@@ -3725,12 +3842,29 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // Cada checkbox de Enviadas ahora representa un GRUPO (mismo tipo+dependencia+remitente), no
+    // un solo ítem — data-items trae el JSON de todos los ítems reales de ese grupo.
+    function itemsDeSeleccionEnviado(seleccionados) {
+        var items = [];
+        seleccionados.forEach(function (casilla) {
+            var propios = [];
+            try {
+                propios = JSON.parse(casilla.dataset.items || '[]');
+            } catch (error) {
+                propios = [];
+            }
+            items = items.concat(propios);
+        });
+        return items;
+    }
+
     function actualizarBotonesEnviado() {
         var seleccionados = obtenerSeleccionadosEnviado();
         var hay = seleccionados.length > 0;
+        var unSoloGrupo = seleccionados.length === 1;
 
         if (botonEnviadoVer) {
-            botonEnviadoVer.disabled = seleccionados.length !== 1;
+            botonEnviadoVer.disabled = !unSoloGrupo;
         }
         if (botonEnviadoDuplicar) {
             botonEnviadoDuplicar.disabled = !hay;
@@ -3740,6 +3874,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (botonEnviadoEnviar) {
             botonEnviadoEnviar.disabled = !hay;
+        }
+        if (botonEnviadoHistorial) {
+            botonEnviadoHistorial.disabled = !unSoloGrupo;
         }
 
         if (checkboxEnviadoTodos) {
@@ -3762,8 +3899,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     actualizarBotonesEnviado();
 
-    // ---- Ver: exige exactamente un ítem seleccionado y navega directo a su tabla real
-    // (peticiones-tipo-detalle), sin popup intermedio — igual que ya hace Pendientes. ----
+    // ---- Ver: exige exactamente un grupo seleccionado y navega directo a la tabla real del
+    // primer ítem de ese grupo (peticiones-tipo-detalle), sin popup intermedio. ----
     if (botonEnviadoVer) {
         botonEnviadoVer.addEventListener('click', function () {
             if (botonEnviadoVer.disabled) {
@@ -3775,6 +3912,23 @@ document.addEventListener('DOMContentLoaded', function () {
             if (seleccionados.length === 1 && seleccionados[0].dataset.rutaVer) {
                 window.location.href = seleccionados[0].dataset.rutaVer;
             }
+        });
+    }
+
+    if (botonEnviadoHistorial) {
+        botonEnviadoHistorial.addEventListener('click', function () {
+            if (botonEnviadoHistorial.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosEnviado();
+            if (seleccionados.length !== 1) {
+                return;
+            }
+
+            var tipo = seleccionados[0].dataset.tipo || '';
+            window.location.href = 'index.php?ruta=peticiones-historial-tipo&tipo=' + encodeURIComponent(tipo)
+                + '&volver=' + encodeURIComponent(window.location.href);
         });
     }
 
@@ -3796,15 +3950,15 @@ document.addEventListener('DOMContentLoaded', function () {
         agregarCampo('vista', 'enviadas');
         agregarCampo('anio_id', anioIdEnviado || '');
 
-        seleccionados.forEach(function (casilla) {
-            agregarCampo('item_origen[]', casilla.dataset.origen || '');
-            agregarCampo('item_origen_id[]', casilla.dataset.origenId || '');
-            agregarCampo('item_tipo[]', casilla.dataset.tipo || '');
-            agregarCampo('item_detalle[]', casilla.dataset.detalle || '');
-            agregarCampo('item_cantidad[]', casilla.dataset.cantidad || '');
-            agregarCampo('item_valor[]', casilla.dataset.valor || '');
-            agregarCampo('item_ruta_ver[]', casilla.dataset.rutaVer || '');
-            agregarCampo('item_accion_actual[]', casilla.dataset.accionActual || '');
+        itemsDeSeleccionEnviado(seleccionados).forEach(function (item) {
+            agregarCampo('item_origen[]', item.origen || '');
+            agregarCampo('item_origen_id[]', item.origen_id || '');
+            agregarCampo('item_tipo[]', item.tipo || '');
+            agregarCampo('item_detalle[]', item.detalle || '');
+            agregarCampo('item_cantidad[]', item.cantidad || '');
+            agregarCampo('item_valor[]', item.valor || '');
+            agregarCampo('item_ruta_ver[]', item.ruta_ver || '');
+            agregarCampo('item_accion_actual[]', item.accion_actual || '');
         });
 
         document.body.appendChild(formulario);
@@ -3818,8 +3972,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             var seleccionados = obtenerSeleccionadosEnviado();
+            var cantidad = itemsDeSeleccionEnviado(seleccionados).length;
 
-            if (!window.confirm('¿Duplicar ' + seleccionados.length + ' ítem(s) seleccionado(s)? Se creará una copia de cada uno, en el mismo estado que tiene hoy.')) {
+            if (!window.confirm('¿Duplicar ' + cantidad + ' ítem(s) seleccionado(s)? Se creará una copia de cada uno, en el mismo estado que tiene hoy.')) {
                 return;
             }
 
@@ -3834,8 +3989,9 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             var seleccionados = obtenerSeleccionadosEnviado();
+            var cantidad = itemsDeSeleccionEnviado(seleccionados).length;
 
-            if (!window.confirm('¿Consolidar ' + seleccionados.length + ' ítem(s) seleccionado(s)? Pasarán a "Consolidado por tipo".')) {
+            if (!window.confirm('¿Consolidar ' + cantidad + ' ítem(s) seleccionado(s)? Pasarán a "Consolidado por tipo".')) {
                 return;
             }
 
@@ -3869,14 +4025,14 @@ document.addEventListener('DOMContentLoaded', function () {
                 contenedorCamposItemsEnviarEnviado.appendChild(campo);
             }
 
-            seleccionados.forEach(function (casilla) {
-                agregarCampoEnviar('item_origen[]', casilla.dataset.origen || '');
-                agregarCampoEnviar('item_origen_id[]', casilla.dataset.origenId || '');
-                agregarCampoEnviar('item_tipo[]', casilla.dataset.tipo || '');
-                agregarCampoEnviar('item_detalle[]', casilla.dataset.detalle || '');
-                agregarCampoEnviar('item_cantidad[]', casilla.dataset.cantidad || '');
-                agregarCampoEnviar('item_valor[]', casilla.dataset.valor || '');
-                agregarCampoEnviar('item_ruta_ver[]', casilla.dataset.rutaVer || '');
+            itemsDeSeleccionEnviado(seleccionados).forEach(function (item) {
+                agregarCampoEnviar('item_origen[]', item.origen || '');
+                agregarCampoEnviar('item_origen_id[]', item.origen_id || '');
+                agregarCampoEnviar('item_tipo[]', item.tipo || '');
+                agregarCampoEnviar('item_detalle[]', item.detalle || '');
+                agregarCampoEnviar('item_cantidad[]', item.cantidad || '');
+                agregarCampoEnviar('item_valor[]', item.valor || '');
+                agregarCampoEnviar('item_ruta_ver[]', item.ruta_ver || '');
             });
 
             campoDependenciaEnviarEnviado.value = '';

@@ -11,7 +11,9 @@
  * Variables esperadas del controlador: $columnas, $clavesFila, $filasCompletas (cada fila incluye
  * 'ruta_editar' y 'puede_editar'), $anchosColumna, $indicesOcultosPorDefecto, $resaltarId, $origen,
  * $estado, $anioSeleccionadoId, $tituloPagina, $rutaVolver, $error, $dependenciaFiltro (si "Ver"
- * vino de una fila-grupo de Pendientes, ej. Gastos por dependencia).
+ * vino de una fila-grupo de Pendientes, ej. Gastos por dependencia), $pestanasGastoIngreso (null,
+ * o ['egresos', 'ingresos', 'activo'] cuando el origen es un par gasto/ingreso de Autogestión —
+ * ver PeticionesControlador::PARES_GASTO_INGRESO).
  */
 require __DIR__ . '/../parciales/encabezado.php';
 
@@ -106,6 +108,13 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
             </div>
         </div>
     </div>
+
+    <?php if ($pestanasGastoIngreso !== null): ?>
+    <div class="pestanas">
+        <a href="<?= htmlspecialchars($pestanasGastoIngreso['egresos']) ?>" class="pestana<?= $pestanasGastoIngreso['activo'] === 'egresos' ? ' activa' : '' ?>">Egresos</a>
+        <a href="<?= htmlspecialchars($pestanasGastoIngreso['ingresos']) ?>" class="pestana<?= $pestanasGastoIngreso['activo'] === 'ingresos' ? ' activa' : '' ?>">Ingresos</a>
+    </div>
+    <?php endif; ?>
 
     <?php if (!empty($error)): ?>
     <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
