@@ -792,8 +792,8 @@ class SinExcedentesControlador
                 $conceptos = $grupo['conceptos'];
                 unset($grupo['conceptos']);
                 $grupo['valor_total'] = $totalIngresosPorGrupo[$clave] ?? 0.0;
-                $this->modeloIngreso->crear($grupo, $conceptos);
-                $gruposAfectados[$grupo['anio_presupuestal_id'] . ':' . $grupo['dependencia']] = $grupo;
+                $grupo['id'] = $this->modeloIngreso->crear($grupo, $conceptos);
+                $gruposAfectados[] = $grupo;
             }
 
             foreach ($filasGastoCandidatas as $candidata) {
@@ -807,7 +807,7 @@ class SinExcedentesControlador
         }
 
         foreach ($gruposAfectados as $grupo) {
-            $this->generarEgresosAutomaticos(null, $grupo['anio_presupuestal_id'], $grupo['dependencia']);
+            $this->regenerarAutomaticosDeIngreso($grupo);
         }
 
         $mensaje = count($gruposIngreso) . ' ingreso(s) y ' . count($filasGastoCandidatas) . ' gasto(s) importado(s) correctamente como borrador.';
@@ -1153,7 +1153,8 @@ class SinExcedentesControlador
             return ['No se pudo registrar el ingreso: ' . $excepcion->getMessage(), ''];
         }
 
-        $this->generarEgresosAutomaticos($ingresoId, $cabecera['anio_presupuestal_id'], $cabecera['dependencia']);
+        $cabecera['id'] = $ingresoId;
+        $this->regenerarAutomaticosDeIngreso($cabecera);
 
         return ['', 'Ingreso registrado correctamente.'];
     }
@@ -1179,7 +1180,9 @@ class SinExcedentesControlador
             return ['No se pudo actualizar el ingreso: ' . $excepcion->getMessage(), ''];
         }
 
-        $this->generarEgresosAutomaticos($id, $cabecera['anio_presupuestal_id'], $cabecera['dependencia']);
+        $cabecera['id'] = $id;
+        $cabecera['usuario_id'] = $existente['usuario_id'];
+        $this->regenerarAutomaticosDeIngreso($cabecera);
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('ingreso_sin_excedentes', $id, $cabecera['valor_total'], $cabecera['dependencia']);
 
@@ -1199,12 +1202,12 @@ class SinExcedentesControlador
             return ['El ingreso que intentas eliminar no existe.', ''];
         }
 
+        // Primero se borran los automáticos ligados a este ingreso_id y LUEGO el ingreso: al revés,
+        // la FK fk_gasto_sinexc_ingreso (ON DELETE SET NULL) pone ingreso_id a NULL en cuanto se
+        // borra el ingreso, y la búsqueda "WHERE ingreso_id = :id" ya no encontraría esas filas —
+        // quedarían huérfanas para siempre en vez de borrarse.
+        $this->modeloGasto->eliminarAutomaticosPorIngreso($id);
         $this->modeloIngreso->eliminar($id);
-        $this->generarEgresosAutomaticos(
-            null,
-            (int) $existente['anio_presupuestal_id'],
-            (string) $existente['dependencia']
-        );
 
         return ['', 'Ingreso eliminado correctamente.'];
     }
@@ -1230,12 +1233,8 @@ class SinExcedentesControlador
                 $existente = $this->modeloIngreso->obtenerPorId($id);
 
                 if ($existente !== null) {
+                    $this->modeloGasto->eliminarAutomaticosPorIngreso($id);
                     $this->modeloIngreso->eliminar($id);
-                    $this->generarEgresosAutomaticos(
-                        null,
-                        (int) $existente['anio_presupuestal_id'],
-                        (string) $existente['dependencia']
-                    );
                     $eliminados++;
                 }
             }
@@ -1274,11 +1273,7 @@ class SinExcedentesControlador
 
                     $nuevo = $this->modeloIngreso->obtenerPorId($nuevoId);
                     if ($nuevo !== null) {
-                        $this->generarEgresosAutomaticos(
-                            null,
-                            (int) $nuevo['anio_presupuestal_id'],
-                            (string) $nuevo['dependencia']
-                        );
+                        $this->regenerarAutomaticosDeIngreso($nuevo);
                     }
                 }
             }
@@ -1291,14 +1286,32 @@ class SinExcedentesControlador
         return ['', 'Se duplicaron ' . $duplicados . ' elemento(s).'];
     }
 
-    private function generarEgresosAutomaticos(?int $ingresoId, int $anioPresupuestalId, string $dependencia): void
+    /**
+     * (Re)calcula las filas automáticas (Excedentes nivel central) de UN ingreso puntual, a partir
+     * de su propio valor_total y su propio usuario_id — nunca de un agregado de "todos los
+     * ingresos de la dependencia para este año". Antes se buscaba/actualizaba una única fila
+     * compartida por (año, tipo), sin filtrar por dependencia ni usuario: si dos dependencias (o
+     * dos usuarios de la misma dependencia) registraban ingresos, la acción de uno podía
+     * pisar/heredar la fila del otro — mostrando excedentes ajenos, o borrando el excedente real al
+     * recalcularlo en $0 sobre datos que no eran los suyos. Ahora cada ingreso tiene sus propias
+     * filas automáticas, ligadas 1:1 por ingreso_id: se borran y se vuelven a crear desde cero en
+     * cada llamada, así que no hay estado previo que reconciliar ni fila que puede pertenecer a
+     * otro ingreso/usuario/dependencia.
+     *
+     * @param array{id: int, anio_presupuestal_id: int, dependencia: string, usuario_id: ?int, valor_total: float} $ingreso
+     */
+    private function regenerarAutomaticosDeIngreso(array $ingreso): void
     {
+        $ingresoId = (int) $ingreso['id'];
+        $this->modeloGasto->eliminarAutomaticosPorIngreso($ingresoId);
+
+        $valorIngreso = (float) $ingreso['valor_total'];
+
+        if ($valorIngreso <= 0) {
+            return;
+        }
+
         $porcentajes = $this->modeloPorcentaje->obtenerPorModulo('sin-excedentes');
-        // Acotado a la propia dependencia del ingreso: antes usaba obtenerTotalPorAnio() (todo el
-        // año, todas las dependencias), así que el egreso automático de cada dependencia se
-        // calculaba sobre el total de TODA la universidad, no sobre lo que esa dependencia
-        // realmente ingresó.
-        $totalIngresos = $this->modeloIngreso->obtenerTotalPorAnioYDependencias($anioPresupuestalId, [$dependencia]);
 
         $lineas = [];
 
@@ -1306,30 +1319,20 @@ class SinExcedentesControlador
             $lineas['excedentes'] = ['porcentaje' => (float) $porcentajes['excedentes'], 'etiqueta' => 'Excedentes nivel central'];
         }
 
-        $this->modeloGasto->eliminarAutomaticosDistintosDe($anioPresupuestalId, array_keys($lineas));
-
         foreach ($lineas as $tipo => $info) {
-            $valor = round($totalIngresos * $info['porcentaje'] / 100, 2);
-            $existente = $this->modeloGasto->obtenerAutomaticoPorTipo($anioPresupuestalId, $tipo);
+            $valor = round($valorIngreso * $info['porcentaje'] / 100, 2);
 
-            // Si ya no hay ingresos que la sustenten (p. ej. tras eliminar el último), la fila
-            // automática desaparece en vez de quedar visible en $0.00.
             if ($valor <= 0) {
-                if ($existente !== null) {
-                    $this->modeloGasto->eliminarAutomaticoPorId((int) $existente['id']);
-                }
                 continue;
             }
 
             $porcentajeTexto = rtrim(rtrim(number_format($info['porcentaje'], 2), '0'), '.');
 
-            $categoria = $info['etiqueta'] . ' (' . $porcentajeTexto . '%)';
-
             $datos = [
                 'sede_id' => self::AUTOMATICO_SEDE_ID,
-                'anio_presupuestal_id' => $anioPresupuestalId,
-                'categoria' => $categoria,
-                'dependencia' => $dependencia,
+                'anio_presupuestal_id' => (int) $ingreso['anio_presupuestal_id'],
+                'categoria' => $info['etiqueta'] . ' (' . $porcentajeTexto . '%)',
+                'dependencia' => (string) $ingreso['dependencia'],
                 'linea_id' => self::AUTOMATICO_LINEA_ID,
                 'motor_id' => self::AUTOMATICO_MOTOR_ID,
                 'proyecto_id' => self::AUTOMATICO_PROYECTO_ID,
@@ -1338,6 +1341,7 @@ class SinExcedentesControlador
                 'rubro_texto' => self::AUTOMATICO_RUBRO_TEXTO,
                 'ingreso_id' => $ingresoId,
                 'tipo_automatico' => $tipo,
+                'usuario_id' => $ingreso['usuario_id'] !== null ? (int) $ingreso['usuario_id'] : null,
                 'insumo' => self::AUTOMATICO_INSUMO,
                 'cantidad' => 1,
                 'costo_unitario' => $valor,
@@ -1345,11 +1349,7 @@ class SinExcedentesControlador
                 'meses' => (string) self::AUTOMATICO_MES,
             ];
 
-            if ($existente !== null) {
-                $this->modeloGasto->actualizarAutomatico((int) $existente['id'], $datos);
-            } else {
-                $this->modeloGasto->crearAutomatico($datos);
-            }
+            $this->modeloGasto->crearAutomatico($datos);
         }
     }
 
@@ -1403,16 +1403,19 @@ class SinExcedentesControlador
     }
 
     /**
-     * Igual que filtrarPorPropietarioODestinatario, pero preserva siempre las líneas automáticas,
-     * que son cifras agregadas administradas de forma centralizada y no pertenecen a la
-     * dependencia que originó el ingreso que las generó.
+     * Antes esta función dejaba pasar SIN FILTRAR las líneas automáticas asumiendo que "no
+     * pertenecen a la dependencia que originó el ingreso" — falso: regenerarAutomaticosDeIngreso()
+     * las genera con 'dependencia' => la MISMA dependencia y 'usuario_id' => el MISMO usuario
+     * dueños del ingreso que las generó (nunca un destino central real), así que cualquier usuario
+     * de OTRA dependencia veía (y exportaba) las líneas automáticas de todas las demás — filtrado
+     * en falso, fuga real de datos entre facultades. Se filtran igual que cualquier otro egreso:
+     * filtrarPorPropietarioODestinatario() ya las deja ver correctamente a su dueño (por
+     * usuario_id) o a quien esté en la dependencia dueña (la propia o un ancestro), sin necesitar
+     * ningún trato especial.
      */
     private function filtrarEgresosVisibles(array $items, ?array $usuarioActual, array $dependenciasPermitidas): array
     {
-        $automaticos = array_values(array_filter($items, static fn (array $item): bool => $item['tipo_automatico'] !== null));
-        $manuales = array_values(array_filter($items, static fn (array $item): bool => $item['tipo_automatico'] === null));
-
-        return array_merge($automaticos, $this->filtrarPorPropietarioODestinatario($manuales, $usuarioActual, $dependenciasPermitidas));
+        return $this->filtrarPorPropietarioODestinatario($items, $usuarioActual, $dependenciasPermitidas);
     }
 
     /**

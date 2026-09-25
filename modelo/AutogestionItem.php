@@ -22,7 +22,7 @@ class AutogestionItem
     public function obtenerActivos(string $modulo): array
     {
         $consulta = $this->db->prepare(
-            "SELECT id, nombre FROM autogestion_items WHERE modulo = :modulo AND estado = 'activo' ORDER BY nombre"
+            "SELECT id, nombre, costos, inversiones, excedentes, contribucion_postgrado FROM autogestion_items WHERE modulo = :modulo AND estado = 'activo' ORDER BY nombre"
         );
         $consulta->execute(['modulo' => $modulo]);
 

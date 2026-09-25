@@ -521,9 +521,17 @@ class GeneradorXlsx
      *
      * @param array{encabezados: string[], columnasConLista: array<int,string>, filaEjemplo: string[], columnaCantidad: int, columnaValorUnitario: int, columnaValorTotal: int} $hojaIngresos
      * @param array{encabezados: string[], columnasConLista: array<int,string>, filaEjemplo: string[], columnaCantidad: int, columnaValorUnitario: int, columnaValorTotal: int, columnaCategoria: int} $hojaGastos
-     * @param array<int, array{etiqueta: string, porcentaje: ?float}> $validacionPorcentajes Filas del bloque de validación, en el orden en que deben aparecer (ej. Excedentes, Gastos, Inversiones).
+     * @param array<int, array{etiqueta: string, porcentaje: ?float}> $validacionPorcentajes Filas del bloque de validación, en el orden en que deben aparecer (ej. Excedentes, Gastos, Inversiones). Solo se usa para las etiquetas/orden de fila cuando $porcentajesPorItem es null.
      * @param array<string, string[]> $listasComunes Nombre de lista => valores, para la hoja "Listas" (Años, Sedes, Dependencias, etc.), compartida por ambas hojas.
      * @param array{plantilla: string, usuario_id: int, usuario_nombre: string} $metadatos
+     * @param array<int, array{nombre: string, excedentes: ?float, costos: ?float, inversiones: ?float}>|null $porcentajesPorItem
+     *        Si se indica (Extensión y Postgrado, donde el % se configura por ítem de autogestión):
+     *        la hoja oculta "Porcentaje" se genera como tabla de búsqueda (una fila por ítem, con su
+     *        % de Excedentes/Gastos/Inversiones) y se agrega un desplegable ($C$1, en ambas hojas
+     *        visibles) para elegir el ítem cuyo % se valida — el bloque de validación usa
+     *        INDEX/MATCH sobre esa tabla y SUMIF/SUMIFS filtrando por ese ítem. Si es null (Unisalud,
+     *        Convenios/SinExcedentes, donde el % es único por módulo), se mantiene el comportamiento
+     *        anterior: una sola fila por categoría, sin desplegable ni filtro por ítem.
      */
     public static function descargarPlantillaAutogestion(
         string $nombreArchivo,
@@ -531,7 +539,8 @@ class GeneradorXlsx
         array $hojaGastos,
         array $validacionPorcentajes,
         array $listasComunes,
-        array $metadatos
+        array $metadatos,
+        ?array $porcentajesPorItem = null
     ): void {
         $celdaTexto = static function (string $referencia, string $valor, ?int $estilo = null): string {
             $texto = htmlspecialchars($valor, ENT_QUOTES | ENT_XML1, 'UTF-8');
@@ -566,19 +575,63 @@ class GeneradorXlsx
         $rangoValorTotalGastos = 'Gastos!$' . $letraValorTotalGastos . '$' . $filaEjemplo . ':$' . $letraValorTotalGastos . '$' . $ultimaFilaDatos;
         $rangoValorTotalIngresos = 'Ingresos!$' . $letraValorTotalIngresos . '$' . $filaEjemplo . ':$' . $letraValorTotalIngresos . '$' . $ultimaFilaDatos;
 
+        // Columna (dentro de cada hoja de datos) que lleva el "Ítem de autogestión" de cada fila —
+        // se usa para filtrar el bloque de validación por ítem cuando $porcentajesPorItem viene dado.
+        $indiceItemIngresos = array_search('Items', $hojaIngresos['columnasConLista'], true);
+        $indiceItemGastos = array_search('Items', $hojaGastos['columnasConLista'], true);
+        $rangoItemIngresos = $indiceItemIngresos !== false
+            ? 'Ingresos!$' . self::columnaLetra($indiceItemIngresos) . '$' . $filaEjemplo . ':$' . self::columnaLetra($indiceItemIngresos) . '$' . $ultimaFilaDatos
+            : null;
+        $rangoItemGastos = $indiceItemGastos !== false
+            ? 'Gastos!$' . self::columnaLetra($indiceItemGastos) . '$' . $filaEjemplo . ':$' . self::columnaLetra($indiceItemGastos) . '$' . $ultimaFilaDatos
+            : null;
+
+        $mapaColumnaPorcentajePorItem = ['Excedentes' => 'B', 'Gastos' => 'C', 'Inversiones' => 'D'];
+
         // --- Hoja "Porcentaje" (oculta): es la ÚNICA hoja protegida del libro. Guarda el % de cada
         // categoría en una celda real (no fórmula) — Ingresos y Gastos solo la LEEN por referencia
         // directa de celda, así que el % nunca aparece como un valor editable en esas dos hojas, que
-        // quedan totalmente sin proteger (se pueden redimensionar columnas, etc.). ---
-        $filasPorcentajeXml = '<row r="1">' . $celdaTexto('A1', 'Categoría', 1) . $celdaTexto('B1', '% Configurado', 1) . '</row>';
-        foreach (array_values($validacionPorcentajes) as $indice => $fila) {
-            $numeroFilaPorcentaje = 2 + $indice;
-            $porcentaje = $fila['porcentaje'];
+        // quedan totalmente sin proteger (se pueden redimensionar columnas, etc.).
+        //
+        // Cuando $porcentajesPorItem viene dado (Extensión/Postgrado), esta hoja es una tabla de
+        // búsqueda con una fila por ítem de autogestión (se reconstruye desde la base de datos en
+        // cada exportación, así que siempre refleja los ítems/% vigentes al momento de descargar la
+        // plantilla) en vez de una sola fila por categoría — porque el % ya no es único por módulo. ---
+        if ($porcentajesPorItem !== null) {
+            $celdaPorcentajeItem = static function (string $columna, int $fila, ?float $valor) use ($celdaNumero, $celdaTexto): string {
+                return $valor !== null ? $celdaNumero($columna . $fila, $valor, 2) : $celdaTexto($columna . $fila, 'N/A', 4);
+            };
 
-            $filasPorcentajeXml .= '<row r="' . $numeroFilaPorcentaje . '">'
-                . $celdaTexto('A' . $numeroFilaPorcentaje, $fila['etiqueta'], 4)
-                . ($porcentaje !== null ? $celdaNumero('B' . $numeroFilaPorcentaje, $porcentaje, 2) : $celdaTexto('B' . $numeroFilaPorcentaje, 'N/A', 4))
+            $filasPorcentajeXml = '<row r="1">'
+                . $celdaTexto('A1', 'Ítem de autogestión', 1)
+                . $celdaTexto('B1', 'Excedentes %', 1)
+                . $celdaTexto('C1', 'Gastos %', 1)
+                . $celdaTexto('D1', 'Inversiones %', 1)
                 . '</row>';
+
+            foreach (array_values($porcentajesPorItem) as $indice => $item) {
+                $numeroFilaPorcentaje = 2 + $indice;
+
+                $filasPorcentajeXml .= '<row r="' . $numeroFilaPorcentaje . '">'
+                    . $celdaTexto('A' . $numeroFilaPorcentaje, $item['nombre'], 4)
+                    . $celdaPorcentajeItem('B', $numeroFilaPorcentaje, $item['excedentes'])
+                    . $celdaPorcentajeItem('C', $numeroFilaPorcentaje, $item['costos'])
+                    . $celdaPorcentajeItem('D', $numeroFilaPorcentaje, $item['inversiones'])
+                    . '</row>';
+            }
+
+            $ultimaFilaPorcentaje = 1 + max(1, count($porcentajesPorItem));
+        } else {
+            $filasPorcentajeXml = '<row r="1">' . $celdaTexto('A1', 'Categoría', 1) . $celdaTexto('B1', '% Configurado', 1) . '</row>';
+            foreach (array_values($validacionPorcentajes) as $indice => $fila) {
+                $numeroFilaPorcentaje = 2 + $indice;
+                $porcentaje = $fila['porcentaje'];
+
+                $filasPorcentajeXml .= '<row r="' . $numeroFilaPorcentaje . '">'
+                    . $celdaTexto('A' . $numeroFilaPorcentaje, $fila['etiqueta'], 4)
+                    . ($porcentaje !== null ? $celdaNumero('B' . $numeroFilaPorcentaje, $porcentaje, 2) : $celdaTexto('B' . $numeroFilaPorcentaje, 'N/A', 4))
+                    . '</row>';
+            }
         }
 
         $sheetPorcentajeXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
@@ -587,12 +640,31 @@ class GeneradorXlsx
             . '<sheetProtection sheet="1" selectLockedCells="0"/>'
             . '</worksheet>';
 
-        // --- Bloque de validación (idéntico en ambas hojas): título + encabezado + una fila por
-        // categoría. "% Configurado" (B) referencia directamente la celda de la hoja "Porcentaje"
-        // (la única protegida); las hojas de Ingresos y Gastos no llevan sheetProtection, así que
-        // ninguna de sus celdas queda bloqueada — solo se muestran con formato de % o moneda para
-        // que se lean bien. ---
-        $bloqueValidacionXml = '<row r="1">' . $celdaTexto('A1', 'Validación de cumplimiento de porcentajes (el % se administra en la hoja oculta "Porcentaje")', 1) . '</row>';
+        // --- Bloque de validación (idéntico en ambas hojas): título + (si aplica) desplegable de
+        // ítem a validar + encabezado + una fila por categoría. "% Configurado" (B) siempre termina
+        // leyendo la hoja oculta "Porcentaje" (la única protegida); las hojas de Ingresos y Gastos no
+        // llevan sheetProtection, así que ninguna de sus celdas queda bloqueada — solo se muestran con
+        // formato de % o moneda para que se lean bien. ---
+        if ($porcentajesPorItem !== null) {
+            $letraListaItems = self::columnaLetraLista('Items', $listasComunes);
+            $cantidadItemsLista = count($listasComunes['Items'] ?? []);
+            $rangoListaItems = 'Listas!$' . $letraListaItems . '$2:$' . $letraListaItems . '$' . ($cantidadItemsLista + 1);
+            $itemPorDefecto = $listasComunes['Items'][0] ?? '';
+
+            $bloqueValidacionXml = '<row r="1">'
+                . $celdaTexto('A1', 'Validación de cumplimiento de porcentajes por ítem (el % se administra en la hoja oculta "Porcentaje")', 1)
+                . $celdaTexto('B1', 'Ítem a validar:', 1)
+                . $celdaTexto('C1', $itemPorDefecto)
+                . '</row>';
+
+            $validacionItemSelector = '<dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Valor no válido" error="Selecciona un valor de la lista." sqref="C1">'
+                . '<formula1>' . htmlspecialchars($rangoListaItems, ENT_QUOTES | ENT_XML1, 'UTF-8') . '</formula1>'
+                . '</dataValidation>';
+        } else {
+            $bloqueValidacionXml = '<row r="1">' . $celdaTexto('A1', 'Validación de cumplimiento de porcentajes (el % se administra en la hoja oculta "Porcentaje")', 1) . '</row>';
+            $validacionItemSelector = '';
+        }
+
         $bloqueValidacionXml .= '<row r="2">'
             . $celdaTexto('A2', 'Categoría', 1)
             . $celdaTexto('B2', '% Configurado', 1)
@@ -604,13 +676,30 @@ class GeneradorXlsx
         foreach (array_values($validacionPorcentajes) as $indice => $fila) {
             $numeroFila = 3 + $indice;
             $numeroFilaPorcentaje = 2 + $indice;
+            $etiqueta = $fila['etiqueta'];
+
+            if ($porcentajesPorItem !== null && isset($mapaColumnaPorcentajePorItem[$etiqueta])) {
+                $columnaLookup = $mapaColumnaPorcentajePorItem[$etiqueta];
+                $formulaPorcentaje = 'IFERROR(INDEX(Porcentaje!$' . $columnaLookup . '$2:$' . $columnaLookup . '$' . $ultimaFilaPorcentaje
+                    . ',MATCH($C$1,Porcentaje!$A$2:$A$' . $ultimaFilaPorcentaje . ',0)),"N/A")';
+                $formulaTotalIngresos = $rangoItemIngresos !== null
+                    ? 'SUMIF(' . $rangoItemIngresos . ',$C$1,' . $rangoValorTotalIngresos . ')'
+                    : 'SUM(' . $rangoValorTotalIngresos . ')';
+                $formulaEjecutado = $rangoItemGastos !== null
+                    ? 'SUMIFS(' . $rangoValorTotalGastos . ',' . $rangoCategoriaGastos . ',A' . $numeroFila . ',' . $rangoItemGastos . ',$C$1)'
+                    : 'SUMIF(' . $rangoCategoriaGastos . ',A' . $numeroFila . ',' . $rangoValorTotalGastos . ')';
+            } else {
+                $formulaPorcentaje = 'Porcentaje!$B$' . $numeroFilaPorcentaje;
+                $formulaTotalIngresos = 'SUM(' . $rangoValorTotalIngresos . ')';
+                $formulaEjecutado = 'SUMIF(' . $rangoCategoriaGastos . ',A' . $numeroFila . ',' . $rangoValorTotalGastos . ')';
+            }
 
             $bloqueValidacionXml .= '<row r="' . $numeroFila . '">'
-                . $celdaTexto('A' . $numeroFila, $fila['etiqueta'])
-                . $celdaFormula('B' . $numeroFila, 'Porcentaje!$B$' . $numeroFilaPorcentaje, 2)
-                . $celdaFormula('C' . $numeroFila, 'SUM(' . $rangoValorTotalIngresos . ')', 3)
+                . $celdaTexto('A' . $numeroFila, $etiqueta)
+                . $celdaFormula('B' . $numeroFila, $formulaPorcentaje, 2)
+                . $celdaFormula('C' . $numeroFila, $formulaTotalIngresos, 3)
                 . $celdaFormula('D' . $numeroFila, 'IFERROR(B' . $numeroFila . '/100*C' . $numeroFila . ',"N/A")', 3)
-                . $celdaFormula('E' . $numeroFila, 'SUMIF(' . $rangoCategoriaGastos . ',A' . $numeroFila . ',' . $rangoValorTotalGastos . ')', 3)
+                . $celdaFormula('E' . $numeroFila, $formulaEjecutado, 3)
                 . '</row>';
         }
 
@@ -625,7 +714,7 @@ class GeneradorXlsx
         // Ninguna de las dos lleva sheetProtection, así que ninguna celda queda bloqueada (se puede
         // redimensionar columnas, dar formato, etc.) — el % configurado, que sí debe quedar de solo
         // lectura, vive únicamente en la hoja oculta y protegida "Porcentaje". ---
-        $construirHoja = function (array $config, int $idTabla, string $nombreTabla) use ($celdaTexto, $celdaFormula, $bloqueValidacionXml, $conditionalFormattingXml, $filaEncabezado, $filaEjemplo, $ultimaFilaDatos, $listasComunes): array {
+        $construirHoja = function (array $config, int $idTabla, string $nombreTabla) use ($celdaTexto, $celdaFormula, $bloqueValidacionXml, $conditionalFormattingXml, $filaEncabezado, $filaEjemplo, $ultimaFilaDatos, $listasComunes, $validacionItemSelector): array {
             $columnas = count($config['encabezados']);
 
             $filasXml = $bloqueValidacionXml;
@@ -654,8 +743,8 @@ class GeneradorXlsx
                 $filasXml .= $filaXml . '</row>';
             }
 
-            $validaciones = '';
-            $cantidadListas = 0;
+            $validaciones = $validacionItemSelector;
+            $cantidadListas = $validacionItemSelector !== '' ? 1 : 0;
             foreach ($config['columnasConLista'] as $indiceColumna => $nombreLista) {
                 $valores = $listasComunes[$nombreLista] ?? [];
                 $cantidadValores = count($valores);

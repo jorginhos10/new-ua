@@ -270,29 +270,19 @@ class GastoSinExcedentes
     }
 
 
-    public function obtenerAutomaticoPorTipo(int $anioPresupuestalId, string $tipo): ?array
-    {
-        $consulta = $this->db->prepare(
-            'SELECT * FROM gastos_sin_excedentes
-             WHERE anio_presupuestal_id = :anio_presupuestal_id AND tipo_automatico = :tipo
-             LIMIT 1'
-        );
-        $consulta->execute([
-            'anio_presupuestal_id' => $anioPresupuestalId,
-            'tipo' => $tipo,
-        ]);
-        $fila = $consulta->fetch();
-
-        return $fila !== false ? $fila : null;
-    }
-
+    /**
+     * Crea una fila de gasto automático (ej. "Excedentes nivel central") siempre ligada a UN
+     * ingreso concreto vía ingreso_id, y con el mismo usuario_id de ese ingreso — nunca se calcula
+     * como agregado de "todos los ingresos de la dependencia" (eso mezclaba, bajo una sola fila
+     * por año, los ingresos de distintos usuarios/dependencias: ver eliminarAutomaticosPorIngreso()).
+     */
     public function crearAutomatico(array $datos): bool
     {
         $consulta = $this->db->prepare(
             'INSERT INTO gastos_sin_excedentes
-                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_texto, ingreso_id, tipo_automatico, insumo, cantidad, costo_unitario, valor_total, meses)
+                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_texto, ingreso_id, tipo_automatico, usuario_id, insumo, cantidad, costo_unitario, valor_total, meses)
              VALUES
-                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_texto, :ingreso_id, :tipo_automatico, :insumo, :cantidad, :costo_unitario, :valor_total, :meses)'
+                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_texto, :ingreso_id, :tipo_automatico, :usuario_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses)'
         );
 
         return $consulta->execute([
@@ -308,6 +298,7 @@ class GastoSinExcedentes
             'rubro_texto' => $datos['rubro_texto'],
             'ingreso_id' => $datos['ingreso_id'],
             'tipo_automatico' => $datos['tipo_automatico'],
+            'usuario_id' => $datos['usuario_id'],
             'insumo' => $datos['insumo'],
             'cantidad' => $datos['cantidad'],
             'costo_unitario' => $datos['costo_unitario'],
@@ -316,51 +307,17 @@ class GastoSinExcedentes
         ]);
     }
 
-    public function eliminarAutomaticosDistintosDe(int $anioPresupuestalId, array $tiposValidos): bool
+    /**
+     * Borra TODAS las filas automáticas ligadas a un ingreso puntual (por ingreso_id) — se llama
+     * antes de recrearlas cada vez que ese ingreso se crea, edita o elimina, así que no queda
+     * ninguna fila "huérfana" ni se toca la de otro ingreso (antes se buscaba/actualizaba una
+     * única fila compartida por año+tipo sin importar el ingreso/dependencia/usuario real, lo que
+     * hacía que el ingreso de un usuario pisara o heredara el excedente calculado de otro).
+     */
+    public function eliminarAutomaticosPorIngreso(int $ingresoId): bool
     {
-        if (empty($tiposValidos)) {
-            $consulta = $this->db->prepare(
-                'DELETE FROM gastos_sin_excedentes
-                 WHERE anio_presupuestal_id = :anio_presupuestal_id AND tipo_automatico IS NOT NULL'
-            );
+        $consulta = $this->db->prepare('DELETE FROM gastos_sin_excedentes WHERE ingreso_id = :ingreso_id AND tipo_automatico IS NOT NULL');
 
-            return $consulta->execute([
-                'anio_presupuestal_id' => $anioPresupuestalId,
-            ]);
-        }
-
-        $marcadores = implode(',', array_fill(0, count($tiposValidos), '?'));
-        $consulta = $this->db->prepare(
-            "DELETE FROM gastos_sin_excedentes
-             WHERE anio_presupuestal_id = ? AND tipo_automatico IS NOT NULL AND tipo_automatico NOT IN ($marcadores)"
-        );
-
-        return $consulta->execute(array_merge([$anioPresupuestalId], $tiposValidos));
-    }
-
-    public function actualizarAutomatico(int $id, array $datos): bool
-    {
-        $consulta = $this->db->prepare(
-            'UPDATE gastos_sin_excedentes
-             SET categoria = :categoria, dependencia = :dependencia, ingreso_id = :ingreso_id,
-                 costo_unitario = :costo_unitario, valor_total = :valor_total
-             WHERE id = :id'
-        );
-
-        return $consulta->execute([
-            'id' => $id,
-            'categoria' => $datos['categoria'],
-            'dependencia' => $datos['dependencia'],
-            'ingreso_id' => $datos['ingreso_id'],
-            'costo_unitario' => $datos['costo_unitario'],
-            'valor_total' => $datos['valor_total'],
-        ]);
-    }
-
-    public function eliminarAutomaticoPorId(int $id): bool
-    {
-        $consulta = $this->db->prepare('DELETE FROM gastos_sin_excedentes WHERE id = :id AND tipo_automatico IS NOT NULL');
-
-        return $consulta->execute(['id' => $id]);
+        return $consulta->execute(['ingreso_id' => $ingresoId]);
     }
 }
