@@ -220,6 +220,25 @@ class Usuario
         return $consulta->fetchAll();
     }
 
+    /**
+     * Lista plana de todos los usuarios con rol asignado, para selectores tipo "Rol · Nombre
+     * (correo)" que no necesitan filtrar en cascada por dependencia (ej. otorgar un permiso
+     * puntual) — a diferencia de obtenerMapaPorDependenciaYRol(), que sí agrupa por dependencia
+     * para el selector de destinatario de "Enviar".
+     */
+    public function obtenerActivosConRol(): array
+    {
+        $consulta = $this->db->query(
+            "SELECT u.id, u.nombre, u.correo, r.nombre AS rol_nombre
+             FROM usuarios u
+             JOIN roles r ON r.id = u.rol_id
+             WHERE u.rol_id IS NOT NULL
+             ORDER BY r.nombre, u.nombre"
+        );
+
+        return $consulta->fetchAll();
+    }
+
     public function obtenerRecientes(int $limite = 5): array
     {
         $consulta = $this->db->prepare(

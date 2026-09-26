@@ -309,9 +309,9 @@ class GastoPostgrado
     {
         $consulta = $this->db->prepare(
             'INSERT INTO gastos_postgrado
-                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, autogestion_id, insumo, cantidad, costo_unitario, valor_total, meses, usuario_id)
+                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, autogestion_id, insumo, cantidad, costo_unitario, valor_total, meses, usuario_id, capitulo_control)
              VALUES
-                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :autogestion_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses, :usuario_id)'
+                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :autogestion_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses, :usuario_id, :capitulo_control)'
         );
 
         return $consulta->execute([
@@ -332,6 +332,7 @@ class GastoPostgrado
             'valor_total' => $datos['cantidad'] * $datos['costo_unitario'],
             'meses' => $datos['meses'],
             'usuario_id' => $datos['usuario_id'] ?? null,
+            'capitulo_control' => $datos['capitulo_control'] ?? null,
         ]);
     }
 
@@ -462,6 +463,56 @@ class GastoPostgrado
     }
 
     /**
+     * Igual que convertirContribucionAManual()/convertirExcedentesAManual() de arriba, pero
+     * genérico a cualquier tipo_automatico — usado por el nuevo mecanismo de permisos delegados
+     * (AutogestionAutomaticoPermiso), en vez de la regla fija de dependencia "DEPARTAMENTO DE
+     * POSTGRADOS"/es_super_admin que ya usaban esos dos métodos (que se dejan intactos).
+     */
+    public function convertirAutomaticoAManual(int $id, array $datos): bool
+    {
+        $consulta = $this->db->prepare(
+            "UPDATE gastos_postgrado SET
+                sede_id = :sede_id, anio_presupuestal_id = :anio_presupuestal_id, categoria = :categoria,
+                dependencia = :dependencia, linea_id = :linea_id, motor_id = :motor_id, proyecto_id = :proyecto_id,
+                objeto_proyecto_paa = :objeto_proyecto_paa, actividad = :actividad, rubro_id = :rubro_id,
+                autogestion_id = :autogestion_id, insumo = :insumo, cantidad = :cantidad,
+                costo_unitario = :costo_unitario, valor_total = :valor_total, meses = :meses, tipo_automatico = NULL
+             WHERE id = :id AND tipo_automatico IS NOT NULL"
+        );
+
+        return $consulta->execute([
+            'id' => $id,
+            'sede_id' => $datos['sede_id'],
+            'anio_presupuestal_id' => $datos['anio_presupuestal_id'],
+            'categoria' => $datos['categoria'],
+            'dependencia' => $datos['dependencia'],
+            'linea_id' => $datos['linea_id'],
+            'motor_id' => $datos['motor_id'],
+            'proyecto_id' => $datos['proyecto_id'],
+            'objeto_proyecto_paa' => $datos['objeto_proyecto_paa'],
+            'actividad' => $datos['actividad'],
+            'rubro_id' => $datos['rubro_id'],
+            'autogestion_id' => $datos['autogestion_id'],
+            'insumo' => $datos['insumo'],
+            'cantidad' => $datos['cantidad'],
+            'costo_unitario' => $datos['costo_unitario'],
+            'valor_total' => $datos['cantidad'] * $datos['costo_unitario'],
+            'meses' => $datos['meses'],
+        ]);
+    }
+
+    /**
+     * Igual que eliminar(), pero sin el guard "AND tipo_automatico IS NULL" — solo debe llamarse
+     * tras confirmar que quien borra es el superadmin raíz o tiene permiso delegado sobre ese tipo.
+     */
+    public function eliminarForzado(int $id): bool
+    {
+        $consulta = $this->db->prepare('DELETE FROM gastos_postgrado WHERE id = :id');
+
+        return $consulta->execute(['id' => $id]);
+    }
+
+    /**
      * Crea una fila de gasto automático (ej. "Excedentes nivel central", "Contribución a
      * posgrado") siempre ligada a UN ingreso concreto vía ingreso_id, y con el mismo usuario_id de
      * ese ingreso — nunca se calcula como agregado de "todos los ingresos de la dependencia" (eso
@@ -472,9 +523,9 @@ class GastoPostgrado
     {
         $consulta = $this->db->prepare(
             'INSERT INTO gastos_postgrado
-                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_texto, autogestion_id, ingreso_id, tipo_automatico, usuario_id, insumo, cantidad, costo_unitario, valor_total, meses)
+                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, rubro_texto, autogestion_id, ingreso_id, tipo_automatico, usuario_id, insumo, cantidad, costo_unitario, valor_total, meses)
              VALUES
-                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_texto, :autogestion_id, :ingreso_id, :tipo_automatico, :usuario_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses)'
+                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :rubro_texto, :autogestion_id, :ingreso_id, :tipo_automatico, :usuario_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses)'
         );
 
         return $consulta->execute([
@@ -487,7 +538,8 @@ class GastoPostgrado
             'proyecto_id' => $datos['proyecto_id'],
             'objeto_proyecto_paa' => $datos['objeto_proyecto_paa'],
             'actividad' => $datos['actividad'],
-            'rubro_texto' => $datos['rubro_texto'],
+            'rubro_id' => $datos['rubro_id'] ?? null,
+            'rubro_texto' => $datos['rubro_texto'] ?? null,
             'autogestion_id' => $datos['autogestion_id'],
             'ingreso_id' => $datos['ingreso_id'],
             'tipo_automatico' => $datos['tipo_automatico'],

@@ -244,9 +244,9 @@ class GastoExtension
     {
         $consulta = $this->db->prepare(
             'INSERT INTO gastos_extension
-                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, autogestion_id, insumo, cantidad, costo_unitario, valor_total, meses, usuario_id)
+                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, autogestion_id, insumo, cantidad, costo_unitario, valor_total, meses, usuario_id, capitulo_control)
              VALUES
-                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :autogestion_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses, :usuario_id)'
+                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :autogestion_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses, :usuario_id, :capitulo_control)'
         );
 
         return $consulta->execute([
@@ -267,6 +267,7 @@ class GastoExtension
             'valor_total' => $datos['cantidad'] * $datos['costo_unitario'],
             'meses' => $datos['meses'],
             'usuario_id' => $datos['usuario_id'] ?? null,
+            'capitulo_control' => $datos['capitulo_control'] ?? null,
         ]);
     }
 
@@ -319,6 +320,59 @@ class GastoExtension
         return $consulta->execute(['id' => $id]);
     }
 
+    /**
+     * Convierte una fila automática en un egreso manual normal (mismo patrón que ya existía en
+     * GastoPostgrado::convertirContribucionAManual()/convertirExcedentesAManual(), generalizado a
+     * cualquier tipo_automatico): pone tipo_automatico = NULL, así que de ahí en adelante se edita/
+     * borra como cualquier fila manual y ya NO se toca si el ingreso_id que la originó cambia
+     * después (regenerarAutomaticosDeIngreso() solo reemplaza filas con tipo_automatico IS NOT NULL).
+     * Solo debe llamarse desde el controlador tras confirmar que quien edita es el superadmin raíz o
+     * tiene permiso delegado sobre ese tipo (ver AutogestionAutomaticoPermiso).
+     */
+    public function convertirAutomaticoAManual(int $id, array $datos): bool
+    {
+        $consulta = $this->db->prepare(
+            "UPDATE gastos_extension SET
+                sede_id = :sede_id, anio_presupuestal_id = :anio_presupuestal_id, categoria = :categoria,
+                dependencia = :dependencia, linea_id = :linea_id, motor_id = :motor_id, proyecto_id = :proyecto_id,
+                objeto_proyecto_paa = :objeto_proyecto_paa, actividad = :actividad, rubro_id = :rubro_id,
+                autogestion_id = :autogestion_id, insumo = :insumo, cantidad = :cantidad,
+                costo_unitario = :costo_unitario, valor_total = :valor_total, meses = :meses, tipo_automatico = NULL
+             WHERE id = :id AND tipo_automatico IS NOT NULL"
+        );
+
+        return $consulta->execute([
+            'id' => $id,
+            'sede_id' => $datos['sede_id'],
+            'anio_presupuestal_id' => $datos['anio_presupuestal_id'],
+            'categoria' => $datos['categoria'],
+            'dependencia' => $datos['dependencia'],
+            'linea_id' => $datos['linea_id'],
+            'motor_id' => $datos['motor_id'],
+            'proyecto_id' => $datos['proyecto_id'],
+            'objeto_proyecto_paa' => $datos['objeto_proyecto_paa'],
+            'actividad' => $datos['actividad'],
+            'rubro_id' => $datos['rubro_id'],
+            'autogestion_id' => $datos['autogestion_id'],
+            'insumo' => $datos['insumo'],
+            'cantidad' => $datos['cantidad'],
+            'costo_unitario' => $datos['costo_unitario'],
+            'valor_total' => $datos['cantidad'] * $datos['costo_unitario'],
+            'meses' => $datos['meses'],
+        ]);
+    }
+
+    /**
+     * Igual que eliminar(), pero sin el guard "AND tipo_automatico IS NULL" — mismo requisito de
+     * llamada que convertirAutomaticoAManual().
+     */
+    public function eliminarForzado(int $id): bool
+    {
+        $consulta = $this->db->prepare('DELETE FROM gastos_extension WHERE id = :id');
+
+        return $consulta->execute(['id' => $id]);
+    }
+
 
     /**
      * Crea una fila de gasto automático (ej. "Excedentes nivel central") siempre ligada a UN
@@ -331,9 +385,9 @@ class GastoExtension
     {
         $consulta = $this->db->prepare(
             'INSERT INTO gastos_extension
-                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_texto, autogestion_id, ingreso_id, tipo_automatico, usuario_id, insumo, cantidad, costo_unitario, valor_total, meses)
+                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, rubro_texto, autogestion_id, ingreso_id, tipo_automatico, usuario_id, insumo, cantidad, costo_unitario, valor_total, meses)
              VALUES
-                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_texto, :autogestion_id, :ingreso_id, :tipo_automatico, :usuario_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses)'
+                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :rubro_texto, :autogestion_id, :ingreso_id, :tipo_automatico, :usuario_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses)'
         );
 
         return $consulta->execute([
@@ -346,7 +400,8 @@ class GastoExtension
             'proyecto_id' => $datos['proyecto_id'],
             'objeto_proyecto_paa' => $datos['objeto_proyecto_paa'],
             'actividad' => $datos['actividad'],
-            'rubro_texto' => $datos['rubro_texto'],
+            'rubro_id' => $datos['rubro_id'] ?? null,
+            'rubro_texto' => $datos['rubro_texto'] ?? null,
             'autogestion_id' => $datos['autogestion_id'],
             'ingreso_id' => $datos['ingreso_id'],
             'tipo_automatico' => $datos['tipo_automatico'],

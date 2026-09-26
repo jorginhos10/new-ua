@@ -18,6 +18,7 @@ require_once __DIR__ . '/../modelo/Mensaje.php';
 require_once __DIR__ . '/../modelo/PeticionArchivada.php';
 require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
+require_once __DIR__ . '/../modelo/AutogestionAutomaticoPermiso.php';
 
 class SinExcedentesControlador
 {
@@ -35,6 +36,9 @@ class SinExcedentesControlador
     private Usuario $modeloUsuario;
     private Rol $modeloRol;
     private Mensaje $modeloMensaje;
+    private AutogestionAutomaticoPermiso $modeloPermisoAutomatico;
+
+    private const MODULO_AUTOGESTION = 'sin-excedentes';
 
     private const CAMPOS_REQUERIDOS_EGRESO = [
         'sede_id',
@@ -90,6 +94,43 @@ class SinExcedentesControlador
         $this->modeloUsuario = new Usuario();
         $this->modeloRol = new Rol();
         $this->modeloMensaje = new Mensaje();
+        $this->modeloPermisoAutomatico = new AutogestionAutomaticoPermiso();
+    }
+
+    /**
+     * SA = quien pertenece a la dependencia raíz (`es_raiz_superadmin`) — mismo criterio ya usado
+     * en toda la sesión para "Auditar"/visibilidad en Peticiones.
+     */
+    private function esUsuarioActualSuperAdminRaiz(): bool
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+
+        if ($usuarioActual === null || empty($usuarioActual['dependencia_id'])) {
+            return false;
+        }
+
+        $dependencia = $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id']);
+
+        return $dependencia !== null && !empty($dependencia['es_raiz_superadmin']);
+    }
+
+    /**
+     * SA siempre puede; además, cualquier usuario a quien el SA le haya otorgado el permiso
+     * delegado para este (módulo, tipo) — ver AutogestionAutomaticoPermiso.
+     */
+    private function puedeGestionarAutomaticos(?string $tipoAutomatico): bool
+    {
+        if ($tipoAutomatico === null) {
+            return false;
+        }
+
+        if ($this->esUsuarioActualSuperAdminRaiz()) {
+            return true;
+        }
+
+        $usuarioActualId = (int) ($_SESSION['usuario_id'] ?? 0);
+
+        return $usuarioActualId > 0 && $this->modeloPermisoAutomatico->tienePermiso(self::MODULO_AUTOGESTION, $tipoAutomatico, $usuarioActualId);
     }
 
     public function index(): void
@@ -853,8 +894,9 @@ class SinExcedentesControlador
     {
         $id = (int) ($_POST['id'] ?? 0);
         $existente = $id > 0 ? $this->modeloGasto->obtenerPorId($id) : null;
+        $esConversionAutomatico = $existente !== null && $existente['tipo_automatico'] !== null && $this->puedeGestionarAutomaticos($existente['tipo_automatico']);
 
-        if ($existente === null || $existente['tipo_automatico'] !== null) {
+        if ($existente === null || ($existente['tipo_automatico'] !== null && !$esConversionAutomatico)) {
             return ['El egreso que intentas editar no existe.', ''];
         }
 
@@ -883,7 +925,11 @@ class SinExcedentesControlador
         }
 
         try {
-            $this->modeloGasto->actualizar($id, $datos);
+            if ($esConversionAutomatico) {
+                $this->modeloGasto->convertirAutomaticoAManual($id, $datos);
+            } else {
+                $this->modeloGasto->actualizar($id, $datos);
+            }
         } catch (PDOException $excepcion) {
             return ['No se pudo actualizar el egreso: ' . $excepcion->getMessage(), ''];
         }
@@ -1008,11 +1054,15 @@ class SinExcedentesControlador
         $id = (int) ($_POST['id'] ?? 0);
         $existente = $id > 0 ? $this->modeloGasto->obtenerPorId($id) : null;
 
-        if ($existente === null || $existente['tipo_automatico'] !== null) {
+        if ($existente === null || ($existente['tipo_automatico'] !== null && !$this->puedeGestionarAutomaticos($existente['tipo_automatico']))) {
             return ['El egreso que intentas eliminar no existe.', ''];
         }
 
-        $this->modeloGasto->eliminar($id);
+        if ($existente['tipo_automatico'] !== null) {
+            $this->modeloGasto->eliminarForzado($id);
+        } else {
+            $this->modeloGasto->eliminar($id);
+        }
 
         return ['', 'Egreso eliminado correctamente.'];
     }
@@ -1228,6 +1278,9 @@ class SinExcedentesControlador
                 if ($existente !== null && $existente['tipo_automatico'] === null) {
                     $this->modeloGasto->eliminar($id);
                     $eliminados++;
+                } elseif ($existente !== null && $this->puedeGestionarAutomaticos($existente['tipo_automatico'])) {
+                    $this->modeloGasto->eliminarForzado($id);
+                    $eliminados++;
                 }
             } else {
                 $existente = $this->modeloIngreso->obtenerPorId($id);
@@ -1412,10 +1465,25 @@ class SinExcedentesControlador
      * filtrarPorPropietarioODestinatario() ya las deja ver correctamente a su dueño (por
      * usuario_id) o a quien esté en la dependencia dueña (la propia o un ancestro), sin necesitar
      * ningún trato especial.
+     *
+     * Excepción: quien tenga permiso delegado (o sea SA) sobre el tipo_automatico de una fila la ve
+     * sin filtrar por dependencia/usuario (ver AutogestionAutomaticoPermiso). El resto sigue el
+     * filtro normal.
      */
     private function filtrarEgresosVisibles(array $items, ?array $usuarioActual, array $dependenciasPermitidas): array
     {
-        return $this->filtrarPorPropietarioODestinatario($items, $usuarioActual, $dependenciasPermitidas);
+        $visiblesPorPermiso = [];
+        $resto = [];
+
+        foreach ($items as $item) {
+            if ($item['tipo_automatico'] !== null && $this->puedeGestionarAutomaticos($item['tipo_automatico'])) {
+                $visiblesPorPermiso[] = $item;
+            } else {
+                $resto[] = $item;
+            }
+        }
+
+        return array_merge($visiblesPorPermiso, $this->filtrarPorPropietarioODestinatario($resto, $usuarioActual, $dependenciasPermitidas));
     }
 
     /**

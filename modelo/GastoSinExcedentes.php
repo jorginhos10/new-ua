@@ -262,6 +262,56 @@ class GastoSinExcedentes
         ]);
     }
 
+    /**
+     * Convierte una fila automática en un egreso manual normal (mismo patrón que
+     * GastoPostgrado::convertirContribucionAManual()/convertirExcedentesAManual()): pone
+     * tipo_automatico = NULL, así que de ahí en adelante se edita/borra como cualquier fila manual
+     * y ya no se regenera si el ingreso que la originó cambia. Solo debe llamarse tras confirmar
+     * que quien edita es el superadmin raíz o tiene permiso delegado (AutogestionAutomaticoPermiso).
+     */
+    public function convertirAutomaticoAManual(int $id, array $datos): bool
+    {
+        $consulta = $this->db->prepare(
+            "UPDATE gastos_sin_excedentes SET
+                sede_id = :sede_id, anio_presupuestal_id = :anio_presupuestal_id, categoria = :categoria,
+                dependencia = :dependencia, linea_id = :linea_id, motor_id = :motor_id, proyecto_id = :proyecto_id,
+                objeto_proyecto_paa = :objeto_proyecto_paa, actividad = :actividad, rubro_id = :rubro_id,
+                insumo = :insumo, cantidad = :cantidad, costo_unitario = :costo_unitario,
+                valor_total = :valor_total, meses = :meses, tipo_automatico = NULL
+             WHERE id = :id AND tipo_automatico IS NOT NULL"
+        );
+
+        return $consulta->execute([
+            'id' => $id,
+            'sede_id' => $datos['sede_id'],
+            'anio_presupuestal_id' => $datos['anio_presupuestal_id'],
+            'categoria' => $datos['categoria'],
+            'dependencia' => $datos['dependencia'],
+            'linea_id' => $datos['linea_id'],
+            'motor_id' => $datos['motor_id'],
+            'proyecto_id' => $datos['proyecto_id'],
+            'objeto_proyecto_paa' => $datos['objeto_proyecto_paa'],
+            'actividad' => $datos['actividad'],
+            'rubro_id' => $datos['rubro_id'],
+            'insumo' => $datos['insumo'],
+            'cantidad' => $datos['cantidad'],
+            'costo_unitario' => $datos['costo_unitario'],
+            'valor_total' => $datos['cantidad'] * $datos['costo_unitario'],
+            'meses' => $datos['meses'],
+        ]);
+    }
+
+    /**
+     * Igual que eliminar(), pero sin el guard "AND tipo_automatico IS NULL" — solo debe llamarse
+     * tras confirmar que quien borra es el superadmin raíz o tiene permiso delegado sobre ese tipo.
+     */
+    public function eliminarForzado(int $id): bool
+    {
+        $consulta = $this->db->prepare('DELETE FROM gastos_sin_excedentes WHERE id = :id');
+
+        return $consulta->execute(['id' => $id]);
+    }
+
     public function eliminar(int $id): bool
     {
         $consulta = $this->db->prepare('DELETE FROM gastos_sin_excedentes WHERE id = :id AND tipo_automatico IS NULL');

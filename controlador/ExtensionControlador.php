@@ -18,6 +18,8 @@ require_once __DIR__ . '/../modelo/Mensaje.php';
 require_once __DIR__ . '/../modelo/PeticionArchivada.php';
 require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
+require_once __DIR__ . '/../modelo/AutogestionAutomaticoPermiso.php';
+require_once __DIR__ . '/../modelo/AutogestionAutomaticoDefinicion.php';
 
 class ExtensionControlador
 {
@@ -35,6 +37,10 @@ class ExtensionControlador
     private Usuario $modeloUsuario;
     private Rol $modeloRol;
     private Mensaje $modeloMensaje;
+    private AutogestionAutomaticoPermiso $modeloPermisoAutomatico;
+    private AutogestionAutomaticoDefinicion $modeloDefinicionAutomatico;
+
+    private const MODULO_AUTOGESTION = 'extension';
 
     private const CAMPOS_REQUERIDOS_EGRESO = [
         'sede_id',
@@ -109,6 +115,45 @@ class ExtensionControlador
         $this->modeloUsuario = new Usuario();
         $this->modeloRol = new Rol();
         $this->modeloMensaje = new Mensaje();
+        $this->modeloPermisoAutomatico = new AutogestionAutomaticoPermiso();
+        $this->modeloDefinicionAutomatico = new AutogestionAutomaticoDefinicion();
+    }
+
+    /**
+     * SA = quien pertenece a la dependencia raíz (`es_raiz_superadmin`) — mismo criterio ya usado
+     * en toda la sesión para "Auditar"/visibilidad en Peticiones, NO el flag distinto
+     * `usuarios.es_super_admin` (que hoy solo usa el mecanismo legado de conversión de Postgrado).
+     */
+    private function esUsuarioActualSuperAdminRaiz(): bool
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+
+        if ($usuarioActual === null || empty($usuarioActual['dependencia_id'])) {
+            return false;
+        }
+
+        $dependencia = $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id']);
+
+        return $dependencia !== null && !empty($dependencia['es_raiz_superadmin']);
+    }
+
+    /**
+     * SA siempre puede; además, cualquier usuario a quien el SA le haya otorgado el permiso
+     * delegado para este (módulo, tipo) — ver AutogestionAutomaticoPermiso.
+     */
+    private function puedeGestionarAutomaticos(?string $tipoAutomatico): bool
+    {
+        if ($tipoAutomatico === null) {
+            return false;
+        }
+
+        if ($this->esUsuarioActualSuperAdminRaiz()) {
+            return true;
+        }
+
+        $usuarioActualId = (int) ($_SESSION['usuario_id'] ?? 0);
+
+        return $usuarioActualId > 0 && $this->modeloPermisoAutomatico->tienePermiso(self::MODULO_AUTOGESTION, $tipoAutomatico, $usuarioActualId);
     }
 
     public function index(): void
@@ -789,6 +834,13 @@ class ExtensionControlador
                     'costo_unitario' => (float) $costoTexto,
                     'meses' => implode(',', $meses),
                     'usuario_id' => (int) ($_SESSION['usuario_id'] ?? 0),
+                    // Marca de control: Colombia clasifica funcionamiento con capítulo "2" e
+                    // inversión con "4", pero el catálogo de rubros todavía no tiene códigos "4.xx"
+                    // — se guarda "4" aquí (sin tocar rubro_id ni el catálogo) cuando la fila se
+                    // clasificó como Inversiones con un rubro de capítulo "2", para que un reporte
+                    // futuro pueda distinguirla. No aplica a Gastos/Excedentes (esos sí son capítulo
+                    // "2" real).
+                    'capitulo_control' => ($categoriaTexto === 'Inversiones' && str_starts_with($rubroTexto, '2.')) ? '4' : null,
                 ],
             ];
         }
@@ -858,6 +910,15 @@ class ExtensionControlador
                 // Gastos/Inversiones sí se sigue acumulando contra lo existente, porque esas
                 // categorías sí son de cupo compartido con el resto del año.
                 if ($categoria === 'Excedentes') {
+                    // Las filas de Excedentes reemplazan la línea automática del ingreso de esta
+                    // misma clave (año:ítem:dependencia) — solo funciona si ese ingreso también
+                    // viene en este mismo archivo (ver importar(), más abajo); si no, se rechaza
+                    // en vez de dejarlas caer silenciosamente sin insertarse en ningún lado.
+                    if (!isset($gruposIngreso[$clave])) {
+                        $errores[] = "Gastos, \"$itemTexto\" en \"$dependenciaTexto\", categoría Excedentes: para reemplazar el excedente calculado, este mismo archivo debe incluir también la fila de Ingresos de \"$itemTexto\" en \"$dependenciaTexto\" para este año.";
+                        continue;
+                    }
+
                     if (abs(round($totalCategoria, 2) - $valorEsperadoCategoria) > 0.01) {
                         $porcentajeTexto = rtrim(rtrim(number_format((float) $porcentajesItem[$clavePorcentaje], 2), '0'), '.');
                         $errores[] = "Gastos, \"$itemTexto\" en \"$dependenciaTexto\", categoría Excedentes: el valor que intentas importar (" . number_format($totalCategoria, 2, ',', '.')
@@ -888,6 +949,13 @@ class ExtensionControlador
         $db = Conexion::obtener();
         $db->beginTransaction();
 
+        // Las filas "Excedentes" NO se insertan como gasto manual suelto: reemplazan la línea
+        // automática calculada del ingreso de esa misma clave (año:ítem:dependencia) — su suma ya
+        // se validó arriba contra el % esperado, igual que hoy, pero ahora si coincide sí se
+        // guardan (antes se validaban y se descartaban sin insertar nada en su lugar, dejando solo
+        // la automática — o, con el bug ya corregido esta ronda, quedaban duplicadas).
+        $excedentesPersonalizadosPorClave = [];
+
         try {
             $gruposAfectados = [];
 
@@ -900,6 +968,19 @@ class ExtensionControlador
             }
 
             foreach ($filasGastoCandidatas as $candidata) {
+                if ($candidata['categoria'] === 'Excedentes') {
+                    $excedentesPersonalizadosPorClave[$candidata['claveGrupo']][] = [
+                        'sede_id' => $candidata['datos']['sede_id'],
+                        'proyecto_id' => $candidata['datos']['proyecto_id'],
+                        'rubro_id' => $candidata['datos']['rubro_id'],
+                        'actividad' => $candidata['datos']['actividad'],
+                        'insumo' => $candidata['datos']['insumo'],
+                        'meses' => $candidata['datos']['meses'],
+                        'valor_total' => $candidata['nuevoValor'],
+                    ];
+                    continue;
+                }
+
                 $this->modeloGasto->crear($candidata['datos']);
             }
 
@@ -910,7 +991,8 @@ class ExtensionControlador
         }
 
         foreach ($gruposAfectados as $grupo) {
-            $this->regenerarAutomaticosDeIngreso($grupo);
+            $clave = $grupo['anio_presupuestal_id'] . ':' . $grupo['autogestion_id'] . ':' . $grupo['dependencia'];
+            $this->regenerarAutomaticosDeIngreso($grupo, ['excedentes' => $excedentesPersonalizadosPorClave[$clave] ?? []]);
         }
 
         $mensaje = count($gruposIngreso) . ' ingreso(s) y ' . count($filasGastoCandidatas) . ' gasto(s) importado(s) correctamente como borrador.';
@@ -958,8 +1040,9 @@ class ExtensionControlador
     {
         $id = (int) ($_POST['id'] ?? 0);
         $existente = $id > 0 ? $this->modeloGasto->obtenerPorId($id) : null;
+        $esConversionAutomatico = $existente !== null && $existente['tipo_automatico'] !== null && $this->puedeGestionarAutomaticos($existente['tipo_automatico']);
 
-        if ($existente === null || $existente['tipo_automatico'] !== null) {
+        if ($existente === null || ($existente['tipo_automatico'] !== null && !$esConversionAutomatico)) {
             return ['El egreso que intentas editar no existe.', ''];
         }
 
@@ -989,7 +1072,11 @@ class ExtensionControlador
         }
 
         try {
-            $this->modeloGasto->actualizar($id, $datos);
+            if ($esConversionAutomatico) {
+                $this->modeloGasto->convertirAutomaticoAManual($id, $datos);
+            } else {
+                $this->modeloGasto->actualizar($id, $datos);
+            }
         } catch (PDOException $excepcion) {
             return ['No se pudo actualizar el egreso: ' . $excepcion->getMessage(), ''];
         }
@@ -1110,11 +1197,15 @@ class ExtensionControlador
         $id = (int) ($_POST['id'] ?? 0);
         $existente = $id > 0 ? $this->modeloGasto->obtenerPorId($id) : null;
 
-        if ($existente === null || $existente['tipo_automatico'] !== null) {
+        if ($existente === null || ($existente['tipo_automatico'] !== null && !$this->puedeGestionarAutomaticos($existente['tipo_automatico']))) {
             return ['El egreso que intentas eliminar no existe.', ''];
         }
 
-        $this->modeloGasto->eliminar($id);
+        if ($existente['tipo_automatico'] !== null) {
+            $this->modeloGasto->eliminarForzado($id);
+        } else {
+            $this->modeloGasto->eliminar($id);
+        }
 
         return ['', 'Egreso eliminado correctamente.'];
     }
@@ -1348,6 +1439,9 @@ class ExtensionControlador
                 if ($existente !== null && $existente['tipo_automatico'] === null) {
                     $this->modeloGasto->eliminar($id);
                     $eliminados++;
+                } elseif ($existente !== null && $this->puedeGestionarAutomaticos($existente['tipo_automatico'])) {
+                    $this->modeloGasto->eliminarForzado($id);
+                    $eliminados++;
                 }
             } else {
                 $existente = $this->modeloIngreso->obtenerPorId($id);
@@ -1419,8 +1513,13 @@ class ExtensionControlador
      * fila que puede pertenecer a otro ingreso/usuario/dependencia.
      *
      * @param array{id: int, anio_presupuestal_id: int, autogestion_id: int, dependencia: string, usuario_id: ?int, valor_total: float} $ingreso
+     * @param array<string, array<int, array{sede_id:int,proyecto_id:int,rubro_id:int,actividad:string,insumo:string,meses:string,valor_total:float}>> $lineasPersonalizadas
+     *        Clave = tipo ('excedentes'). Si viene con líneas para un tipo (ver importar(), reemplazo
+     *        por plantilla), esas líneas YA fueron validadas contra el total esperado y se insertan
+     *        tal cual en vez de la única línea calculada — cada una queda igual de "protegida"
+     *        (ingreso_id/usuario_id/tipo_automatico) que la automática de siempre.
      */
-    private function regenerarAutomaticosDeIngreso(array $ingreso): void
+    private function regenerarAutomaticosDeIngreso(array $ingreso, array $lineasPersonalizadas = []): void
     {
         $ingresoId = (int) $ingreso['id'];
         $this->modeloGasto->eliminarAutomaticosPorIngreso($ingresoId);
@@ -1432,6 +1531,10 @@ class ExtensionControlador
         }
 
         $item = $this->modeloAutogestion->obtenerPorId((int) $ingreso['autogestion_id']);
+        $usuarioId = $ingreso['usuario_id'] !== null ? (int) $ingreso['usuario_id'] : null;
+        $dependencia = (string) $ingreso['dependencia'];
+        $anioId = (int) $ingreso['anio_presupuestal_id'];
+        $autogestionId = (int) $ingreso['autogestion_id'];
 
         $lineas = [];
 
@@ -1446,29 +1549,80 @@ class ExtensionControlador
                 continue;
             }
 
-            $porcentajeTexto = rtrim(rtrim(number_format($info['porcentaje'], 2), '0'), '.');
+            if (!empty($lineasPersonalizadas[$tipo])) {
+                foreach ($lineasPersonalizadas[$tipo] as $lineaPersonalizada) {
+                    $this->modeloGasto->crearAutomatico([
+                        'sede_id' => $lineaPersonalizada['sede_id'],
+                        'anio_presupuestal_id' => $anioId,
+                        'categoria' => 'Excedentes',
+                        'dependencia' => $dependencia,
+                        'linea_id' => self::AUTOMATICO_LINEA_ID,
+                        'motor_id' => self::AUTOMATICO_MOTOR_ID,
+                        'proyecto_id' => $lineaPersonalizada['proyecto_id'],
+                        'objeto_proyecto_paa' => '',
+                        'actividad' => $lineaPersonalizada['actividad'],
+                        'rubro_id' => $lineaPersonalizada['rubro_id'],
+                        'autogestion_id' => $autogestionId,
+                        'ingreso_id' => $ingresoId,
+                        'tipo_automatico' => $tipo,
+                        'usuario_id' => $usuarioId,
+                        'insumo' => $lineaPersonalizada['insumo'],
+                        'cantidad' => 1,
+                        'costo_unitario' => $lineaPersonalizada['valor_total'],
+                        'valor_total' => $lineaPersonalizada['valor_total'],
+                        'meses' => $lineaPersonalizada['meses'],
+                    ]);
+                }
+                continue;
+            }
 
-            $datos = [
-                'sede_id' => self::AUTOMATICO_SEDE_ID,
-                'anio_presupuestal_id' => (int) $ingreso['anio_presupuestal_id'],
-                'categoria' => $info['etiqueta'] . ' (' . $porcentajeTexto . '%)',
-                'dependencia' => (string) $ingreso['dependencia'],
-                'linea_id' => self::AUTOMATICO_LINEA_ID,
-                'motor_id' => self::AUTOMATICO_MOTOR_ID,
-                'proyecto_id' => self::AUTOMATICO_PROYECTO_ID,
-                'objeto_proyecto_paa' => self::AUTOMATICO_OBJETO_PROYECTO_PAA,
-                'actividad' => self::AUTOMATICO_ACTIVIDAD,
-                'rubro_texto' => self::AUTOMATICO_RUBRO_TEXTO,
-                'autogestion_id' => (int) $ingreso['autogestion_id'],
-                'ingreso_id' => $ingresoId,
-                'tipo_automatico' => $tipo,
-                'usuario_id' => $ingreso['usuario_id'] !== null ? (int) $ingreso['usuario_id'] : null,
-                'insumo' => self::AUTOMATICO_INSUMO,
-                'cantidad' => 1,
-                'costo_unitario' => $valor,
-                'valor_total' => $valor,
-                'meses' => (string) self::AUTOMATICO_MES,
-            ];
+            $porcentajeTexto = rtrim(rtrim(number_format($info['porcentaje'], 2), '0'), '.');
+            $categoria = $info['etiqueta'] . ' (' . $porcentajeTexto . '%)';
+            $definicion = $this->modeloDefinicionAutomatico->buscarConFallback(self::MODULO_AUTOGESTION, $autogestionId, $tipo, $dependencia);
+
+            $datos = $definicion !== null
+                ? [
+                    'sede_id' => (int) $definicion['sede_id'],
+                    'anio_presupuestal_id' => $anioId,
+                    'categoria' => $categoria,
+                    'dependencia' => $dependencia,
+                    'linea_id' => self::AUTOMATICO_LINEA_ID,
+                    'motor_id' => self::AUTOMATICO_MOTOR_ID,
+                    'proyecto_id' => (int) $definicion['proyecto_id'],
+                    'objeto_proyecto_paa' => '',
+                    'actividad' => $definicion['actividad'],
+                    'rubro_id' => (int) $definicion['rubro_id'],
+                    'autogestion_id' => $autogestionId,
+                    'ingreso_id' => $ingresoId,
+                    'tipo_automatico' => $tipo,
+                    'usuario_id' => $usuarioId,
+                    'insumo' => $definicion['insumo'],
+                    'cantidad' => 1,
+                    'costo_unitario' => $valor,
+                    'valor_total' => $valor,
+                    'meses' => $definicion['meses'],
+                ]
+                : [
+                    'sede_id' => self::AUTOMATICO_SEDE_ID,
+                    'anio_presupuestal_id' => $anioId,
+                    'categoria' => $categoria,
+                    'dependencia' => $dependencia,
+                    'linea_id' => self::AUTOMATICO_LINEA_ID,
+                    'motor_id' => self::AUTOMATICO_MOTOR_ID,
+                    'proyecto_id' => self::AUTOMATICO_PROYECTO_ID,
+                    'objeto_proyecto_paa' => self::AUTOMATICO_OBJETO_PROYECTO_PAA,
+                    'actividad' => self::AUTOMATICO_ACTIVIDAD,
+                    'rubro_texto' => self::AUTOMATICO_RUBRO_TEXTO,
+                    'autogestion_id' => $autogestionId,
+                    'ingreso_id' => $ingresoId,
+                    'tipo_automatico' => $tipo,
+                    'usuario_id' => $usuarioId,
+                    'insumo' => self::AUTOMATICO_INSUMO,
+                    'cantidad' => 1,
+                    'costo_unitario' => $valor,
+                    'valor_total' => $valor,
+                    'meses' => (string) self::AUTOMATICO_MES,
+                ];
 
             $this->modeloGasto->crearAutomatico($datos);
         }
@@ -1535,9 +1689,25 @@ class ExtensionControlador
      * correctamente a su dueño (por usuario_id) o a quien esté en la dependencia dueña (la propia o
      * un ancestro), sin necesitar ningún trato especial.
      */
+    /**
+     * Quien tenga permiso delegado (o sea SA) sobre el tipo_automatico de una fila la ve sin
+     * filtrar por dependencia/usuario — necesario para poder "reagrupar" filas automáticas entre
+     * dependencias (ver AutogestionAutomaticoPermiso). El resto de filas sigue el filtro normal.
+     */
     private function filtrarEgresosVisibles(array $items, ?array $usuarioActual, array $dependenciasPermitidas): array
     {
-        return $this->filtrarPorPropietarioODestinatario($items, $usuarioActual, $dependenciasPermitidas);
+        $visiblesPorPermiso = [];
+        $resto = [];
+
+        foreach ($items as $item) {
+            if ($item['tipo_automatico'] !== null && $this->puedeGestionarAutomaticos($item['tipo_automatico'])) {
+                $visiblesPorPermiso[] = $item;
+            } else {
+                $resto[] = $item;
+            }
+        }
+
+        return array_merge($visiblesPorPermiso, $this->filtrarPorPropietarioODestinatario($resto, $usuarioActual, $dependenciasPermitidas));
     }
 
     /**

@@ -1593,6 +1593,16 @@ input[type="file"]::-webkit-file-upload-button:hover {
     margin: 0;
 }
 
+.grupo-checkboxes-meses {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.grupo-checkboxes-meses .campo-checkbox {
+    margin: 0;
+}
+
 .boton-enviar {
     grid-column: span 3;
     justify-self: start;

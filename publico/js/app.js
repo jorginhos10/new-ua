@@ -4974,6 +4974,211 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 /**
+ * Modal "Definir parámetros" de fila automática (Excedentes/Contribución a posgrado): un solo
+ * modal compartido, reutilizado por cada botón "Definir" (uno por ítem en Extensión/Postgrado, uno
+ * solo para todo el módulo en Unisalud) — mismo patrón que el modal "Editar ítem" de arriba, más
+ * una tabla de definiciones ya creadas (construida en JS desde `data-definiciones`, no del lado del
+ * servidor, porque un solo modal debe poder mostrar la lista de cualquier ítem según cuál botón se
+ * haya presionado).
+ */
+document.addEventListener('DOMContentLoaded', function () {
+    var modalDefinirAutomatico = document.getElementById('modal-definir-automatico');
+
+    if (!modalDefinirAutomatico) {
+        return;
+    }
+
+    var botonCerrarDefinirAutomatico = document.getElementById('boton-cerrar-modal-definir-automatico');
+    var formDefinirAutomatico = document.getElementById('form-definir-automatico');
+    var formEliminarDefinicion = document.getElementById('form-eliminar-definicion-automatico');
+    var campoEliminarId = document.getElementById('eliminar-definicion-automatico-id');
+    var cuerpoLista = document.getElementById('definir-automatico-lista-cuerpo');
+    var listaVacia = document.getElementById('definir-automatico-lista-vacia');
+    var campoAutogestionId = document.getElementById('definir-automatico-autogestion-id');
+    var campoId = document.getElementById('definir-automatico-id');
+    var campoTitulo = document.getElementById('definir-automatico-titulo');
+    var campoTipo = document.getElementById('definir-automatico-tipo');
+
+    var datosTiposElemento = document.getElementById('datos-tipos-automatico');
+    var etiquetasTipos = {};
+    if (datosTiposElemento) {
+        try {
+            etiquetasTipos = JSON.parse(datosTiposElemento.textContent || '{}');
+        } catch (error) {
+            etiquetasTipos = {};
+        }
+    }
+
+    function cerrarDefinirAutomatico() {
+        modalDefinirAutomatico.classList.remove('abierto');
+    }
+
+    function limpiarFormulario() {
+        formDefinirAutomatico.reset();
+        campoId.value = '';
+        establecerValorBuscable('definir-automatico-dependencia', '');
+
+        var campoRubroTexto = document.getElementById('definir-automatico-rubro_buscador');
+        var campoRubroId = document.getElementById('definir-automatico-rubro_id');
+        if (campoRubroTexto && campoRubroId) {
+            campoRubroTexto.value = '';
+            campoRubroId.value = '';
+        }
+
+        var campoProyectoTexto = document.getElementById('definir-automatico-proyecto_buscador');
+        var campoProyectoId = document.getElementById('definir-automatico-proyecto_id');
+        if (campoProyectoTexto && campoProyectoId) {
+            campoProyectoTexto.value = '';
+            campoProyectoId.value = '';
+        }
+    }
+
+    function llenarFormularioParaEditar(definicion) {
+        campoId.value = definicion.id;
+
+        if (campoTipo) {
+            campoTipo.value = definicion.tipo;
+        }
+
+        establecerValorBuscable('definir-automatico-dependencia', definicion.dependencia || '');
+
+        var campoSede = document.getElementById('definir-automatico-sede_id');
+        if (campoSede) {
+            campoSede.value = definicion.sede_id;
+        }
+
+        var campoActividad = document.getElementById('definir-automatico-actividad');
+        if (campoActividad) {
+            campoActividad.value = definicion.actividad;
+        }
+
+        var campoInsumo = document.getElementById('definir-automatico-insumo');
+        if (campoInsumo) {
+            campoInsumo.value = definicion.insumo;
+        }
+
+        var campoRubroTexto = document.getElementById('definir-automatico-rubro_buscador');
+        var campoRubroId = document.getElementById('definir-automatico-rubro_id');
+        if (campoRubroTexto && campoRubroId) {
+            var opcionRubro = document.querySelector('#definir-automatico-rubro_lista .selector-buscable-opcion[data-id="' + definicion.rubro_id + '"]');
+            campoRubroTexto.value = opcionRubro ? opcionRubro.dataset.texto : '';
+            campoRubroId.value = definicion.rubro_id;
+        }
+
+        var campoProyectoTexto = document.getElementById('definir-automatico-proyecto_buscador');
+        var campoProyectoId = document.getElementById('definir-automatico-proyecto_id');
+        if (campoProyectoTexto && campoProyectoId) {
+            var opcionProyecto = document.querySelector('#definir-automatico-proyecto_lista .selector-buscable-opcion[data-id="' + definicion.proyecto_id + '"]');
+            campoProyectoTexto.value = opcionProyecto ? (opcionProyecto.dataset.mostrar || opcionProyecto.dataset.texto) : '';
+            campoProyectoId.value = definicion.proyecto_id;
+        }
+
+        document.querySelectorAll('#definir-automatico-meses input[type="checkbox"]').forEach(function (casilla) {
+            casilla.checked = false;
+        });
+        String(definicion.meses || '').split(',').forEach(function (mes) {
+            var casilla = document.querySelector('#definir-automatico-meses input[value="' + mes.trim() + '"]');
+            if (casilla) {
+                casilla.checked = true;
+            }
+        });
+    }
+
+    function renderizarLista(definicionesPorTipo) {
+        cuerpoLista.innerHTML = '';
+        var totalFilas = 0;
+
+        Object.keys(definicionesPorTipo || {}).forEach(function (tipoClave) {
+            (definicionesPorTipo[tipoClave] || []).forEach(function (definicion) {
+                totalFilas++;
+                var fila = document.createElement('tr');
+
+                var celdaTipo = document.createElement('td');
+                celdaTipo.textContent = etiquetasTipos[tipoClave] || tipoClave;
+                fila.appendChild(celdaTipo);
+
+                var celdaDependencia = document.createElement('td');
+                celdaDependencia.textContent = definicion.dependencia || 'Todas (default)';
+                fila.appendChild(celdaDependencia);
+
+                var celdaSede = document.createElement('td');
+                celdaSede.textContent = definicion.sede_nombre || '';
+                fila.appendChild(celdaSede);
+
+                var celdaRubro = document.createElement('td');
+                celdaRubro.textContent = (definicion.rubro_codigo || '') + ' - ' + (definicion.rubro_descripcion || '');
+                fila.appendChild(celdaRubro);
+
+                var celdaAcciones = document.createElement('td');
+                celdaAcciones.className = 'acciones-fila';
+
+                var botonEditar = document.createElement('button');
+                botonEditar.type = 'button';
+                botonEditar.className = 'boton-accion boton-accion-editar';
+                botonEditar.textContent = 'Editar';
+                botonEditar.addEventListener('click', function () {
+                    llenarFormularioParaEditar(definicion);
+                });
+                celdaAcciones.appendChild(botonEditar);
+
+                var botonEliminar = document.createElement('button');
+                botonEliminar.type = 'button';
+                botonEliminar.className = 'boton-accion boton-accion-eliminar';
+                botonEliminar.textContent = 'Eliminar';
+                botonEliminar.addEventListener('click', function () {
+                    if (!confirm('¿Eliminar esta definición? Las próximas filas automáticas volverán a usar el valor por defecto.')) {
+                        return;
+                    }
+                    campoEliminarId.value = definicion.id;
+                    formEliminarDefinicion.requestSubmit();
+                });
+                celdaAcciones.appendChild(botonEliminar);
+
+                fila.appendChild(celdaAcciones);
+                cuerpoLista.appendChild(fila);
+            });
+        });
+
+        listaVacia.style.display = totalFilas === 0 ? 'block' : 'none';
+    }
+
+    document.querySelectorAll('.boton-definir-automatico').forEach(function (boton) {
+        boton.addEventListener('click', function () {
+            var definiciones;
+
+            try {
+                definiciones = JSON.parse(boton.dataset.definiciones);
+            } catch (error) {
+                definiciones = {};
+            }
+
+            limpiarFormulario();
+            campoTitulo.textContent = boton.dataset.nombre || '';
+            campoAutogestionId.value = boton.dataset.autogestionId || '0';
+            renderizarLista(definiciones);
+
+            modalDefinirAutomatico.classList.add('abierto');
+        });
+    });
+
+    if (botonCerrarDefinirAutomatico) {
+        botonCerrarDefinirAutomatico.addEventListener('click', cerrarDefinirAutomatico);
+    }
+
+    modalDefinirAutomatico.addEventListener('click', function (evento) {
+        if (evento.target === modalDefinirAutomatico) {
+            cerrarDefinirAutomatico();
+        }
+    });
+
+    document.addEventListener('keydown', function (evento) {
+        if (evento.key === 'Escape') {
+            cerrarDefinirAutomatico();
+        }
+    });
+});
+
+/**
  * Botones "Enviar" de un solo clic (ARL/Monitores/OPS) que no tienen su propio selector de
  * dependencia+rol visible (ya quedaron fijos al crear la solicitud): antes de enviar, si hay más
  * de una persona con ese rol en esa dependencia, se intercepta el submit y se pide elegir a cuál

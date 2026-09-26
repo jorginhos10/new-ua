@@ -233,6 +233,55 @@ de datos antes de correrlo.
 
 ---
 
+## 2026-09-24 — Permisos delegados y "Definir" parámetros sobre filas automáticas de Autogestión
+
+- **Archivos:** `sql/autogestion_automatico_permisos.sql`, `sql/autogestion_automatico_definiciones.sql`.
+- **Cambio:** dos tablas nuevas. `autogestion_automatico_permisos` (modulo, tipo, usuario_id,
+  otorgado_por) — quién, además del superadmin, puede editar/borrar filas automáticas de un
+  (módulo, tipo); empieza vacía. `autogestion_automatico_definiciones` (modulo, autogestion_id NULL,
+  tipo, dependencia NULL, sede_id, proyecto_id, rubro_id, actividad, insumo, meses, creado_por) —
+  plantilla de campos a usar al generar la fila automática, por ítem+dependencia, reemplazando las
+  constantes fijas `AUTOMATICO_*` de cada controlador.
+- **Motivo:** Ver plan `el-techo-no-deberia-kind-candle`. El superadmin necesita poder borrar
+  manualmente una fila automática mal calculada, delegar ese poder a usuarios puntuales que deben
+  consolidar/ajustar excedentes o contribución a posgrado entre dependencias, y dejar que cada
+  dependencia clasifique presupuestalmente su propio excedente (sede/rubro/proyecto/actividad/insumo)
+  en vez de compartir una única constante fija en todo el sistema.
+- **Aplicado en local:** Sí (2026-09-24).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Acompañar con el despliegue del código de `GastoExtension.php`/`GastoPostgrado.php`/
+  `GastoUnisalud.php`/`GastoSinExcedentes.php` (`eliminarForzado()`/`actualizarForzado()`),
+  `AutogestionAutomaticoPermiso.php`, `AutogestionAutomaticoDefinicion.php` (nuevos), y los cambios
+  en `ExtensionControlador.php`/`PostgradoControlador.php`/`UnisaludControlador.php`/
+  `SinExcedentesControlador.php`/`AutogestionControlador.php` — sin ese código, las tablas no tienen
+  ningún efecto todavía. El punto de "convertir rubro 2.xx→4.xx al elegir Inversiones" del mismo
+  pedido quedó pospuesto (fuera de esta migración) a pedido explícito del usuario.
+
+---
+
+## 2026-09-25 — Marca de control de capítulo (2→4) al importar plantilla de autogestión
+
+- **Archivo:** `sql/gastos_autogestion_capitulo_control.sql`
+- **Cambio:** `ALTER TABLE gastos_extension/gastos_postgrado/gastos_unisalud ADD COLUMN
+  capitulo_control VARCHAR(5) NULL;` — no toca `gastos_sin_excedentes` ni `rubro_id`/el catálogo de
+  rubros.
+- **Motivo:** Colombia clasifica funcionamiento con capítulo "2" e inversión con "4", pero el
+  catálogo de rubros de este sistema todavía no tiene ningún código "4.xx" — no se van a crear
+  rubros nuevos solo para esto. Al importar la plantilla, si una fila de Gastos queda clasificada
+  como "Inversiones" pero el Rubro elegido es de capítulo "2", se guarda "4" en esta columna nueva
+  como marca de control (el `rubro_id` real, con su mismo código y nombre, no cambia) — pensada para
+  que un reporte futuro para el SA pueda distinguir estas filas. Esta ronda solo agrega el guardado
+  del dato al importar; no hay todavía ningún reporte/pantalla que lo lea.
+- **Aplicado en local:** Sí (2026-09-25).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Solo aplica a Extensión/Postgrado/Unisalud (mismo alcance que el resto de cambios de
+  autogestión de esta ronda, ver plan `el-techo-no-deberia-kind-candle`) — no a Convenios/
+  SinExcedentes ni al módulo principal de Gastos. No cambia nada en la plantilla Excel exportada
+  (`GeneradorXlsx`) ni en el formulario manual de "Nuevo gasto" — solo en el procesamiento del
+  archivo importado.
+
+---
+
 <!--
 Plantilla para la próxima entrada:
 
