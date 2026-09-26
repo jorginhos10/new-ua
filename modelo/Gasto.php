@@ -117,40 +117,72 @@ class Gasto
     }
 
     /**
+     * Devuelve un gasto ya enviado a borrador (acción "Devolver a borrador" en Peticiones >
+     * Pendientes) — limpia el destinatario para que quede como recién creado, editable de nuevo
+     * por su dueño en el módulo de Gastos.
+     */
+    public function devolverABorrador(int $id): bool
+    {
+        $consulta = $this->db->prepare(
+            "UPDATE gastos SET estado = 'borrador', rol_destinatario_id = NULL,
+                usuario_destinatario_id = NULL, dependencia_destino = NULL
+             WHERE id = :id AND estado = 'enviado'"
+        );
+
+        return $consulta->execute(['id' => $id]);
+    }
+
+    /**
      * Envía todos los gastos en borrador de $dependenciaNombre. Los gastos que hayan quedado
      * registrados bajo una dependencia tipo "Dumi" (una etiqueta interna sin usuarios propios,
      * ej. "CONCURSO DOCENTE" dentro de la distribución de Docencia) se envían también, pero su
      * dependencia se sustituye por la de quien realmente remite ($dependenciaNombre), porque una
      * dependencia Dumi no tiene a quién notificarle ni cómo hacerle seguimiento en Peticiones.
+     *
+     * Devuelve las filas que se enviaron, con sus valores de borrador (antes del UPDATE) — para que
+     * el llamador pueda congelar una foto exacta de lo que se envió (ver EnvioLote::crear()). El
+     * SELECT usa el mismo criterio WHERE que el UPDATE, dentro de una transacción, así ambos siempre
+     * coinciden en qué filas tocan.
      */
-    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaNombre, int $rolDestinatarioId, array $dependenciasDumi = [], ?int $usuarioDestinatarioId = null): int
+    public function enviarTodosBorrador(int $anioPresupuestalId, string $dependenciaNombre, int $rolDestinatarioId, array $dependenciasDumi = [], ?int $usuarioDestinatarioId = null): array
     {
         $nombres = array_values(array_unique(array_merge([$dependenciaNombre], $dependenciasDumi)));
         $marcadores = [];
-        $parametros = [
-            'anio_presupuestal_id' => $anioPresupuestalId,
-            'rol_destinatario_id' => $rolDestinatarioId,
-            'usuario_destinatario_id' => $usuarioDestinatarioId,
-            'dependencia_final' => $dependenciaNombre,
-        ];
+        $parametrosBusqueda = ['anio_presupuestal_id' => $anioPresupuestalId];
 
         foreach ($nombres as $indice => $nombre) {
             $marcador = 'dep' . $indice;
             $marcadores[] = ':' . $marcador;
-            $parametros[$marcador] = $nombre;
+            $parametrosBusqueda[$marcador] = $nombre;
         }
 
-        $consulta = $this->db->prepare(
-            "UPDATE gastos
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, usuario_destinatario_id = :usuario_destinatario_id, dependencia_destino = :dependencia_final
-             WHERE anio_presupuestal_id = :anio_presupuestal_id
-                AND dependencia IN (" . implode(', ', $marcadores) . ")
+        $criterioWhere = 'anio_presupuestal_id = :anio_presupuestal_id
+                AND dependencia IN (' . implode(', ', $marcadores) . ")
                 AND estado = 'borrador'
-                AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')"
-        );
-        $consulta->execute($parametros);
+                AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')";
 
-        return $consulta->rowCount();
+        $this->db->beginTransaction();
+
+        $seleccion = $this->db->prepare("SELECT * FROM gastos WHERE $criterioWhere");
+        $seleccion->execute($parametrosBusqueda);
+        $filas = $seleccion->fetchAll();
+
+        if (!empty($filas)) {
+            $consulta = $this->db->prepare(
+                "UPDATE gastos
+                 SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, usuario_destinatario_id = :usuario_destinatario_id, dependencia_destino = :dependencia_final
+                 WHERE $criterioWhere"
+            );
+            $consulta->execute($parametrosBusqueda + [
+                'rol_destinatario_id' => $rolDestinatarioId,
+                'usuario_destinatario_id' => $usuarioDestinatarioId,
+                'dependencia_final' => $dependenciaNombre,
+            ]);
+        }
+
+        $this->db->commit();
+
+        return $filas;
     }
 
 

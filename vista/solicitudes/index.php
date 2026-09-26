@@ -169,11 +169,11 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     action="index.php?ruta=solicitudes"
                                     class="form-enviar-solicitud"
                                     data-dependencia="<?= htmlspecialchars($solicitud['facultad']) ?>"
-                                    data-rol="<?= (int) ($solicitud['rol_destinatario_id'] ?? 0) ?>"
                                 >
                                     <input type="hidden" name="accion" value="enviar">
                                     <input type="hidden" name="tab" value="arl">
                                     <input type="hidden" name="id" value="<?= (int) $solicitud['id'] ?>">
+                                    <input type="hidden" name="rol_destinatario_id" value="">
                                     <input type="hidden" name="usuario_destinatario_id" value="">
                                     <button type="submit" class="boton-accion boton-accion-enviar">Enviar</button>
                                 </form>
@@ -302,11 +302,11 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     action="index.php?ruta=solicitudes"
                                     class="form-enviar-solicitud"
                                     data-dependencia="<?= htmlspecialchars($solicitudMonitor['dependencia']) ?>"
-                                    data-rol="<?= (int) ($solicitudMonitor['rol_destinatario_id'] ?? 0) ?>"
                                 >
                                     <input type="hidden" name="accion" value="enviar_monitor">
                                     <input type="hidden" name="tab" value="monitores">
                                     <input type="hidden" name="id" value="<?= (int) $solicitudMonitor['id'] ?>">
+                                    <input type="hidden" name="rol_destinatario_id" value="">
                                     <input type="hidden" name="usuario_destinatario_id" value="">
                                     <button type="submit" class="boton-accion boton-accion-enviar">Enviar</button>
                                 </form>
@@ -441,11 +441,11 @@ require __DIR__ . '/../parciales/encabezado.php';
                                     action="index.php?ruta=solicitudes"
                                     class="form-enviar-solicitud"
                                     data-dependencia="<?= htmlspecialchars($solicitudOps['dependencia']) ?>"
-                                    data-rol="<?= (int) ($solicitudOps['rol_destinatario_id'] ?? 0) ?>"
                                 >
                                     <input type="hidden" name="accion" value="enviar_ops">
                                     <input type="hidden" name="tab" value="ops">
                                     <input type="hidden" name="id" value="<?= (int) $solicitudOps['id'] ?>">
+                                    <input type="hidden" name="rol_destinatario_id" value="">
                                     <input type="hidden" name="usuario_destinatario_id" value="">
                                     <button type="submit" class="boton-accion boton-accion-enviar">Enviar</button>
                                 </form>
@@ -708,20 +708,11 @@ require __DIR__ . '/../parciales/encabezado.php';
                     $idPrefijoDependencia = '';
                     $nombreCampoDependencia = 'facultad';
                     $dependenciasOpciones = $dependenciasSugeridas;
-                    $dependenciaDataSelectRol = 'rol_destinatario_id';
                     require __DIR__ . '/../parciales/selector-dependencia.php';
                     ?>
                 </div>
-
-                <div class="campo">
-                    <label for="rol_destinatario_id">Rol al que se enviará *</label>
-                    <select id="rol_destinatario_id" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+                <!-- El rol/persona destinataria ya no se elige aquí: se elige junto al hacer clic
+                     en "Enviar" (selector en vivo "Rol · Nombre (correo)"), igual que Gastos/Extensión. -->
 
                 <div class="campo campo-ancho">
                     <label>Riesgos ARL *</label>
@@ -785,20 +776,11 @@ require __DIR__ . '/../parciales/encabezado.php';
                     $nombreCampoDependencia = 'dependencia';
                     $idBaseDependenciaOverride = 'monitor_dependencia';
                     $dependenciasOpciones = $dependenciasSugeridas;
-                    $dependenciaDataSelectRol = 'monitor_rol_destinatario_id';
                     require __DIR__ . '/../parciales/selector-dependencia.php';
                     ?>
                 </div>
-
-                <div class="campo">
-                    <label for="monitor_rol_destinatario_id">Rol al que se enviará *</label>
-                    <select id="monitor_rol_destinatario_id" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+                <!-- El rol/persona destinataria ya no se elige aquí: se elige junto al hacer clic
+                     en "Enviar" (selector en vivo "Rol · Nombre (correo)"), igual que Gastos/Extensión. -->
 
                 <div class="campo">
                     <label for="monitor_tipo">Tipo *</label>
@@ -865,20 +847,11 @@ require __DIR__ . '/../parciales/encabezado.php';
                     $nombreCampoDependencia = 'dependencia';
                     $idBaseDependenciaOverride = 'ops_dependencia';
                     $dependenciasOpciones = $dependenciasSugeridas;
-                    $dependenciaDataSelectRol = 'ops_rol_destinatario_id';
                     require __DIR__ . '/../parciales/selector-dependencia.php';
                     ?>
                 </div>
-
-                <div class="campo">
-                    <label for="ops_rol_destinatario_id">Rol al que se enviará *</label>
-                    <select id="ops_rol_destinatario_id" name="rol_destinatario_id" required>
-                        <option value="">Selecciona un rol</option>
-                        <?php foreach ($roles as $rolOpcion): ?>
-                        <option value="<?= (int) $rolOpcion['id'] ?>"><?= htmlspecialchars($rolOpcion['nombre']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
+                <!-- El rol/persona destinataria ya no se elige aquí: se elige junto al hacer clic
+                     en "Enviar" (selector en vivo "Rol · Nombre (correo)"), igual que Gastos/Extensión. -->
 
                 <div class="campo campo-ancho">
                     <label for="rubro_buscador">Rubro *</label>
@@ -997,7 +970,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <button type="button" id="boton-cerrar-modal-elegir-destinatario" class="modal-cerrar" aria-label="Cerrar">&times;</button>
             </div>
 
-            <p class="texto-atenuado">Hay más de una persona con ese rol en esa dependencia. Elige a quién remitir la solicitud.</p>
+            <p class="texto-atenuado">Elige el rol y la persona a quien remitir la solicitud.</p>
 
             <div class="campo">
                 <label for="elegir-destinatario-select">Destinatario *</label>

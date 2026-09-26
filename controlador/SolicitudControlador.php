@@ -348,12 +348,6 @@ class SolicitudControlador
             return ['El año presupuestal y la facultad son obligatorios.', []];
         }
 
-        [$errorRol, $rolDestinatarioId] = $this->validarRolDestinatario();
-
-        if ($errorRol !== '') {
-            return [$errorRol, []];
-        }
-
         $variableSmlv = $this->modeloVariable->obtenerPorNombreYAnio(self::NOMBRE_VARIABLE_SMLV, $anioPresupuestalId);
 
         if ($variableSmlv === null) {
@@ -368,7 +362,9 @@ class SolicitudControlador
         $datos = [
             'anio_presupuestal_id' => $anioPresupuestalId,
             'facultad' => $facultad,
-            'rol_destinatario_id' => $rolDestinatarioId,
+            // El rol/persona destinataria ya no se fija al crear: se elige junto al hacer clic en
+            // "Enviar" (selector en vivo "Rol · Nombre (correo)"), igual que Gastos/Extensión.
+            'rol_destinatario_id' => null,
             'usuario_id' => (int) ($_SESSION['usuario_id'] ?? 0),
         ];
 
@@ -449,30 +445,28 @@ class SolicitudControlador
         }
 
         if ($dependenciaNombre !== null) {
+            // Selector en vivo (igual que Gastos/Extensión al enviar): rol + persona ya vienen
+            // elegidos juntos desde el modal "Rol · Nombre (correo)" — se valida que esa persona
+            // exista, tenga justo ese rol y esté en esa dependencia, en vez de listar candidatos
+            // por rol y desambiguar por separado (así ya no depende de tipo_dependencia_roles,
+            // que era la causa de que a veces no apareciera ningún destinatario posible).
+            $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
             $dependencia = $this->modeloDependencia->obtenerPorNombre($dependenciaNombre);
             $destinatarios = $dependencia !== null
                 ? $this->modeloUsuario->obtenerPorDependenciaYRol((int) $dependencia['id'], $rolDestinatarioId)
                 : [];
-        } else {
-            $destinatarios = $this->modeloUsuario->obtenerPorRolId($rolDestinatarioId);
-        }
-
-        if (empty($destinatarios)) {
-            $ubicacion = $dependenciaNombre !== null ? ' en "' . $dependenciaNombre . '"' : '';
-
-            return ['No se encontró ningún usuario con el rol "' . $rol['nombre'] . '"' . $ubicacion . ' para notificar.', ''];
-        }
-
-        // El filtro por destinatario específico solo aplica cuando el envío está acotado a una
-        // dependencia (ahí sí tiene sentido "elegir a cuál Gestor/Avalador"). Para 'otros' (sin
-        // dependencia, dirigida a todos los que tengan ese rol en toda la universidad) se mantiene
-        // el envío masivo original: no tendría sentido pedir elegir uno entre decenas.
-        if ($dependenciaNombre !== null && count($destinatarios) > 1) {
-            $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
             $destinatarios = array_values(array_filter($destinatarios, static fn (array $u): bool => (int) $u['id'] === $usuarioDestinatarioId));
 
             if (empty($destinatarios)) {
-                return ['Hay más de un usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombre . '". Selecciona a quién remitir la petición.', ''];
+                return ['Selecciona a quién remitir la petición.', ''];
+            }
+        } else {
+            // 'otros': sin dependencia, envío masivo a TODOS los que tengan ese rol en toda la
+            // universidad — comportamiento sin cambios.
+            $destinatarios = $this->modeloUsuario->obtenerPorRolId($rolDestinatarioId);
+
+            if (empty($destinatarios)) {
+                return ['No se encontró ningún usuario con el rol "' . $rol['nombre'] . '" para notificar.', ''];
             }
         }
 
@@ -489,7 +483,7 @@ class SolicitudControlador
             ? (int) $destinatarios[0]['id']
             : null;
 
-        $modelo->enviar($id, $rol['nombre'], $usuarioDestinatarioResuelto);
+        $modelo->enviar($id, $rol['nombre'], $usuarioDestinatarioResuelto, $rolDestinatarioId);
 
         $mensajeDestino = count($destinatarios) === 1
             ? $destinatarios[0]['nombre']
@@ -510,7 +504,7 @@ class SolicitudControlador
         return $this->notificarYMarcarEnviada(
             $this->modeloSolicitud,
             $id,
-            $solicitud['rol_destinatario_id'] !== null ? (int) $solicitud['rol_destinatario_id'] : null,
+            !empty($_POST['rol_destinatario_id']) ? (int) $_POST['rol_destinatario_id'] : null,
             $solicitud['facultad'],
             'Nueva solicitud ARL — ' . $solicitud['facultad'],
             'Se registró una solicitud de ARL de estudiantes en prácticas para "' . $solicitud['facultad'] . '".'
@@ -579,12 +573,6 @@ class SolicitudControlador
             return ['Selecciona un tipo de monitor válido.', []];
         }
 
-        [$errorRol, $rolDestinatarioId] = $this->validarRolDestinatario();
-
-        if ($errorRol !== '') {
-            return [$errorRol, []];
-        }
-
         if ($semestre1 === '') {
             $semestre1 = '0';
         }
@@ -600,7 +588,9 @@ class SolicitudControlador
         return ['', [
             'anio_presupuestal_id' => $anioPresupuestalId,
             'dependencia' => $dependencia,
-            'rol_destinatario_id' => $rolDestinatarioId,
+            // El rol/persona destinataria ya no se fija al crear: se elige junto al hacer clic en
+            // "Enviar" (selector en vivo "Rol · Nombre (correo)"), igual que Gastos/Extensión.
+            'rol_destinatario_id' => null,
             'usuario_id' => (int) ($_SESSION['usuario_id'] ?? 0),
             'tipo' => $tipo,
             'monitores_semestre1' => (int) $semestre1,
@@ -658,7 +648,7 @@ class SolicitudControlador
         return $this->notificarYMarcarEnviada(
             $this->modeloMonitor,
             $id,
-            $solicitud['rol_destinatario_id'] !== null ? (int) $solicitud['rol_destinatario_id'] : null,
+            !empty($_POST['rol_destinatario_id']) ? (int) $_POST['rol_destinatario_id'] : null,
             $solicitud['dependencia'],
             'Nueva solicitud de monitores — ' . $solicitud['dependencia'],
             'Se registró una solicitud de monitores para "' . $solicitud['dependencia'] . '".'
@@ -741,12 +731,6 @@ class SolicitudControlador
             return ['Selecciona un perfil válido.', []];
         }
 
-        [$errorRol, $rolDestinatarioId] = $this->validarRolDestinatario();
-
-        if ($errorRol !== '') {
-            return [$errorRol, []];
-        }
-
         if ($valor === '' || !is_numeric($valor) || (float) $valor < 0) {
             return ['El valor debe ser un número válido mayor o igual a 0.', []];
         }
@@ -762,7 +746,9 @@ class SolicitudControlador
             'motor_id' => $motorId,
             'proyecto_id' => $proyectoId,
             'dependencia' => $dependencia,
-            'rol_destinatario_id' => $rolDestinatarioId,
+            // El rol/persona destinataria ya no se fija al crear: se elige junto al hacer clic en
+            // "Enviar" (selector en vivo "Rol · Nombre (correo)"), igual que Gastos/Extensión.
+            'rol_destinatario_id' => null,
             'usuario_id' => (int) ($_SESSION['usuario_id'] ?? 0),
             'rubro_id' => $rubroId,
             'perfil' => $perfil,
@@ -822,7 +808,7 @@ class SolicitudControlador
         return $this->notificarYMarcarEnviada(
             $this->modeloOps,
             $id,
-            $solicitud['rol_destinatario_id'] !== null ? (int) $solicitud['rol_destinatario_id'] : null,
+            !empty($_POST['rol_destinatario_id']) ? (int) $_POST['rol_destinatario_id'] : null,
             $solicitud['dependencia'],
             'Nueva solicitud OPS — ' . $solicitud['dependencia'],
             'Se registró una solicitud OPS para "' . $solicitud['dependencia'] . '".'

@@ -47,6 +47,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <button type="button" id="boton-pendientes-aprobar" class="boton-accion boton-accion-enviar" disabled>Aceptar seleccionados</button>
                 <button type="button" id="boton-pendientes-archivar" class="boton-accion boton-accion-editar" disabled>Archivar seleccionados</button>
                 <button type="button" id="boton-pendientes-enviar" class="boton-agregar" disabled>Enviar</button>
+                <button type="button" id="boton-pendientes-devolver-borrador" class="boton-accion" disabled title="Devuelve el ítem a borrador en su propio módulo, sin destinatario, para que su dueño lo corrija y lo reenvíe.">Devolver a borrador</button>
                 <button type="button" id="boton-pendientes-eliminar" class="boton-accion boton-accion-eliminar" disabled>Eliminar seleccionados</button>
             </div>
             <?php endif; ?>

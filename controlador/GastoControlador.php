@@ -20,6 +20,9 @@ require_once __DIR__ . '/../modelo/TipoDependenciaRol.php';
 require_once __DIR__ . '/../modelo/PeticionArchivada.php';
 require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
+require_once __DIR__ . '/../modelo/EnvioLote.php';
+require_once __DIR__ . '/../modelo/VistaLoteEnvio.php';
+require_once __DIR__ . '/../modelo/PeticionHistorial.php';
 
 class GastoControlador
 {
@@ -39,6 +42,8 @@ class GastoControlador
     private Rol $modeloRol;
     private Mensaje $modeloMensaje;
     private TipoDependenciaRol $modeloTipoDependenciaRol;
+    private EnvioLote $modeloEnvioLote;
+    private PeticionHistorial $modeloHistorial;
 
     private const CAMPOS_REQUERIDOS = [
         'sede_id',
@@ -70,6 +75,8 @@ class GastoControlador
         $this->modeloRol = new Rol();
         $this->modeloMensaje = new Mensaje();
         $this->modeloTipoDependenciaRol = new TipoDependenciaRol();
+        $this->modeloEnvioLote = new EnvioLote();
+        $this->modeloHistorial = new PeticionHistorial();
     }
 
     public function index(): void
@@ -101,6 +108,10 @@ class GastoControlador
                 [$error, $exito] = $this->duplicarSeleccionados();
             } elseif ($accion === 'enviar_todo') {
                 [$error, $exito] = $this->enviarTodo();
+            } elseif ($accion === 'ocultar_lote') {
+                [$error, $exito] = $this->ocultarLote();
+            } elseif ($accion === 'eliminar_lote') {
+                [$error, $exito] = $this->eliminarLote();
             } elseif ($accion === 'importar') {
                 [$error, $exito, $erroresImportacion] = $this->importar();
             } else {
@@ -302,6 +313,13 @@ class GastoControlador
         $diaActual = (int) date('z') + 1;
         $totalDiasAnio = date('L') ? 366 : 365;
 
+        // Los lotes que contienen alguna fila ya visible en $gastos (tras
+        // filtrarPorPropietarioODestinatario()) — evita duplicar esa lógica de visibilidad, e incluye
+        // lotes cuyas filas se devolvieron luego a borrador.
+        $lotesCrudos = $this->modeloEnvioLote->obtenerActivosPorFilas('gasto_principal', array_column($gastos, 'id'));
+        $lotesEnviados = (new VistaLoteEnvio())->construirLotes('gasto_principal', $lotesCrudos);
+        $esSuperAdmin = $this->esSuperAdmin();
+
         require __DIR__ . '/../vista/gastos/index.php';
     }
 
@@ -454,10 +472,29 @@ class GastoControlador
         $gastosBorrador = array_values(array_filter($gastos, static fn (array $g): bool => $g['estado'] === 'borrador'));
         $gastosEnviado = array_values(array_filter($gastos, static fn (array $g): bool => $g['estado'] === 'enviado'));
 
-        $hojas = [
-            ['nombre' => 'Borradores', 'encabezados' => $encabezados, 'filas' => array_map($filaDatos, $gastosBorrador)],
-            ['nombre' => 'Enviados', 'encabezados' => $encabezados, 'filas' => array_map($filaDatos, $gastosEnviado)],
-        ];
+        // Una pestaña por lote enviado (foto congelada), mismos lotes visibles que en el landing.
+        $lotesCrudos = $this->modeloEnvioLote->obtenerActivosPorFilas('gasto_principal', array_column($gastos, 'id'));
+        $vistaLotes = new VistaLoteEnvio();
+        $lotesVista = $vistaLotes->construirLotes('gasto_principal', $lotesCrudos);
+
+        $idsEnLotes = [];
+        foreach ($lotesVista as $loteVista) {
+            foreach ($loteVista['filas'] as $filaVista) {
+                $idsEnLotes[$filaVista['origenId']] = true;
+            }
+        }
+        $gastosEnviadoSinLote = array_values(array_filter($gastosEnviado, static fn (array $g): bool => !isset($idsEnLotes[(int) $g['id']])));
+
+        $hojas = array_merge(
+            [['nombre' => 'Borrador', 'encabezados' => $encabezados, 'filas' => array_map($filaDatos, $gastosBorrador)]],
+            $vistaLotes->hojasExcel($lotesVista, ['Borrador', 'Enviados sin snapshot'])
+        );
+
+        // Lo enviado antes de que existieran los lotes no tiene foto congelada: se conserva en una
+        // pestaña aparte con sus valores actuales, para que la exportación no pierda nada.
+        if (!empty($gastosEnviadoSinLote)) {
+            $hojas[] = ['nombre' => 'Enviados sin snapshot', 'encabezados' => $encabezados, 'filas' => array_map($filaDatos, $gastosEnviadoSinLote)];
+        }
 
         $anioTexto = (string) $anioSeleccionadoId;
         foreach ($aniosActivos as $anioFila) {
@@ -782,8 +819,9 @@ class GastoControlador
     private function actualizar(): array
     {
         $id = (int) ($_POST['id'] ?? 0);
+        $existente = $id > 0 ? $this->modeloGasto->obtenerPorId($id) : null;
 
-        if ($id <= 0 || $this->modeloGasto->obtenerPorId($id) === null) {
+        if ($existente === null) {
             return ['El gasto que intentas editar no existe.', ''];
         }
 
@@ -809,6 +847,13 @@ class GastoControlador
             $this->modeloGasto->actualizar($id, $datos);
         } catch (PDOException $excepcion) {
             return ['No se pudo actualizar el gasto. Verifica el año, la sede, la línea, el motor, el proyecto y el rubro seleccionados.', ''];
+        }
+
+        // Puramente observacional: no bloquea nada ni cambia el flujo — solo deja constancia en
+        // Historial de que este ítem ya enviado fue editado después (ver EnvioLote/plan aprobado
+        // el-techo-no-deberia-kind-candle, "Articulación con Historial").
+        if ($existente['estado'] === 'enviado') {
+            $this->modeloHistorial->registrar('gasto_principal', $id, 'editado_tras_enviar', 'Editado después de enviarse.');
         }
 
         (new PeticionArchivada())->sincronizarDesdeOrigen(
@@ -1203,28 +1248,93 @@ class GastoControlador
         // vería la petición en Pendientes, no solo la persona elegida.
         $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
 
-        $enviados = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaNombre, $rolDestinatarioId, $nombresAdicionales, $usuarioDestinatarioResuelto);
-
-        if ($enviados === 0) {
-            return ['No hay gastos en borrador para enviar en "' . $dependenciaNombreVisible . '".', ''];
+        // Techo vigente para esta dependencia en este momento — se congela en el lote junto con las
+        // filas, mismo criterio que usa validarLimiteTecho() (ver resolverDependenciaConTecho()).
+        $dependenciaParaTecho = $dependenciaObjetivo ?? $this->modeloDependencia->obtenerPorNombre($dependenciaNombre);
+        $techoNumero = null;
+        if ($dependenciaParaTecho !== null) {
+            $presupuestosDependencia = $this->modeloPresupuestoDependencia->obtenerPorAnio($anioId);
+            $resueltoTecho = $this->resolverDependenciaConTecho($dependenciaParaTecho, $presupuestosDependencia);
+            $techoNumero = $resueltoTecho['techo'] ?? null;
         }
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
+
+        $enviados = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaNombre, $rolDestinatarioId, $nombresAdicionales, $usuarioDestinatarioResuelto);
+        $cantidadEnviados = count($enviados);
+
+        if ($cantidadEnviados === 0) {
+            return ['No hay gastos en borrador para enviar en "' . $dependenciaNombreVisible . '".', ''];
+        }
+
+        $totalLote = array_sum(array_map(static fn (array $fila): float => (float) $fila['valor_total'], $enviados));
+        $lote = $this->modeloEnvioLote->crear('gasto_principal', [
+            'anio_presupuestal_id' => $anioId,
+            'dependencia' => $dependenciaNombre,
+            'enviado_por' => $remitenteId,
+            'rol_destinatario_id' => $rolDestinatarioId,
+            'usuario_destinatario_id' => $usuarioDestinatarioResuelto,
+            'total_lote' => $totalLote,
+            'techo_numero' => $techoNumero,
+        ], $enviados);
+
+        $detalleLote = 'Enviado como lote v' . $lote['version'];
+        $loteHistorialId = $this->modeloHistorial->registrarLote('gasto_principal', 'enviado', $detalleLote, $cantidadEnviados);
+        foreach ($enviados as $fila) {
+            $this->modeloHistorial->registrar('gasto_principal', (int) $fila['id'], 'enviado', $detalleLote, $loteHistorialId);
+        }
 
         foreach ($destinatarios as $destinatario) {
             $this->modeloMensaje->crear(
                 $remitenteId,
                 (int) $destinatario['id'],
                 'Gastos enviados — ' . $dependenciaNombreVisible,
-                'Se enviaron ' . $enviados . ' gasto(s) de "' . $dependenciaNombreVisible . '" para tu revisión.'
+                'Se enviaron ' . $cantidadEnviados . ' gasto(s) de "' . $dependenciaNombreVisible . '" para tu revisión.'
             );
         }
 
         if (empty($destinatarios)) {
-            return ['', 'Se enviaron ' . $enviados . ' gasto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombreVisible . '" para notificar.'];
+            return ['', 'Se enviaron ' . $cantidadEnviados . ' gasto(s), pero no se encontró ningún usuario con el rol "' . $rol['nombre'] . '" en "' . $dependenciaNombreVisible . '" para notificar.'];
         }
 
-        return ['', 'Se enviaron ' . $enviados . ' gasto(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ').'];
+        return ['', 'Se enviaron ' . $cantidadEnviados . ' gasto(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ').'];
+    }
+
+    private function esSuperAdmin(): bool
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+
+        return $usuarioActual !== null && (int) ($usuarioActual['es_super_admin'] ?? 0) === 1;
+    }
+
+    private function ocultarLote(): array
+    {
+        if (!$this->esSuperAdmin()) {
+            return ['Solo el superadministrador puede ocultar un snapshot de envío.', ''];
+        }
+
+        $loteId = (int) ($_POST['lote_id'] ?? 0);
+
+        if ($loteId <= 0 || !$this->modeloEnvioLote->ocultar($loteId)) {
+            return ['No se pudo ocultar ese snapshot.', ''];
+        }
+
+        return ['', 'Snapshot ocultado.'];
+    }
+
+    private function eliminarLote(): array
+    {
+        if (!$this->esSuperAdmin()) {
+            return ['Solo el superadministrador puede eliminar un snapshot de envío.', ''];
+        }
+
+        $loteId = (int) ($_POST['lote_id'] ?? 0);
+
+        if ($loteId <= 0 || !$this->modeloEnvioLote->eliminar($loteId)) {
+            return ['No se pudo eliminar ese snapshot.', ''];
+        }
+
+        return ['', 'Snapshot eliminado.'];
     }
 
     private function validarDatos(): array

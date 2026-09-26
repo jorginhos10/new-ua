@@ -269,40 +269,73 @@ class GastoPostgrado
         return array_column($consulta->fetchAll(), 'dependencia');
     }
 
-    public function enviarTodosBorrador(int $anioPresupuestalId, int $autogestionId, string $dependenciaDestinoNombre, int $rolDestinatarioId, array $dependenciasOrigen, ?int $usuarioDestinatarioId = null): int
+    /**
+     * Devuelve las filas enviadas (con sus valores de borrador, antes del UPDATE) — para que el
+     * llamador pueda congelar una foto exacta de lo que se envió (ver EnvioLote::crear()).
+     */
+    public function enviarTodosBorrador(int $anioPresupuestalId, int $autogestionId, string $dependenciaDestinoNombre, int $rolDestinatarioId, array $dependenciasOrigen, ?int $usuarioDestinatarioId = null): array
     {
         if (empty($dependenciasOrigen)) {
-            return 0;
+            return [];
         }
 
-        $parametros = [
+        $parametrosBusqueda = [
             'anio_presupuestal_id' => $anioPresupuestalId,
             'autogestion_id' => $autogestionId,
-            'dependencia' => $dependenciaDestinoNombre,
-            'rol_destinatario_id' => $rolDestinatarioId,
-            'usuario_destinatario_id' => $usuarioDestinatarioId,
         ];
         $marcadores = [];
         foreach (array_values($dependenciasOrigen) as $indice => $dependenciaOrigen) {
             $clave = 'depOrigen' . $indice;
             $marcadores[] = ':' . $clave;
-            $parametros[$clave] = $dependenciaOrigen;
+            $parametrosBusqueda[$clave] = $dependenciaOrigen;
         }
 
         // El IN de dependencia acota a solo las dependencias que el remitente puede ver — sin
         // esto, "Enviar todo" marcaba como enviados los borradores de CUALQUIER dependencia que
         // compartiera año + ítem de Autogestión, no solo los del usuario que envía.
-        $consulta = $this->db->prepare(
-            "UPDATE gastos_postgrado
-             SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, usuario_destinatario_id = :usuario_destinatario_id, dependencia_destino = :dependencia
-             WHERE anio_presupuestal_id = :anio_presupuestal_id
+        $criterioWhere = 'anio_presupuestal_id = :anio_presupuestal_id
                 AND autogestion_id = :autogestion_id
-                AND estado = 'borrador'
-                AND dependencia IN (" . implode(', ', $marcadores) . ')'
-        );
-        $consulta->execute($parametros);
+                AND estado = \'borrador\'
+                AND dependencia IN (' . implode(', ', $marcadores) . ')';
 
-        return $consulta->rowCount();
+        $this->db->beginTransaction();
+
+        $seleccion = $this->db->prepare("SELECT * FROM gastos_postgrado WHERE $criterioWhere");
+        $seleccion->execute($parametrosBusqueda);
+        $filas = $seleccion->fetchAll();
+
+        if (!empty($filas)) {
+            $consulta = $this->db->prepare(
+                "UPDATE gastos_postgrado
+                 SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, usuario_destinatario_id = :usuario_destinatario_id, dependencia_destino = :dependencia
+                 WHERE $criterioWhere"
+            );
+            $consulta->execute($parametrosBusqueda + [
+                'rol_destinatario_id' => $rolDestinatarioId,
+                'usuario_destinatario_id' => $usuarioDestinatarioId,
+                'dependencia' => $dependenciaDestinoNombre,
+            ]);
+        }
+
+        $this->db->commit();
+
+        return $filas;
+    }
+
+    /**
+     * Devuelve un gasto ya enviado a borrador (acción "Devolver a borrador" en Peticiones >
+     * Pendientes) — limpia el destinatario para que quede como recién creado, editable de nuevo
+     * por su dueño en el módulo de Postgrado.
+     */
+    public function devolverABorrador(int $id): bool
+    {
+        $consulta = $this->db->prepare(
+            "UPDATE gastos_postgrado SET estado = 'borrador', rol_destinatario_id = NULL,
+                usuario_destinatario_id = NULL, dependencia_destino = NULL
+             WHERE id = :id AND estado = 'enviado'"
+        );
+
+        return $consulta->execute(['id' => $id]);
     }
 
     public function crear(array $datos): bool

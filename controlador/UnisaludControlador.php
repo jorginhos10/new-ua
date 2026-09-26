@@ -20,6 +20,9 @@ require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
 require_once __DIR__ . '/../modelo/AutogestionAutomaticoPermiso.php';
 require_once __DIR__ . '/../modelo/AutogestionAutomaticoDefinicion.php';
+require_once __DIR__ . '/../modelo/EnvioLote.php';
+require_once __DIR__ . '/../modelo/VistaLoteEnvio.php';
+require_once __DIR__ . '/../modelo/PeticionHistorial.php';
 
 class UnisaludControlador
 {
@@ -39,6 +42,8 @@ class UnisaludControlador
     private Mensaje $modeloMensaje;
     private AutogestionAutomaticoPermiso $modeloPermisoAutomatico;
     private AutogestionAutomaticoDefinicion $modeloDefinicionAutomatico;
+    private EnvioLote $modeloEnvioLote;
+    private PeticionHistorial $modeloHistorial;
 
     private const MODULO_AUTOGESTION = 'unisalud';
 
@@ -98,6 +103,74 @@ class UnisaludControlador
         $this->modeloMensaje = new Mensaje();
         $this->modeloPermisoAutomatico = new AutogestionAutomaticoPermiso();
         $this->modeloDefinicionAutomatico = new AutogestionAutomaticoDefinicion();
+        $this->modeloEnvioLote = new EnvioLote();
+        $this->modeloHistorial = new PeticionHistorial();
+    }
+
+    private function esSuperAdmin(): bool
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+
+        return $usuarioActual !== null && (int) ($usuarioActual['es_super_admin'] ?? 0) === 1;
+    }
+
+    private function ocultarLote(): array
+    {
+        if (!$this->esSuperAdmin()) {
+            return ['Solo el superadministrador puede ocultar un snapshot de envío.', ''];
+        }
+
+        $loteId = (int) ($_POST['lote_id'] ?? 0);
+
+        if ($loteId <= 0 || !$this->modeloEnvioLote->ocultar($loteId)) {
+            return ['No se pudo ocultar ese snapshot.', ''];
+        }
+
+        return ['', 'Snapshot ocultado.'];
+    }
+
+    private function eliminarLote(): array
+    {
+        if (!$this->esSuperAdmin()) {
+            return ['Solo el superadministrador puede eliminar un snapshot de envío.', ''];
+        }
+
+        $loteId = (int) ($_POST['lote_id'] ?? 0);
+
+        if ($loteId <= 0 || !$this->modeloEnvioLote->eliminar($loteId)) {
+            return ['No se pudo eliminar ese snapshot.', ''];
+        }
+
+        return ['', 'Snapshot eliminado.'];
+    }
+
+    /**
+     * Techo (% de Costos/Inversiones/Excedentes) vigente para las categorías presentes en las
+     * filas que se están enviando — se congela en el lote junto con las filas. A diferencia de
+     * Extensión/Postgrado, el % es único por módulo completo (AutogestionPorcentaje), no por ítem.
+     */
+    private function construirTechoCategorias(float $totalIngresos, array $filasGasto): ?array
+    {
+        $porcentajes = $this->modeloPorcentaje->obtenerPorModulo('unisalud');
+        $mapaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
+        $categorias = array_unique(array_column($filasGasto, 'categoria'));
+        $resultado = [];
+
+        foreach ($categorias as $categoria) {
+            $clave = $mapaPorcentaje[$categoria] ?? null;
+
+            if ($clave === null || $porcentajes[$clave] === null) {
+                continue;
+            }
+
+            $porcentaje = (float) $porcentajes[$clave];
+            $resultado[$categoria] = [
+                'porcentaje' => $porcentaje,
+                'limite' => round($totalIngresos * $porcentaje / 100, 2),
+            ];
+        }
+
+        return empty($resultado) ? null : $resultado;
     }
 
     /**
@@ -158,6 +231,10 @@ class UnisaludControlador
 
             if ($accion === 'enviar_todo') {
                 [$error, $exito] = $this->enviarTodo();
+            } elseif ($accion === 'ocultar_lote') {
+                [$error, $exito] = $this->ocultarLote();
+            } elseif ($accion === 'eliminar_lote') {
+                [$error, $exito] = $this->eliminarLote();
             } elseif ($tab === 'egresos' && $accion === 'actualizar') {
                 [$error, $exito] = $this->actualizarEgreso();
             } elseif ($tab === 'egresos' && $accion === 'eliminar') {
@@ -238,7 +315,7 @@ class UnisaludControlador
             $gastos = $anioSeleccionadoId > 0 ? $this->modeloIngreso->obtenerPorAnio($anioSeleccionadoId) : [];
             $gastos = $this->filtrarPorPropietarioODestinatario($gastos, $usuarioActual, $dependenciasSugeridas);
         } else {
-            $gastos = $this->filtrarEgresosVisibles($gastosEgresos, $usuarioActual, $dependenciasSugeridas);
+            $gastos = $this->filtrarPorPropietarioODestinatario($gastosEgresos, $usuarioActual, $dependenciasSugeridas);
         }
 
         $dependenciasTodas = $this->modeloDependencia->obtenerActivasParaEnvio();
@@ -293,6 +370,21 @@ class UnisaludControlador
 
         $diaActual = (int) date('z') + 1;
         $totalDiasAnio = date('L') ? 366 : 365;
+
+        // Lotes visibles del tab activo: mismos ids ya filtrados en $gastos arriba (evita duplicar
+        // la lógica de visibilidad de filtrarPorPropietarioODestinatario()).
+        $origenLote = $tab === 'ingresos' ? 'ingreso_unisalud' : 'gasto_unisalud';
+        $lotesCrudos = $this->modeloEnvioLote->obtenerActivosPorFilas($origenLote, array_column($gastos, 'id'));
+        $lotesEnviados = (new VistaLoteEnvio())->construirLotes($origenLote, $lotesCrudos);
+        $esSuperAdmin = $this->esSuperAdmin();
+
+        // Por tipo presente en la tabla (normalmente solo 'excedentes'), si el usuario actual
+        // puede editar/eliminar esa fila automática (SA o permiso delegado) — la vista lo usa para
+        // decidir si muestra Editar/Eliminar en vez de solo la etiqueta "Automático".
+        $permisosAutomaticosPorTipo = [];
+        foreach (array_unique(array_filter(array_column($gastosEgresos, 'tipo_automatico'))) as $tipoAutomatico) {
+            $permisosAutomaticosPorTipo[$tipoAutomatico] = $this->puedeGestionarAutomaticos($tipoAutomatico);
+        }
 
         require __DIR__ . '/../vista/unisalud/index.php';
     }
@@ -400,7 +492,7 @@ class UnisaludControlador
         $ingresos = $this->filtrarPorPropietarioODestinatario($ingresos, $usuarioActual, $dependenciasPermitidas);
 
         $gastos = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : [];
-        $gastos = $this->filtrarEgresosVisibles($gastos, $usuarioActual, $dependenciasPermitidas);
+        $gastos = $this->filtrarPorPropietarioODestinatario($gastos, $usuarioActual, $dependenciasPermitidas);
 
         $filaIngreso = static function (array $ingreso): array {
             return [
@@ -428,6 +520,13 @@ class UnisaludControlador
             ['nombre' => 'Ingresos', 'encabezados' => ['Dependencia', 'Concepto adicional', 'Valor adicional', 'Valor total', 'Estado'], 'filas' => array_map($filaIngreso, $ingresos)],
             ['nombre' => 'Gastos', 'encabezados' => ['Dependencia', 'Categoría', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Estado'], 'filas' => array_map($filaGasto, $gastos)],
         ];
+
+        // Una pestaña por lote enviado (foto congelada).
+        $vistaLotes = new VistaLoteEnvio();
+        $lotesGasto = $vistaLotes->construirLotes('gasto_unisalud', $this->modeloEnvioLote->obtenerActivosPorFilas('gasto_unisalud', array_column($gastos, 'id')));
+        $lotesIngreso = $vistaLotes->construirLotes('ingreso_unisalud', $this->modeloEnvioLote->obtenerActivosPorFilas('ingreso_unisalud', array_column($ingresos, 'id')));
+        $nombresReservados = array_column($hojas, 'nombre');
+        $hojas = array_merge($hojas, $vistaLotes->hojasExcel($lotesGasto, $nombresReservados), $vistaLotes->hojasExcel($lotesIngreso, $nombresReservados));
 
         $anioTexto = (string) $anioSeleccionadoId;
         foreach ($aniosActivos as $anioFila) {
@@ -976,6 +1075,10 @@ class UnisaludControlador
             return ['No se pudo actualizar el egreso: ' . $excepcion->getMessage(), ''];
         }
 
+        if ($existente['estado'] === 'enviado') {
+            $this->modeloHistorial->registrar('gasto_unisalud', $id, 'editado_tras_enviar', 'Editado después de enviarse.');
+        }
+
         (new PeticionArchivada())->sincronizarDesdeOrigen('gasto_unisalud', $id, $nuevoValor, $datos['dependencia']);
 
         $destino = !empty($_POST['volver'])
@@ -1061,14 +1164,54 @@ class UnisaludControlador
         // petición en Pendientes, no solo la persona elegida.
         $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
 
-        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
-        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
+        $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
+
+        $filasIngreso = $this->modeloIngreso->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
+        $filasGasto = $this->modeloGasto->enviarTodosBorrador($anioId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
+        $enviadosIngresos = count($filasIngreso);
+        $enviadosEgresos = count($filasGasto);
 
         if ($enviadosIngresos === 0 && $enviadosEgresos === 0) {
             return ['No hay ingresos ni egresos en borrador para enviar.', ''];
         }
 
-        $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
+        // Snapshot al enviar: un lote por tabla (mismo criterio de origen que usa TABLAS_ORIGEN en
+        // Peticiones). Unisalud no tiene ítems de autogestión (no hace falta 'ambito').
+        $techoCategorias = $this->construirTechoCategorias($totalIngresos, $filasGasto);
+        $historial = $this->modeloHistorial;
+
+        if (!empty($filasGasto)) {
+            $loteGasto = $this->modeloEnvioLote->crear('gasto_unisalud', [
+                'anio_presupuestal_id' => $anioId,
+                'dependencia' => $dependenciaDestinoNombre,
+                'enviado_por' => $remitenteId,
+                'rol_destinatario_id' => $rolDestinatarioId,
+                'usuario_destinatario_id' => $usuarioDestinatarioResuelto,
+                'total_lote' => array_sum(array_map(static fn (array $f): float => (float) $f['valor_total'], $filasGasto)),
+                'techo_categorias' => $techoCategorias,
+            ], $filasGasto);
+            $detalleGasto = 'Enviado como lote v' . $loteGasto['version'];
+            $loteHistorialGasto = $historial->registrarLote('gasto_unisalud', 'enviado', $detalleGasto, $enviadosEgresos);
+            foreach ($filasGasto as $fila) {
+                $historial->registrar('gasto_unisalud', (int) $fila['id'], 'enviado', $detalleGasto, $loteHistorialGasto);
+            }
+        }
+
+        if (!empty($filasIngreso)) {
+            $loteIngreso = $this->modeloEnvioLote->crear('ingreso_unisalud', [
+                'anio_presupuestal_id' => $anioId,
+                'dependencia' => $dependenciaDestinoNombre,
+                'enviado_por' => $remitenteId,
+                'rol_destinatario_id' => $rolDestinatarioId,
+                'usuario_destinatario_id' => $usuarioDestinatarioResuelto,
+                'total_lote' => array_sum(array_map(static fn (array $f): float => (float) $f['valor_total'], $filasIngreso)),
+            ], $filasIngreso);
+            $detalleIngreso = 'Enviado como lote v' . $loteIngreso['version'];
+            $loteHistorialIngreso = $historial->registrarLote('ingreso_unisalud', 'enviado', $detalleIngreso, $enviadosIngresos);
+            foreach ($filasIngreso as $fila) {
+                $historial->registrar('ingreso_unisalud', (int) $fila['id'], 'enviado', $detalleIngreso, $loteHistorialIngreso);
+            }
+        }
 
         foreach ($destinatarios as $destinatario) {
             $this->modeloMensaje->crear(
@@ -1270,6 +1413,10 @@ class UnisaludControlador
         $cabecera['id'] = $id;
         $cabecera['usuario_id'] = $existente['usuario_id'];
         $this->regenerarAutomaticosDeIngreso($cabecera);
+
+        if ($existente['estado'] === 'enviado') {
+            $this->modeloHistorial->registrar('ingreso_unisalud', $id, 'editado_tras_enviar', 'Editado después de enviarse.');
+        }
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('ingreso_unisalud', $id, $cabecera['valor_total'], $cabecera['dependencia']);
 
@@ -1544,37 +1691,6 @@ class UnisaludControlador
                 && $item['dependencia_destino'] === $dependenciaUsuarioNombre
                 && (empty($item['usuario_destinatario_id']) || (int) $item['usuario_destinatario_id'] === $usuarioActualId);
         }));
-    }
-
-    /**
-     * Antes esta función dejaba pasar SIN FILTRAR las líneas automáticas asumiendo que "no
-     * pertenecen a la dependencia que originó el ingreso" — falso: regenerarAutomaticosDeIngreso()
-     * las genera con 'dependencia' => la MISMA dependencia y 'usuario_id' => el MISMO usuario
-     * dueños del ingreso que las generó (nunca un destino central real), así que cualquier usuario
-     * de OTRA dependencia veía (y exportaba) las líneas automáticas de todas las demás — filtrado
-     * en falso, fuga real de datos entre facultades. Se filtran igual que cualquier otro egreso:
-     * filtrarPorPropietarioODestinatario() ya las deja ver correctamente a su dueño (por
-     * usuario_id) o a quien esté en la dependencia dueña (la propia o un ancestro), sin necesitar
-     * ningún trato especial.
-     *
-     * Excepción: quien tenga permiso delegado (o sea SA) sobre el tipo_automatico de una fila la ve
-     * sin filtrar por dependencia/usuario (ver AutogestionAutomaticoPermiso). El resto sigue el
-     * filtro normal.
-     */
-    private function filtrarEgresosVisibles(array $items, ?array $usuarioActual, array $dependenciasPermitidas): array
-    {
-        $visiblesPorPermiso = [];
-        $resto = [];
-
-        foreach ($items as $item) {
-            if ($item['tipo_automatico'] !== null && $this->puedeGestionarAutomaticos($item['tipo_automatico'])) {
-                $visiblesPorPermiso[] = $item;
-            } else {
-                $resto[] = $item;
-            }
-        }
-
-        return array_merge($visiblesPorPermiso, $this->filtrarPorPropietarioODestinatario($resto, $usuarioActual, $dependenciasPermitidas));
     }
 
     /**

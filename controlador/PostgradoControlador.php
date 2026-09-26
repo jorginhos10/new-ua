@@ -20,6 +20,9 @@ require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
 require_once __DIR__ . '/../modelo/AutogestionAutomaticoPermiso.php';
 require_once __DIR__ . '/../modelo/AutogestionAutomaticoDefinicion.php';
+require_once __DIR__ . '/../modelo/EnvioLote.php';
+require_once __DIR__ . '/../modelo/VistaLoteEnvio.php';
+require_once __DIR__ . '/../modelo/PeticionHistorial.php';
 
 class PostgradoControlador
 {
@@ -39,6 +42,8 @@ class PostgradoControlador
     private Mensaje $modeloMensaje;
     private AutogestionAutomaticoPermiso $modeloPermisoAutomatico;
     private AutogestionAutomaticoDefinicion $modeloDefinicionAutomatico;
+    private EnvioLote $modeloEnvioLote;
+    private PeticionHistorial $modeloHistorial;
 
     private const MODULO_AUTOGESTION = 'postgrado';
 
@@ -117,6 +122,79 @@ class PostgradoControlador
         $this->modeloMensaje = new Mensaje();
         $this->modeloPermisoAutomatico = new AutogestionAutomaticoPermiso();
         $this->modeloDefinicionAutomatico = new AutogestionAutomaticoDefinicion();
+        $this->modeloEnvioLote = new EnvioLote();
+        $this->modeloHistorial = new PeticionHistorial();
+    }
+
+    private function esSuperAdmin(): bool
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+
+        return $usuarioActual !== null && (int) ($usuarioActual['es_super_admin'] ?? 0) === 1;
+    }
+
+    private function ocultarLote(): array
+    {
+        if (!$this->esSuperAdmin()) {
+            return ['Solo el superadministrador puede ocultar un snapshot de envío.', ''];
+        }
+
+        $loteId = (int) ($_POST['lote_id'] ?? 0);
+
+        if ($loteId <= 0 || !$this->modeloEnvioLote->ocultar($loteId)) {
+            return ['No se pudo ocultar ese snapshot.', ''];
+        }
+
+        return ['', 'Snapshot ocultado.'];
+    }
+
+    private function eliminarLote(): array
+    {
+        if (!$this->esSuperAdmin()) {
+            return ['Solo el superadministrador puede eliminar un snapshot de envío.', ''];
+        }
+
+        $loteId = (int) ($_POST['lote_id'] ?? 0);
+
+        if ($loteId <= 0 || !$this->modeloEnvioLote->eliminar($loteId)) {
+            return ['No se pudo eliminar ese snapshot.', ''];
+        }
+
+        return ['', 'Snapshot eliminado.'];
+    }
+
+    /**
+     * Techo (% de Costos/Inversiones/Excedentes) vigente para las categorías presentes en las
+     * filas que se están enviando — se congela en el lote junto con las filas. A diferencia de
+     * Gastos (un techo fijo en pesos), aquí puede haber varias categorías en el mismo lote.
+     */
+    private function construirTechoCategorias(int $autogestionId, float $totalIngresos, array $filasGasto): ?array
+    {
+        $item = $this->modeloAutogestion->obtenerPorId($autogestionId);
+
+        if ($item === null) {
+            return null;
+        }
+
+        $mapaPorcentaje = ['Excedentes' => 'excedentes', 'Gastos' => 'costos', 'Inversiones' => 'inversiones'];
+        $categorias = array_unique(array_column($filasGasto, 'categoria'));
+        $resultado = [];
+
+        foreach ($categorias as $categoria) {
+            $clave = $mapaPorcentaje[$categoria] ?? null;
+
+            if ($clave === null || $item[$clave] === null) {
+                continue;
+            }
+
+            $porcentaje = (float) $item[$clave];
+            $resultado[$categoria] = [
+                'porcentaje' => $porcentaje,
+                'limite' => round($totalIngresos * $porcentaje / 100, 2),
+            ];
+        }
+
+        return empty($resultado) ? null : $resultado;
     }
 
     /**
@@ -179,6 +257,10 @@ class PostgradoControlador
 
             if ($accion === 'enviar_todo') {
                 [$error, $exito] = $this->enviarTodo();
+            } elseif ($accion === 'ocultar_lote') {
+                [$error, $exito] = $this->ocultarLote();
+            } elseif ($accion === 'eliminar_lote') {
+                [$error, $exito] = $this->eliminarLote();
             } elseif ($tab === 'egresos' && $accion === 'actualizar') {
                 [$error, $exito] = $this->actualizarEgreso();
             } elseif ($tab === 'egresos' && $accion === 'eliminar') {
@@ -269,7 +351,7 @@ class PostgradoControlador
             // desglose Costos+Inversión/Excedentes) — si no se filtran aquí, la barra de resumen
             // termina sumando ingresos/egresos de OTRAS dependencias que comparten el mismo ítem
             // de Autogestión, y una dependencia ve los totales de otra.
-            $gastosEgresos = $this->filtrarEgresosVisibles(
+            $gastosEgresos = $this->filtrarPorPropietarioODestinatario(
                 $this->modeloGasto->obtenerPorAnioYAutogestion($anioSeleccionadoId, $autogestionSeleccionadoId),
                 $usuarioActual,
                 $dependenciasSugeridas
@@ -337,6 +419,19 @@ class PostgradoControlador
 
         $diaActual = (int) date('z') + 1;
         $totalDiasAnio = date('L') ? 366 : 365;
+
+        $origenLote = $tab === 'ingresos' ? 'ingreso_postgrado' : 'gasto_postgrado';
+        $lotesCrudos = $this->modeloEnvioLote->obtenerActivosPorFilas($origenLote, array_column($gastos, 'id'));
+        $lotesEnviados = (new VistaLoteEnvio())->construirLotes($origenLote, $lotesCrudos);
+        $esSuperAdmin = $this->esSuperAdmin();
+
+        // Por tipo presente en la tabla (normalmente solo 'excedentes'), si el usuario actual
+        // puede editar/eliminar esa fila automática (SA o permiso delegado) — la vista lo usa para
+        // decidir si muestra Editar/Eliminar en vez de solo la etiqueta "Automático".
+        $permisosAutomaticosPorTipo = [];
+        foreach (array_unique(array_filter(array_column($gastosEgresos, 'tipo_automatico'))) as $tipoAutomatico) {
+            $permisosAutomaticosPorTipo[$tipoAutomatico] = $this->puedeGestionarAutomaticos($tipoAutomatico);
+        }
 
         require __DIR__ . '/../vista/postgrado/index.php';
     }
@@ -467,7 +562,7 @@ class PostgradoControlador
                     $usuarioActual,
                     $dependenciasPermitidas
                 ));
-                $gastos = array_merge($gastos, $this->filtrarEgresosVisibles(
+                $gastos = array_merge($gastos, $this->filtrarPorPropietarioODestinatario(
                     $this->modeloGasto->obtenerPorAnioYAutogestion($anioSeleccionadoId, $itemId),
                     $usuarioActual,
                     $dependenciasPermitidas
@@ -503,6 +598,12 @@ class PostgradoControlador
             ['nombre' => 'Ingresos', 'encabezados' => ['Ítem de autogestión', 'Dependencia', 'Concepto adicional', 'Valor adicional', 'Valor total', 'Estado'], 'filas' => array_map($filaIngreso, $ingresos)],
             ['nombre' => 'Gastos', 'encabezados' => ['Ítem de autogestión', 'Dependencia', 'Categoría', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Estado'], 'filas' => array_map($filaGasto, $gastos)],
         ];
+
+        $vistaLotes = new VistaLoteEnvio();
+        $lotesGasto = $vistaLotes->construirLotes('gasto_postgrado', $this->modeloEnvioLote->obtenerActivosPorFilas('gasto_postgrado', array_column($gastos, 'id')));
+        $lotesIngreso = $vistaLotes->construirLotes('ingreso_postgrado', $this->modeloEnvioLote->obtenerActivosPorFilas('ingreso_postgrado', array_column($ingresos, 'id')));
+        $nombresReservados = array_column($hojas, 'nombre');
+        $hojas = array_merge($hojas, $vistaLotes->hojasExcel($lotesGasto, $nombresReservados), $vistaLotes->hojasExcel($lotesIngreso, $nombresReservados));
 
         $anioTexto = (string) $anioSeleccionadoId;
         foreach ($aniosActivos as $anioFila) {
@@ -1112,19 +1213,20 @@ class PostgradoControlador
             return ['El egreso que intentas editar no existe.', ''];
         }
 
+        // Sin restricción de estado (igual que Extensión/Unisalud/SinExcedentes): una fila
+        // automática ya enviada sigue siendo editable por quien tiene el permiso, para poder
+        // corregirla desde "Ver en Peticiones" → "Editar" incluso después de que se envió junto
+        // con el resto del lote de su dependencia.
         $esConversionContribucion = $existente['tipo_automatico'] === 'contrib_postgrado'
-            && $existente['estado'] === 'borrador'
             && $this->puedeAdministrarContribucion();
 
         $esConversionExcedentes = $existente['tipo_automatico'] === 'excedentes'
-            && $existente['estado'] === 'borrador'
             && $this->puedeAdministrarExcedentes();
 
         // Mecanismo nuevo (permisos delegados por SA, ver AutogestionAutomaticoPermiso), además del
         // mecanismo legado de arriba (solo SA/Departamento de Postgrados) — cualquiera de los dos
-        // habilita la edición de una fila automática en borrador.
+        // habilita la edición de una fila automática.
         $esConversionPorPermiso = $existente['tipo_automatico'] !== null
-            && $existente['estado'] === 'borrador'
             && !$esConversionContribucion
             && !$esConversionExcedentes
             && $this->puedeGestionarAutomaticos($existente['tipo_automatico']);
@@ -1169,6 +1271,10 @@ class PostgradoControlador
             }
         } catch (PDOException $excepcion) {
             return ['No se pudo actualizar el egreso: ' . $excepcion->getMessage(), ''];
+        }
+
+        if ($existente['estado'] === 'enviado') {
+            $this->modeloHistorial->registrar('gasto_postgrado', $id, 'editado_tras_enviar', 'Editado después de enviarse.');
         }
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('gasto_postgrado', $id, $nuevoValor, $datos['dependencia']);
@@ -1257,14 +1363,55 @@ class PostgradoControlador
         // petición en Pendientes, no solo la persona elegida.
         $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
 
-        $enviadosIngresos = $this->modeloIngreso->enviarTodosBorrador($anioId, $autogestionId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
-        $enviadosEgresos = $this->modeloGasto->enviarTodosBorrador($anioId, $autogestionId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
+        $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
+
+        $filasIngreso = $this->modeloIngreso->enviarTodosBorrador($anioId, $autogestionId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
+        $filasGasto = $this->modeloGasto->enviarTodosBorrador($anioId, $autogestionId, $dependenciaDestinoNombre, $rolDestinatarioId, $dependenciasPermitidasEnvio, $usuarioDestinatarioResuelto);
+        $enviadosIngresos = count($filasIngreso);
+        $enviadosEgresos = count($filasGasto);
 
         if ($enviadosIngresos === 0 && $enviadosEgresos === 0) {
             return ['No hay ingresos ni egresos en borrador para enviar.', ''];
         }
 
-        $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
+        $ambitoLote = 'autogestion:' . $autogestionId;
+        $techoCategorias = $this->construirTechoCategorias($autogestionId, $totalIngresos, $filasGasto);
+        $historial = $this->modeloHistorial;
+
+        if (!empty($filasGasto)) {
+            $loteGasto = $this->modeloEnvioLote->crear('gasto_postgrado', [
+                'anio_presupuestal_id' => $anioId,
+                'dependencia' => $dependenciaDestinoNombre,
+                'ambito' => $ambitoLote,
+                'enviado_por' => $remitenteId,
+                'rol_destinatario_id' => $rolDestinatarioId,
+                'usuario_destinatario_id' => $usuarioDestinatarioResuelto,
+                'total_lote' => array_sum(array_map(static fn (array $f): float => (float) $f['valor_total'], $filasGasto)),
+                'techo_categorias' => $techoCategorias,
+            ], $filasGasto);
+            $detalleGasto = 'Enviado como lote v' . $loteGasto['version'];
+            $loteHistorialGasto = $historial->registrarLote('gasto_postgrado', 'enviado', $detalleGasto, $enviadosEgresos);
+            foreach ($filasGasto as $fila) {
+                $historial->registrar('gasto_postgrado', (int) $fila['id'], 'enviado', $detalleGasto, $loteHistorialGasto);
+            }
+        }
+
+        if (!empty($filasIngreso)) {
+            $loteIngreso = $this->modeloEnvioLote->crear('ingreso_postgrado', [
+                'anio_presupuestal_id' => $anioId,
+                'dependencia' => $dependenciaDestinoNombre,
+                'ambito' => $ambitoLote,
+                'enviado_por' => $remitenteId,
+                'rol_destinatario_id' => $rolDestinatarioId,
+                'usuario_destinatario_id' => $usuarioDestinatarioResuelto,
+                'total_lote' => array_sum(array_map(static fn (array $f): float => (float) $f['valor_total'], $filasIngreso)),
+            ], $filasIngreso);
+            $detalleIngreso = 'Enviado como lote v' . $loteIngreso['version'];
+            $loteHistorialIngreso = $historial->registrarLote('ingreso_postgrado', 'enviado', $detalleIngreso, $enviadosIngresos);
+            foreach ($filasIngreso as $fila) {
+                $historial->registrar('ingreso_postgrado', (int) $fila['id'], 'enviado', $detalleIngreso, $loteHistorialIngreso);
+            }
+        }
 
         foreach ($destinatarios as $destinatario) {
             $this->modeloMensaje->crear(
@@ -1479,6 +1626,10 @@ class PostgradoControlador
         $cabecera['id'] = $id;
         $cabecera['usuario_id'] = $existente['usuario_id'];
         $this->regenerarAutomaticosDeIngreso($cabecera);
+
+        if ($existente['estado'] === 'enviado') {
+            $this->modeloHistorial->registrar('ingreso_postgrado', $id, 'editado_tras_enviar', 'Editado después de enviarse.');
+        }
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('ingreso_postgrado', $id, $cabecera['valor_total'], $cabecera['dependencia']);
 
@@ -1762,38 +1913,6 @@ class PostgradoControlador
                 && $item['dependencia_destino'] === $dependenciaUsuarioNombre
                 && (empty($item['usuario_destinatario_id']) || (int) $item['usuario_destinatario_id'] === $usuarioActualId);
         }));
-    }
-
-    /**
-     * Antes esta función dejaba pasar SIN FILTRAR las líneas automáticas (excedentes/contribución a
-     * posgrado) asumiendo que "no pertenecen a la dependencia que originó el ingreso" — falso:
-     * regenerarAutomaticosDeIngreso() las genera con 'dependencia' => la MISMA dependencia y
-     * 'usuario_id' => el MISMO usuario dueños del ingreso que las generó (nunca un destino central
-     * real), así que cualquier usuario de OTRA dependencia que comparta el mismo ítem de
-     * Autogestión veía (y exportaba) las líneas automáticas de todas las demás — filtrado en falso,
-     * fuga real de datos entre facultades. Se filtran igual que cualquier otro egreso:
-     * filtrarPorPropietarioODestinatario() ya las deja ver correctamente a su dueño (por
-     * usuario_id) o a quien esté en la dependencia dueña (la propia o un ancestro), sin necesitar
-     * ningún trato especial.
-     *
-     * Excepción: quien tenga permiso delegado (o sea SA) sobre el tipo_automatico de una fila la ve
-     * sin filtrar por dependencia/usuario — necesario para poder "reagrupar" filas automáticas
-     * entre dependencias (ver AutogestionAutomaticoPermiso). El resto sigue el filtro normal.
-     */
-    private function filtrarEgresosVisibles(array $items, ?array $usuarioActual, array $dependenciasPermitidas): array
-    {
-        $visiblesPorPermiso = [];
-        $resto = [];
-
-        foreach ($items as $item) {
-            if ($item['tipo_automatico'] !== null && $this->puedeGestionarAutomaticos($item['tipo_automatico'])) {
-                $visiblesPorPermiso[] = $item;
-            } else {
-                $resto[] = $item;
-            }
-        }
-
-        return array_merge($visiblesPorPermiso, $this->filtrarPorPropietarioODestinatario($resto, $usuarioActual, $dependenciasPermitidas));
     }
 
     /**

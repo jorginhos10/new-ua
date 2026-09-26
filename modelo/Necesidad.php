@@ -225,6 +225,22 @@ class Necesidad
         return $consulta->rowCount();
     }
 
+    /**
+     * Devuelve una necesidad académica ya enviada a borrador (acción "Devolver a borrador" en
+     * Peticiones > Pendientes) — limpia el destinatario para que quede como recién creada,
+     * editable de nuevo por su dueño.
+     */
+    public function devolverABorrador(int $id): bool
+    {
+        $consulta = $this->db->prepare(
+            "UPDATE necesidades_academicas SET estado = 'borrador', rol_destinatario_id = NULL,
+                usuario_destinatario_id = NULL, dependencia_destino = NULL
+             WHERE id = :id AND estado = 'enviado'"
+        );
+
+        return $consulta->execute(['id' => $id]);
+    }
+
     public function eliminar(int $id): bool
     {
         $consulta = $this->db->prepare('DELETE FROM necesidades_academicas WHERE id = :id');

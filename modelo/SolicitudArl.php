@@ -122,12 +122,34 @@ class SolicitudArl
         return $consulta->execute(['id' => $id]);
     }
 
-    public function enviar(int $id, string $dependenciaDestino, ?int $usuarioDestinatarioId = null): bool
+    public function enviar(int $id, string $dependenciaDestino, ?int $usuarioDestinatarioId = null, ?int $rolDestinatarioId = null): bool
     {
         $consulta = $this->db->prepare(
-            "UPDATE solicitudes_arl SET estado = 'enviada', enviada_a = :enviada_a, usuario_destinatario_id = :usuario_destinatario_id WHERE id = :id"
+            "UPDATE solicitudes_arl SET estado = 'enviada', enviada_a = :enviada_a, usuario_destinatario_id = :usuario_destinatario_id, rol_destinatario_id = :rol_destinatario_id WHERE id = :id"
         );
 
-        return $consulta->execute(['id' => $id, 'enviada_a' => $dependenciaDestino, 'usuario_destinatario_id' => $usuarioDestinatarioId]);
+        return $consulta->execute([
+            'id' => $id,
+            'enviada_a' => $dependenciaDestino,
+            'usuario_destinatario_id' => $usuarioDestinatarioId,
+            'rol_destinatario_id' => $rolDestinatarioId,
+        ]);
+    }
+
+    /**
+     * Devuelve una solicitud ya enviada a borrador (acción "Devolver a borrador" en Peticiones >
+     * Pendientes) — limpia el destinatario para que quede como recién creada, editable de nuevo
+     * por su dueño. No toca `facultad` (esa es la facultad de ORIGEN de la solicitud, no un campo
+     * de destinatario).
+     */
+    public function devolverABorrador(int $id): bool
+    {
+        $consulta = $this->db->prepare(
+            "UPDATE solicitudes_arl SET estado = 'borrador', rol_destinatario_id = NULL,
+                usuario_destinatario_id = NULL, enviada_a = NULL
+             WHERE id = :id AND estado = 'enviada'"
+        );
+
+        return $consulta->execute(['id' => $id]);
     }
 }

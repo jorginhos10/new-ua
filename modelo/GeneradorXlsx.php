@@ -383,6 +383,17 @@ class GeneradorXlsx
             return '<c r="' . $referencia . '"' . $atributoEstilo . ' t="inlineStr"><is><t xml:space="preserve">' . $texto . '</t></is></c>';
         };
 
+        // Una celda puede ser texto plano (como siempre) o ['valor' => ..., 'estilo' => N] para
+        // resaltarla: 1 = encabezado, 2 = valor cambiado (naranja), 3 = fila de total (negrita, gris,
+        // borde superior), 4 = negrita simple. Así los llamadores existentes no cambian nada.
+        $celda = static function (string $referencia, $valor, ?int $estiloPorDefecto = null) use ($celdaTexto): string {
+            if (is_array($valor)) {
+                return $celdaTexto($referencia, (string) ($valor['valor'] ?? ''), $valor['estilo'] ?? $estiloPorDefecto);
+            }
+
+            return $celdaTexto($referencia, (string) $valor, $estiloPorDefecto);
+        };
+
         $hojas = array_values($hojas);
         $sheetsXml = [];
         $sheetsTags = '';
@@ -399,7 +410,7 @@ class GeneradorXlsx
             foreach ($filasPrevias as $filaPrevia) {
                 $filaXml = '<row r="' . $numeroFila . '">';
                 foreach (array_values($filaPrevia) as $col => $valor) {
-                    $filaXml .= $celdaTexto(self::columnaLetra($col) . $numeroFila, (string) $valor);
+                    $filaXml .= $celda(self::columnaLetra($col) . $numeroFila, $valor);
                 }
                 $filaXml .= '</row>';
                 $filasXml .= $filaXml;
@@ -417,7 +428,7 @@ class GeneradorXlsx
             foreach ($hoja['filas'] as $fila) {
                 $filaXml = '<row r="' . $numeroFila . '">';
                 for ($col = 0; $col < $columnas; $col++) {
-                    $filaXml .= $celdaTexto(self::columnaLetra($col) . $numeroFila, (string) ($fila[$col] ?? ''));
+                    $filaXml .= $celda(self::columnaLetra($col) . $numeroFila, $fila[$col] ?? '');
                 }
                 $filaXml .= '</row>';
                 $filasXml .= $filaXml;
@@ -436,20 +447,30 @@ class GeneradorXlsx
 
         $stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-            . '<fonts count="2">'
+            . '<fonts count="4">'
             . '<font><sz val="11"/><name val="Calibri"/></font>'
             . '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>'
+            . '<font><b/><sz val="11"/><color rgb="FFC96500"/><name val="Calibri"/></font>'
+            . '<font><b/><sz val="11"/><name val="Calibri"/></font>'
             . '</fonts>'
-            . '<fills count="3">'
+            . '<fills count="5">'
             . '<fill><patternFill patternType="none"/></fill>'
             . '<fill><patternFill patternType="gray125"/></fill>'
             . '<fill><patternFill patternType="solid"><fgColor rgb="FF1F4E78"/><bgColor indexed="64"/></patternFill></fill>'
+            . '<fill><patternFill patternType="solid"><fgColor rgb="FFFFE3B3"/><bgColor indexed="64"/></patternFill></fill>'
+            . '<fill><patternFill patternType="solid"><fgColor rgb="FFF0F0F2"/><bgColor indexed="64"/></patternFill></fill>'
             . '</fills>'
-            . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
+            . '<borders count="2">'
+            . '<border><left/><right/><top/><bottom/><diagonal/></border>'
+            . '<border><left/><right/><top style="medium"><color rgb="FF1D1D1F"/></top><bottom/><diagonal/></border>'
+            . '</borders>'
             . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-            . '<cellXfs count="2">'
+            . '<cellXfs count="5">'
             . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
             . '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            . '<xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
+            . '<xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>'
+            . '<xf numFmtId="0" fontId="3" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
             . '</cellXfs>'
             . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
             . '</styleSheet>';

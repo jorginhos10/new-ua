@@ -282,6 +282,63 @@ de datos antes de correrlo.
 
 ---
 
+## 2026-09-26 — Snapshot al enviar (lote + techo) en Gastos y Autogestión
+
+- **Archivo:** `sql/envios_lote.sql`
+- **Cambio:** dos tablas nuevas. `envios_lote` (origen, anio_presupuestal_id, dependencia, ambito, version,
+  enviado_por, enviado_en, rol_destinatario_id, usuario_destinatario_id, total_lote, techo_numero,
+  techo_flexible_activo, techo_categorias JSON, estado activo/inactivo). `envios_lote_filas` (lote_id
+  FK con `ON DELETE CASCADE`, origen_fila_id, datos_json con la foto completa de la fila).
+- **Motivo:** Ver plan `el-techo-no-deberia-kind-candle`. Al hacer clic en "Enviar" en Gastos o en
+  Autogestión (Extensión/Postgrado/Unisalud/SinExcedentes) no quedaba ninguna foto de los valores
+  enviados — si un Avalador/Gestor editaba la fila después, se perdía para siempre qué se envió
+  originalmente. Cada "Enviar" ahora congela un lote versionado (v1, v2... por dependencia/año/origen)
+  con sus filas y el techo presupuestal vigente en ese momento. La edición posterior sigue permitida
+  igual que hoy — no se bloquea nada, la foto simplemente no cambia.
+- **Aplicado en local:** Sí (2026-09-26).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Acompañar con el despliegue de `modelo/EnvioLote.php` (nuevo) y los cambios en
+  `modelo/Gasto.php`/`GastoExtension.php`/`GastoPostgrado.php`/`GastoUnisalud.php`/
+  `GastoSinExcedentes.php` + sus 4 pares `Ingreso*.php` (`enviarTodosBorrador()` pasa a devolver las
+  filas enviadas en vez de solo un conteo), los 5 controladores (`enviarTodo()`, `actualizar()`/
+  `actualizarEgreso()`, nuevas acciones `ocultar_lote`/`eliminar_lote`), y
+  `PeticionesControlador::historialItem()` (deja de exigir rol administrador, usa
+  `puedeVerHistorialItem()`) — sin ese código, las tablas no tienen ningún efecto todavía.
+
+---
+
+## 2026-09-26 — Backfill de usuario_id en filas automáticas huérfanas de Autogestión
+
+- **Archivo:** `sql/backfill_usuario_id_automaticos.sql`
+- **Cambio:** migración de datos (no de esquema). `UPDATE` que copia `usuario_id` desde el
+  ingreso que originó cada fila automática (Excedentes/Contribución a posgrado) en
+  `gastos_extension`/`gastos_postgrado`/`gastos_unisalud`/`gastos_sin_excedentes`, para las que
+  quedaron con `usuario_id NULL`.
+- **Motivo:** esas filas antiguas (de antes de que `regenerarAutomaticosDeIngreso()` empezara a
+  copiar el `usuario_id` del ingreso) caían en el filtro de respaldo para filas sin dueño
+  (`filtrarPorPropietarioODestinatario()`: visibles a un ancestro de su dependencia) — un
+  superadmin raíz las veía TODAS, de cualquier facultad, sin necesitar el modo Auditar ni un
+  permiso delegado, y sus valores se sumaban de más en la barra de presupuesto/techo del landing
+  de quien las veía. Encontrado al revisar por qué un usuario seguía viendo "Excedentes nivel
+  central" de FACULTAD DE ARQUITECTURA después de la corrección de visibilidad del mismo día (ver
+  la entrada de Snapshot al enviar, arriba, y el hallazgo de que la fuga real era de datos legado,
+  no del mecanismo de permisos).
+- **Aplicado en local:** Sí (2026-09-26) — 6 filas corregidas (3 en `gastos_extension` vía
+  `ingreso_id`, 1 en `gastos_extension` sin `ingreso_id` — id 87, FACULTAD DE ARQUITECTURA,
+  asignada a mano al único usuario dueño de los demás ingresos de esa dependencia+autogestión
+  [usuario 67] — y 2 en `gastos_postgrado` vía `ingreso_id`).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** el archivo `.sql` cubre el caso general (fila con `ingreso_id` válido). El caso sin
+  `ingreso_id` (huérfana) no se puede resolver con una consulta genérica — el archivo deja
+  documentado cómo detectarlas y el criterio usado en local para asignarles dueño a mano.
+  Deliberadamente NO incluye las 26 filas de `gastos` (gasto_principal) con `usuario_id NULL`
+  encontradas de paso: son todas `tipo_automatico = 'techo_hijo'`, un mecanismo distinto (cálculo
+  interno de techo heredado, excluido explícitamente de `enviarTodosBorrador()`) — fuera de
+  alcance de este arreglo a menos que se confirme que también les afecta el mismo problema de
+  visibilidad.
+
+---
+
 <!--
 Plantilla para la próxima entrada:
 

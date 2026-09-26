@@ -18,70 +18,79 @@ require __DIR__ . '/../parciales/encabezado.php';
     <div class="tarjeta">
         <?php
         $barraTitulo = 'Gastos';
-        $barraBotonesSecundarios = [
-            [
-                'id' => 'boton-seleccionar-gastos',
-                'icono' => 'seleccionar',
-                'etiqueta' => 'Seleccionar elementos',
-                'disabled' => $modoEdicion,
+        // Mismo patrón de barra que Dev > Tabla: básico (selección y edición) · específico ·
+        // datos (plantilla/importar/exportar) · principal (Agregar + Enviar como ícono).
+        $barraGruposIconos = [
+            'basico' => [
+                [
+                    'id' => 'boton-seleccionar-gastos',
+                    'icono' => 'seleccionar',
+                    'etiqueta' => 'Seleccionar elementos',
+                    'disabled' => $modoEdicion,
+                ],
+                ['separador' => true],
+                [
+                    'id' => 'boton-editar-gastos',
+                    'icono' => 'editar',
+                    'etiqueta' => 'Editar seleccionado',
+                    'disabled' => true,
+                    'titulo_disabled' => $modoEdicion ? 'Ya estás editando un elemento' : 'Selecciona exactamente un elemento',
+                ],
+                [
+                    'id' => 'boton-duplicar-gastos',
+                    'icono' => 'duplicar',
+                    'etiqueta' => 'Duplicar seleccionados',
+                    'disabled' => true,
+                    'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
+                ],
+                [
+                    'id' => 'boton-eliminar-gastos',
+                    'icono' => 'eliminar',
+                    'etiqueta' => 'Eliminar seleccionados',
+                    'disabled' => true,
+                    'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
+                ],
             ],
-            [
-                'id' => 'boton-editar-gastos',
-                'icono' => 'editar',
-                'etiqueta' => 'Editar seleccionado',
-                'disabled' => true,
-                'titulo_disabled' => $modoEdicion ? 'Ya estás editando un elemento' : 'Selecciona exactamente un elemento',
-            ],
-            [
-                'id' => 'boton-duplicar-gastos',
-                'icono' => 'duplicar',
-                'etiqueta' => 'Duplicar seleccionados',
-                'disabled' => true,
-                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
-            ],
-            [
-                'id' => 'boton-eliminar-gastos',
-                'icono' => 'eliminar',
-                'etiqueta' => 'Eliminar seleccionados',
-                'disabled' => true,
-                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
-            ],
-            [
-                'id' => 'boton-abrir-modal-enviar-todo-gasto',
-                'icono' => 'enviar',
-                'etiqueta' => 'Enviar todos los gastos en borrador',
-                'disabled' => $modoEdicion || !$puedeEnviarTodo,
-                'titulo_disabled' => 'Disponible cuando se haya ejecutado el 100% del presupuesto',
-            ],
-            [
-                'id' => 'boton-exportar-plantilla-gastos',
-                'icono' => 'exportar',
-                'etiqueta' => 'Exportar plantilla (.xlsx)',
-                'tipo' => 'a',
-                'href' => 'index.php?ruta=gastos-exportar-plantilla',
-            ],
-            [
-                'id' => 'boton-exportar-gastos',
-                'icono' => 'exportar',
-                'etiqueta' => 'Exportar gastos (.xlsx)',
-                'tipo' => 'a',
-                'href' => 'index.php?ruta=gastos-exportar' . ($anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : ''),
-            ],
-            [
-                'id' => 'boton-importar-gastos',
-                'icono' => 'importar',
-                'etiqueta' => 'Importar gastos (.xlsx)',
-                'disabled' => $modoEdicion,
-                'titulo_disabled' => 'No disponible mientras editas',
+            'especifico' => [],
+            'datos' => [
+                [
+                    'id' => 'boton-exportar-plantilla-gastos',
+                    'icono' => 'plantilla',
+                    'etiqueta' => 'Exportar plantilla (.xlsx)',
+                    'tipo' => 'a',
+                    'href' => 'index.php?ruta=gastos-exportar-plantilla',
+                ],
+                [
+                    'id' => 'boton-importar-gastos',
+                    'icono' => 'importar',
+                    'etiqueta' => 'Importar gastos (.xlsx)',
+                    'disabled' => $modoEdicion,
+                    'titulo_disabled' => 'No disponible mientras editas',
+                ],
+                [
+                    'id' => 'boton-exportar-gastos',
+                    'icono' => 'exportar',
+                    'etiqueta' => 'Exportar gastos (.xlsx)',
+                    'tipo' => 'a',
+                    'href' => 'index.php?ruta=gastos-exportar' . ($anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : ''),
+                ],
             ],
         ];
         if ($modoEdicion) {
-            $barraBotonesSecundarios[] = [
+            $barraGruposIconos['basico'][] = ['separador' => true];
+            $barraGruposIconos['basico'][] = [
                 'id' => 'boton-nuevo-item-desde-edicion',
                 'icono' => 'nuevo',
                 'etiqueta' => 'Nuevo ítem',
             ];
         }
+        $barraBuscar = $modoEdicion ? null : '[data-toggle-envio="gastos"]';
+        $barraBotonEnviar = [
+            'id' => 'boton-abrir-modal-enviar-todo-gasto',
+            'etiqueta' => 'Enviar todos los gastos en borrador',
+            'disabled' => $modoEdicion || !$puedeEnviarTodo,
+            'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Disponible cuando se haya ejecutado el 100% del presupuesto',
+        ];
         $barraBotonPrincipal = $modoEdicion
             ? ['id' => 'boton-guardar-edicion-gasto', 'etiqueta' => 'Guardar', 'form' => 'form-editar-gasto']
             : ($catalogosListos ? ['id' => 'boton-abrir-modal-gasto', 'etiqueta' => '+ Agregar gasto'] : null);
@@ -144,6 +153,23 @@ require __DIR__ . '/../parciales/encabezado.php';
             </form>
         <?php endif; ?>
 
+        <?php
+        // Botón único Borrador/Enviado: se pinta en la fila de insignias (Techo total/Propio/...),
+        // a la derecha, en vez de una cabecera propia sobre la tabla.
+        $botonToggleEnvio = '';
+        if (!$modoEdicion) {
+            $cantidadBorradores = count(array_filter($gastos, static fn (array $g): bool => $g['estado'] === 'borrador'));
+            $cantidadLotes = count($lotesEnviados);
+            $textoToggleBorrador = 'Borrador · ' . $cantidadBorradores;
+            $textoToggleEnviado = 'Enviado · ' . $cantidadLotes . ' lote' . ($cantidadLotes === 1 ? '' : 's');
+            $botonToggleEnvio = '<button type="button" class="toggle-envio-boton es-borrador" data-toggle-envio-boton="gastos"'
+                . ' data-texto-borrador="' . htmlspecialchars($textoToggleBorrador) . '"'
+                . ' data-texto-enviado="' . htmlspecialchars($textoToggleEnviado) . '">'
+                . htmlspecialchars($textoToggleBorrador) . '</button>';
+        }
+        $botonToggleEnvioPintado = false;
+        ?>
+
         <?php if ($anioSeleccionado): ?>
             <div class="progreso-presupuesto">
                 <div class="progreso-presupuesto-info">
@@ -177,7 +203,10 @@ require __DIR__ . '/../parciales/encabezado.php';
                 $iconoChipHeredado = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" y1="3" x2="6" y2="15"></line><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg>';
                 $iconoChipReasignado = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
                 ?>
-                <?php if ($presupuestoAnio > 0 || $totalGastadoHeredado > 0 || $totalGastadoHijasConTecho > 0 || $dumiSeleccionado !== null): ?>
+                <?php $hayChipsGasto = $presupuestoAnio > 0 || $totalGastadoHeredado > 0 || $totalGastadoHijasConTecho > 0 || $dumiSeleccionado !== null; ?>
+                <?php if ($hayChipsGasto || $botonToggleEnvio !== ''): ?>
+                <div class="fila-chips-toggle">
+                <?php if ($hayChipsGasto): ?>
                 <div class="chips-gasto">
                     <?php if ($presupuestoAnio > 0): ?>
                     <span class="chip-gasto chip-gasto-techo-total"><?= $iconoChipTechoTotal ?>Techo total: $<?= number_format($presupuestoAnio, 2, ',', '.') ?></span>
@@ -201,6 +230,10 @@ require __DIR__ . '/../parciales/encabezado.php';
                         $<?= number_format($totalGastadoDumiSeleccionado, 2, ',', '.') ?> (<?= number_format($porcentajeGastadoDumiSeleccionado, 1) ?>% del techo)
                     </span>
                     <?php endif; ?>
+                </div>
+                <?php endif; ?>
+                <?= $botonToggleEnvio ?>
+                <?php $botonToggleEnvioPintado = true; ?>
                 </div>
                 <?php endif; ?>
             </div>
@@ -259,14 +292,11 @@ require __DIR__ . '/../parciales/encabezado.php';
         };
         ?>
 
-        <details class="acordeon-grupo" open>
-            <summary class="acordeon-cabecera">
-                <span class="acordeon-flecha">▸</span>
-                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></span>
-                <span class="acordeon-titulo">Borradores</span>
-                <span class="acordeon-contador"><?= count($gastosBorrador) ?></span>
-            </summary>
-            <div class="acordeon-cuerpo">
+        <?php if (!$botonToggleEnvioPintado): ?>
+        <div class="fila-chips-toggle solo-toggle"><?= $botonToggleEnvio ?></div>
+        <?php endif; ?>
+        <div data-toggle-envio="gastos" data-mostrando="borrador">
+            <div class="panel-toggle-envio" data-panel-envio="borrador">
                 <div
                     class="tabla-scroll tabla-bulk-seleccionable"
                     data-boton-seleccionar="boton-seleccionar-gastos"
@@ -310,50 +340,68 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </table>
                 </div>
             </div>
-        </details>
 
-        <details class="acordeon-grupo">
-            <summary class="acordeon-cabecera">
-                <span class="acordeon-flecha">▸</span>
-                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></span>
-                <span class="acordeon-titulo">Enviados</span>
-                <span class="acordeon-contador"><?= count($gastosEnviado) ?></span>
-            </summary>
-            <div class="acordeon-cuerpo">
-                <div class="tabla-scroll">
-                    <table class="tabla-usuarios">
-                        <thead>
-                            <tr>
-                                <th class="columna-seleccion"></th>
-                                <th>Acciones</th>
-                                <th>Estado</th>
-                                <th>Sede</th>
-                                <th>Dependencia</th>
-                                <th>Línea estratégica</th>
-                                <th>Motor de desarrollo</th>
-                                <th>Proyecto PDI</th>
-                                <th>Contratos comunes</th>
-                                <th>Actividad</th>
-                                <th>Rubro</th>
-                                <th>Insumo</th>
-                                <th>Cantidad</th>
-                                <th>Costo unitario</th>
-                                <th>Valor total</th>
-                                <th>Meses</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($gastosEnviado as $gasto): $filaGasto($gasto); endforeach; ?>
-                            <?php if (empty($gastosEnviado)): ?>
-                            <tr>
-                                <td colspan="16">No hay gastos enviados.</td>
-                            </tr>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
+            <div class="panel-toggle-envio oculto" data-panel-envio="enviado">
+                <div class="panel-lotes-enviados">
+                    <?php
+                    $idsEnLotes = [];
+                    foreach ($lotesEnviados as $loteVista) {
+                        foreach ($loteVista['filas'] as $filaVista) {
+                            $idsEnLotes[$filaVista['origenId']] = true;
+                        }
+                    }
+                    $gastosEnviadoSinLote = array_values(array_filter($gastosEnviado, static fn (array $g): bool => !isset($idsEnLotes[(int) $g['id']])));
+                    ?>
+                    <?php if (empty($lotesEnviados) && empty($gastosEnviadoSinLote)): ?>
+                    <p class="texto-atenuado">No hay gastos enviados.</p>
+                    <?php endif; ?>
+                    <?php
+                    $rutaAccionLote = 'index.php?ruta=gastos&anio_id=' . (int) $anioSeleccionadoId;
+                    $origenLote = 'gasto_principal';
+                    foreach ($lotesEnviados as $loteVista) {
+                        require __DIR__ . '/../parciales/tarjeta-lote.php';
+                    }
+                    ?>
+                    <?php if (!empty($gastosEnviadoSinLote)): ?>
+                    <div class="lote-card">
+                        <div class="lote-card-cabecera">
+                            <div>
+                                <div class="lote-card-meta">Enviados sin snapshot · <?= count($gastosEnviadoSinLote) ?> ítem(s)</div>
+                                <div class="lote-card-sub">Enviados antes de que existiera la foto congelada al enviar — se muestran con sus valores actuales.</div>
+                            </div>
+                        </div>
+                        <div class="tabla-scroll">
+                            <table class="tabla-usuarios">
+                                <thead>
+                                    <tr>
+                                        <th class="columna-seleccion"></th>
+                                        <th>Acciones</th>
+                                        <th>Estado</th>
+                                        <th>Sede</th>
+                                        <th>Dependencia</th>
+                                        <th>Línea estratégica</th>
+                                        <th>Motor de desarrollo</th>
+                                        <th>Proyecto PDI</th>
+                                        <th>Contratos comunes</th>
+                                        <th>Actividad</th>
+                                        <th>Rubro</th>
+                                        <th>Insumo</th>
+                                        <th>Cantidad</th>
+                                        <th>Costo unitario</th>
+                                        <th>Valor total</th>
+                                        <th>Meses</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($gastosEnviadoSinLote as $gasto): $filaGasto($gasto); endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
-        </details>
+        </div>
         <?php endif; ?>
     </div>
 

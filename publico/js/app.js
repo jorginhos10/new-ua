@@ -2787,6 +2787,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var botonPendientesAprobar = document.getElementById('boton-pendientes-aprobar');
     var botonPendientesArchivar = document.getElementById('boton-pendientes-archivar');
     var botonPendientesEnviar = document.getElementById('boton-pendientes-enviar');
+    var botonPendientesDevolverBorrador = document.getElementById('boton-pendientes-devolver-borrador');
     var botonPendientesEliminar = document.getElementById('boton-pendientes-eliminar');
 
     function obtenerSeleccionadosPendientes() {
@@ -2810,6 +2811,9 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (botonPendientesEnviar) {
             botonPendientesEnviar.disabled = !hay;
+        }
+        if (botonPendientesDevolverBorrador) {
+            botonPendientesDevolverBorrador.disabled = !hay;
         }
         if (botonPendientesEliminar) {
             botonPendientesEliminar.disabled = !hay;
@@ -2923,6 +2927,22 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             enviarFormularioPendientes('archivar_pendientes_grupo', seleccionados);
+        });
+    }
+
+    if (botonPendientesDevolverBorrador) {
+        botonPendientesDevolverBorrador.addEventListener('click', function () {
+            if (botonPendientesDevolverBorrador.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosPendientes();
+
+            if (!window.confirm('¿Devolver ' + seleccionados.length + ' ítem(s) a borrador? Volverán al módulo de origen, sin destinatario, para que su dueño los corrija y los reenvíe.')) {
+                return;
+            }
+
+            enviarFormularioPendientes('devolver_borrador_pendientes_grupo', seleccionados);
         });
     }
 
@@ -5179,10 +5199,11 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 /**
- * Botones "Enviar" de un solo clic (ARL/Monitores/OPS) que no tienen su propio selector de
- * dependencia+rol visible (ya quedaron fijos al crear la solicitud): antes de enviar, si hay más
- * de una persona con ese rol en esa dependencia, se intercepta el submit y se pide elegir a cuál
- * mediante un modal — luego se reenvía el mismo formulario ya con el destinatario elegido.
+ * Botones "Enviar" de ARL/Monitores/OPS: el rol ya no queda fijo desde la creación de la
+ * solicitud — al hacer clic en "Enviar" siempre se intercepta el submit y se pide elegir rol +
+ * persona juntos (selector en vivo "Rol · Nombre (correo)", igual que Gastos/Extensión), con
+ * todas las combinaciones que existan en la dependencia de esa solicitud — luego se reenvía el
+ * mismo formulario ya con `rol_destinatario_id`/`usuario_destinatario_id` elegidos.
  */
 document.addEventListener('DOMContentLoaded', function () {
     var datosUsuariosElemento = document.getElementById('datos-usuarios-por-dependencia-rol');
@@ -5218,22 +5239,28 @@ document.addEventListener('DOMContentLoaded', function () {
     formulariosEnviar.forEach(function (formulario) {
         formulario.addEventListener('submit', function (evento) {
             var dependencia = formulario.dataset.dependencia || '';
-            var rol = formulario.dataset.rol || '';
-            var candidatos = (dependencia && rol && usuariosPorDependenciaYRol[dependencia] && usuariosPorDependenciaYRol[dependencia][rol]) || [];
-
-            if (candidatos.length <= 1) {
-                return;
-            }
+            var rolesDeLaDependencia = usuariosPorDependenciaYRol[dependencia] || {};
 
             evento.preventDefault();
 
             selectDestinatario.innerHTML = '';
-            candidatos.forEach(function (usuario) {
-                var opcion = document.createElement('option');
-                opcion.value = usuario.id;
-                opcion.textContent = (usuario.rol_nombre || '') + ' · ' + usuario.nombre + ' (' + usuario.correo + ')';
-                selectDestinatario.appendChild(opcion);
+            var algunaOpcion = false;
+
+            Object.keys(rolesDeLaDependencia).forEach(function (rolId) {
+                rolesDeLaDependencia[rolId].forEach(function (usuario) {
+                    var opcion = document.createElement('option');
+                    opcion.value = usuario.id;
+                    opcion.dataset.rolId = rolId;
+                    opcion.textContent = (usuario.rol_nombre || '') + ' · ' + usuario.nombre + ' (' + usuario.correo + ')';
+                    selectDestinatario.appendChild(opcion);
+                    algunaOpcion = true;
+                });
             });
+
+            if (!algunaOpcion) {
+                alert('No hay ningún usuario con rol asignado en "' + dependencia + '" para remitir esta solicitud.');
+                return;
+            }
 
             formularioPendiente = formulario;
             modal.classList.add('abierto');
@@ -5243,6 +5270,13 @@ document.addEventListener('DOMContentLoaded', function () {
     botonConfirmar.addEventListener('click', function () {
         if (!formularioPendiente) {
             return;
+        }
+
+        var opcionElegida = selectDestinatario.options[selectDestinatario.selectedIndex];
+
+        var campoRol = formularioPendiente.querySelector('input[name="rol_destinatario_id"]');
+        if (campoRol && opcionElegida) {
+            campoRol.value = opcionElegida.dataset.rolId || '';
         }
 
         var campoDestinatario = formularioPendiente.querySelector('input[name="usuario_destinatario_id"]');
@@ -5425,7 +5459,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (checkboxTodos) {
             checkboxTodos.addEventListener('change', function () {
-                filas.forEach(function (casilla) { casilla.checked = checkboxTodos.checked; });
+                filas.forEach(function (casilla) {
+                    var fila = casilla.closest('tr');
+                    // "Todos" = todos los visibles: nunca marca filas ocultas por la búsqueda.
+                    casilla.checked = checkboxTodos.checked && !(fila && fila.classList.contains('oculta-busqueda'));
+                });
                 actualizarBotones();
             });
         }
@@ -5534,6 +5572,204 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('th.th-ordenable').forEach(function (encabezado) {
         encabezado.addEventListener('click', function () {
             window.ordenarPorEncabezado(encabezado);
+        });
+    });
+});
+
+/**
+ * Toggle único Borrador/Enviado (reemplaza el par de acordeones) y botones independientes "Ver
+ * cambios"/"Ver lote completo" de cada tarjeta de lote enviado. Genérico por data-atributos, para
+ * reusarse igual en Gastos y en los módulos de Autogestión (ver vista/parciales/tarjeta-lote.php).
+ */
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-toggle-envio]').forEach(function (grupo) {
+        // El botón puede estar fuera del grupo (ej. en la fila de insignias de arriba): se enlaza
+        // por el mismo nombre, data-toggle-envio="x" ↔ data-toggle-envio-boton="x".
+        var boton = document.querySelector('[data-toggle-envio-boton="' + grupo.dataset.toggleEnvio + '"]');
+        var panelBorrador = grupo.querySelector('[data-panel-envio="borrador"]');
+        var panelEnviado = grupo.querySelector('[data-panel-envio="enviado"]');
+
+        if (!boton || !panelBorrador || !panelEnviado) {
+            return;
+        }
+
+        function pintar() {
+            var mostrandoEnviado = grupo.dataset.mostrando === 'enviado';
+            panelBorrador.classList.toggle('oculto', mostrandoEnviado);
+            panelEnviado.classList.toggle('oculto', !mostrandoEnviado);
+            boton.textContent = mostrandoEnviado ? boton.dataset.textoEnviado : boton.dataset.textoBorrador;
+            boton.classList.toggle('es-enviado', mostrandoEnviado);
+            boton.classList.toggle('es-borrador', !mostrandoEnviado);
+            boton.title = mostrandoEnviado ? 'Clic para ver los borradores' : 'Clic para ver lo enviado';
+        }
+
+        boton.addEventListener('click', function () {
+            grupo.dataset.mostrando = grupo.dataset.mostrando === 'enviado' ? 'borrador' : 'enviado';
+            pintar();
+        });
+
+        pintar();
+    });
+
+    document.querySelectorAll('[data-lote-card]').forEach(function (tarjeta) {
+        tarjeta.querySelectorAll('[data-lote-boton]').forEach(function (boton) {
+            boton.addEventListener('click', function () {
+                var panel = tarjeta.querySelector('[data-lote-panel="' + boton.dataset.loteBoton + '"]');
+
+                if (!panel) {
+                    return;
+                }
+
+                var abrir = panel.classList.contains('oculto');
+                panel.classList.toggle('oculto', !abrir);
+                boton.classList.toggle('activo', abrir);
+            });
+        });
+    });
+});
+
+/**
+ * Barra de módulo en modo agrupado (barra-modulo.php con $barraGruposIconos): cada píldora de
+ * íconos se colapsa a "⋯ Más acciones" en pantallas angostas. Las opciones del menú no duplican
+ * lógica: disparan el botón real de la barra (data-proxy = su id), y al abrir el menú copian su
+ * estado deshabilitado, que el JS de cada módulo va cambiando (ej. Editar exige 1 fila elegida).
+ */
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.grupo-iconos.colapsable [data-toggle-menu]').forEach(function (boton) {
+        var menu = boton.parentElement.querySelector('.grupo-iconos-menu');
+
+        if (!menu) {
+            return;
+        }
+
+        boton.addEventListener('click', function (evento) {
+            evento.stopPropagation();
+            var yaAbierto = menu.classList.contains('abierto');
+
+            document.querySelectorAll('.grupo-iconos-menu.abierto').forEach(function (otro) {
+                otro.classList.remove('abierto');
+            });
+
+            if (!yaAbierto) {
+                menu.querySelectorAll('[data-proxy]').forEach(function (opcion) {
+                    var real = document.getElementById(opcion.dataset.proxy);
+                    opcion.disabled = !real || real.disabled;
+                });
+            }
+
+            menu.classList.toggle('abierto', !yaAbierto);
+        });
+
+        menu.querySelectorAll('[data-proxy]').forEach(function (opcion) {
+            opcion.addEventListener('click', function () {
+                var real = document.getElementById(opcion.dataset.proxy);
+                menu.classList.remove('abierto');
+
+                if (real && !real.disabled) {
+                    real.click();
+                }
+            });
+        });
+    });
+
+    document.addEventListener('click', function () {
+        document.querySelectorAll('.grupo-iconos-menu.abierto').forEach(function (menu) {
+            menu.classList.remove('abierto');
+        });
+    });
+});
+
+/**
+ * Búsqueda de la barra agrupada ($barraBuscar en barra-modulo.php): la lupa despliega el campo
+ * (mismo comportamiento que Dev > Tabla, con sugerencia en gris que se acepta con Tab o →) y filtra
+ * las filas de las tablas del contenedor indicado y las tarjetas de lote sin coincidencias. Una fila
+ * que queda oculta se desmarca, para que Editar/Duplicar/Eliminar nunca actúen sobre algo no visible.
+ */
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.buscar-envoltorio[data-buscar-en]').forEach(function (envoltorio) {
+        var contenedor = document.querySelector(envoltorio.dataset.buscarEn);
+        var boton = envoltorio.querySelector('.barra-boton-buscar');
+        var campo = envoltorio.querySelector('.barra-campo-buscar');
+        var tecleado = envoltorio.querySelector('.combo-fantasma-tecleado');
+        var sugerencia = envoltorio.querySelector('.combo-fantasma-sugerencia');
+
+        if (!contenedor || !boton || !campo) {
+            return;
+        }
+
+        function filasBuscables() {
+            return Array.prototype.filter.call(contenedor.querySelectorAll('tbody tr'), function (fila) {
+                return !fila.classList.contains('fila-total-lote')
+                    && !fila.classList.contains('fila-techo-lote')
+                    && !fila.querySelector('td[colspan]');
+            });
+        }
+
+        var valores = {};
+        filasBuscables().forEach(function (fila) {
+            Array.prototype.forEach.call(fila.children, function (celda) {
+                var texto = celda.textContent.trim();
+                if (texto !== '' && texto !== '—') { valores[texto] = true; }
+            });
+        });
+        valores = Object.keys(valores);
+
+        function pintarSugerencia() {
+            var texto = campo.value;
+            var encontrado = texto === '' ? null : valores.find(function (v) {
+                return v.length > texto.length && v.toLowerCase().indexOf(texto.toLowerCase()) === 0;
+            });
+            tecleado.textContent = texto;
+            sugerencia.textContent = encontrado ? encontrado.slice(texto.length) : '';
+        }
+
+        function filtrar() {
+            var termino = campo.value.trim().toLowerCase();
+
+            filasBuscables().forEach(function (fila) {
+                var ocultar = termino !== '' && fila.textContent.toLowerCase().indexOf(termino) === -1;
+                fila.classList.toggle('oculta-busqueda', ocultar);
+                var casilla = fila.querySelector('.checkbox-bulk-fila');
+                if (ocultar && casilla && casilla.checked) {
+                    casilla.checked = false;
+                    casilla.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            });
+
+            contenedor.querySelectorAll('.lote-card').forEach(function (tarjeta) {
+                var ocultar = termino !== '' && tarjeta.textContent.toLowerCase().indexOf(termino) === -1;
+                tarjeta.classList.toggle('oculta-busqueda', ocultar);
+            });
+        }
+
+        boton.addEventListener('click', function () {
+            var desplegar = !envoltorio.classList.contains('desplegado');
+            envoltorio.classList.toggle('desplegado', desplegar);
+            boton.classList.toggle('activo', desplegar);
+
+            if (desplegar) {
+                campo.focus();
+            } else {
+                campo.value = '';
+                pintarSugerencia();
+                filtrar();
+            }
+        });
+
+        campo.addEventListener('input', function () {
+            pintarSugerencia();
+            filtrar();
+        });
+
+        campo.addEventListener('keydown', function (evento) {
+            if (sugerencia.textContent && (evento.key === 'Tab' || evento.key === 'ArrowRight') && campo.selectionStart === campo.value.length) {
+                evento.preventDefault();
+                campo.value += sugerencia.textContent;
+                pintarSugerencia();
+                filtrar();
+            } else if (evento.key === 'Escape') {
+                boton.click();
+            }
         });
     });
 });

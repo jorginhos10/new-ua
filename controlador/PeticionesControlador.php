@@ -29,6 +29,7 @@ require_once __DIR__ . '/../modelo/Linea.php';
 require_once __DIR__ . '/../modelo/Motor.php';
 require_once __DIR__ . '/../modelo/Proyecto.php';
 require_once __DIR__ . '/../modelo/ExportadorExcel.php';
+require_once __DIR__ . '/../modelo/VistaLoteEnvio.php';
 require_once __DIR__ . '/../config/conexion.php';
 
 class PeticionesControlador
@@ -218,6 +219,10 @@ class PeticionesControlador
                 [$errorEliminarGrupo, $exitoEliminarGrupo] = $this->eliminarPendientesGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorEliminarGrupo;
                 $_SESSION['peticiones_flash_exito'] = $exitoEliminarGrupo;
+            } elseif ($accion === 'devolver_borrador_pendientes_grupo') {
+                [$errorDevolverGrupo, $exitoDevolverGrupo] = $this->devolverBorradorPendientesGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorDevolverGrupo;
+                $_SESSION['peticiones_flash_exito'] = $exitoDevolverGrupo;
             } elseif ($accion === 'enviar_pendientes_grupo') {
                 [$errorEnviarPend, $exitoEnviarPend] = $this->enviarPendientesGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorEnviarPend;
@@ -1019,6 +1024,9 @@ class PeticionesControlador
         }
 
         $eventos = $this->modeloHistorial->obtenerPorOrigenYId($origen, $origenId);
+        // Solo el cambio de ESTE ítem (más total y techo de su lote), embebido aquí mismo: quien no
+        // tiene acceso al landing del módulo de origen (MenuPermiso) igual ve qué se envió y qué cambió.
+        $loteItem = (new VistaLoteEnvio())->construirParaHistorial($origen, $origenId);
 
         require __DIR__ . '/../vista/peticiones/historial-item.php';
     }
@@ -2704,6 +2712,72 @@ class PeticionesControlador
         $this->modeloArchivada->eliminarPorOrigen($origen, $origenId);
 
         return true;
+    }
+
+    /**
+     * Devuelve en lote una selección de ítems pendientes a borrador en su propio módulo de
+     * origen — mismo esqueleto que eliminarPendientesGrupo(), pero llamando a
+     * devolverUnPendienteABorrador() en vez de eliminarUnPendiente(), y dejando un lote en el
+     * historial (a diferencia de eliminar, que ya registraba por ítem individualmente).
+     */
+    private function devolverBorradorPendientesGrupo(): array
+    {
+        $items = $this->leerItemsJson();
+
+        if (empty($items)) {
+            return ['No seleccionaste ningún ítem pendiente.', ''];
+        }
+
+        $devueltos = 0;
+        $itemsAfectados = [];
+
+        foreach ($items as $item) {
+            $origen = $item['origen'];
+            $origenId = $item['origen_id'];
+
+            if ($origen === '' || $origenId <= 0) {
+                continue;
+            }
+
+            if ($this->devolverUnPendienteABorrador($origen, $origenId)) {
+                $devueltos++;
+                $itemsAfectados[] = [
+                    'origen' => $origen,
+                    'origen_id' => $origenId,
+                    'tipo' => $item['tipo'] ?? $origen,
+                    'detalle' => $item['detalle'] ?? null,
+                ];
+            }
+        }
+
+        if ($devueltos === 0) {
+            return ['No se pudo devolver a borrador ningún ítem.', ''];
+        }
+
+        $this->registrarConLote('devuelto_borrador', 'Devuelto a borrador desde Pendientes', $itemsAfectados);
+
+        return ['', 'Se devolvieron a borrador ' . $devueltos . ' ítem(s). Vuelven a estar disponibles, sin destinatario, en su módulo de origen.'];
+    }
+
+    private function devolverUnPendienteABorrador(string $origen, int $origenId): bool
+    {
+        return match ($origen) {
+            'arl' => $this->modeloSolicitud->devolverABorrador($origenId),
+            'monitores' => $this->modeloMonitor->devolverABorrador($origenId),
+            'ops' => $this->modeloOps->devolverABorrador($origenId),
+            'otros' => $this->modeloPeticion->devolverABorrador($origenId),
+            'gasto_principal' => $this->modeloGasto->devolverABorrador($origenId),
+            'gasto_extension' => $this->modeloGastoExtension->devolverABorrador($origenId),
+            'gasto_postgrado' => $this->modeloGastoPostgrado->devolverABorrador($origenId),
+            'gasto_unisalud' => $this->modeloGastoUnisalud->devolverABorrador($origenId),
+            'gasto_sin_excedentes' => $this->modeloGastoSinExcedentes->devolverABorrador($origenId),
+            'ingreso_extension' => $this->modeloIngresoExtension->devolverABorrador($origenId),
+            'ingreso_postgrado' => $this->modeloIngresoPostgrado->devolverABorrador($origenId),
+            'ingreso_unisalud' => $this->modeloIngresoUnisalud->devolverABorrador($origenId),
+            'ingreso_sin_excedentes' => $this->modeloIngresoSinExcedentes->devolverABorrador($origenId),
+            'necesidad' => $this->modeloNecesidad->devolverABorrador($origenId),
+            default => false,
+        };
     }
 
     private function obtenerDependenciasPermitidas(): array

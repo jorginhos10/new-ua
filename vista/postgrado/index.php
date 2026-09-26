@@ -20,70 +20,77 @@ require __DIR__ . '/../parciales/encabezado.php';
     <div class="tarjeta">
         <?php
         $barraTitulo = 'Postgrado';
-        $barraBotonesSecundarios = [
-            [
-                'id' => 'boton-seleccionar-postgrado',
-                'icono' => 'seleccionar',
-                'etiqueta' => 'Seleccionar elementos',
-                'disabled' => $modoEdicion,
+        $barraGruposIconos = [
+            'basico' => [
+                [
+                    'id' => 'boton-seleccionar-postgrado',
+                    'icono' => 'seleccionar',
+                    'etiqueta' => 'Seleccionar elementos',
+                    'disabled' => $modoEdicion,
+                ],
+                ['separador' => true],
+                [
+                    'id' => 'boton-editar-postgrado',
+                    'icono' => 'editar',
+                    'etiqueta' => 'Editar seleccionado',
+                    'disabled' => true,
+                    'titulo_disabled' => $modoEdicion ? 'Ya estás editando un elemento' : 'Selecciona exactamente un elemento',
+                ],
+                [
+                    'id' => 'boton-duplicar-postgrado',
+                    'icono' => 'duplicar',
+                    'etiqueta' => 'Duplicar seleccionados',
+                    'disabled' => true,
+                    'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
+                ],
+                [
+                    'id' => 'boton-eliminar-postgrado',
+                    'icono' => 'eliminar',
+                    'etiqueta' => 'Eliminar seleccionados',
+                    'disabled' => true,
+                    'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
+                ],
             ],
-            [
-                'id' => 'boton-editar-postgrado',
-                'icono' => 'editar',
-                'etiqueta' => 'Editar seleccionado',
-                'disabled' => true,
-                'titulo_disabled' => $modoEdicion ? 'Ya estás editando un elemento' : 'Selecciona exactamente un elemento',
-            ],
-            [
-                'id' => 'boton-duplicar-postgrado',
-                'icono' => 'duplicar',
-                'etiqueta' => 'Duplicar seleccionados',
-                'disabled' => true,
-                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
-            ],
-            [
-                'id' => 'boton-eliminar-postgrado',
-                'icono' => 'eliminar',
-                'etiqueta' => 'Eliminar seleccionados',
-                'disabled' => true,
-                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
-            ],
-            [
-                'id' => 'boton-abrir-modal-enviar-todo-postgrado',
-                'icono' => 'enviar',
-                'etiqueta' => 'Enviar todos los ingresos y egresos en borrador de este ítem',
-                'disabled' => $modoEdicion || !$puedeEnviarTodo,
-                'titulo_disabled' => 'Disponible cuando el total de egresos sea igual al total de ingresos de este ítem',
-            ],
-            [
-                'id' => 'boton-exportar-plantilla-postgrado',
-                'icono' => 'exportar',
-                'etiqueta' => 'Exportar plantilla (.xlsx)',
-                'tipo' => 'a',
-                'href' => 'index.php?ruta=postgrado-exportar-plantilla',
-            ],
-            [
-                'id' => 'boton-exportar-postgrado',
-                'icono' => 'exportar',
-                'etiqueta' => 'Exportar ingresos y gastos (.xlsx)',
-                'tipo' => 'a',
-                'href' => 'index.php?ruta=postgrado-exportar' . ($anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : ''),
-            ],
-            [
-                'id' => 'boton-importar-postgrado',
-                'icono' => 'importar',
-                'etiqueta' => 'Importar ingresos y gastos (.xlsx): primero crea los ingresos de la hoja "Ingresos" y luego los egresos de la hoja "Gastos", en una sola importación',
-                'disabled' => $modoEdicion,
-                'titulo_disabled' => 'No disponible mientras editas',
+            'especifico' => [],
+            'datos' => [
+                [
+                    'id' => 'boton-exportar-plantilla-postgrado',
+                    'icono' => 'plantilla',
+                    'etiqueta' => 'Exportar plantilla (.xlsx)',
+                    'tipo' => 'a',
+                    'href' => 'index.php?ruta=postgrado-exportar-plantilla',
+                ],
+                [
+                    'id' => 'boton-importar-postgrado',
+                    'icono' => 'importar',
+                    'etiqueta' => 'Importar ingresos y gastos (.xlsx): primero crea los ingresos de la hoja "Ingresos" y luego los egresos de la hoja "Gastos", en una sola importación',
+                    'disabled' => $modoEdicion,
+                    'titulo_disabled' => 'No disponible mientras editas',
+                ],
+                [
+                    'id' => 'boton-exportar-postgrado',
+                    'icono' => 'exportar',
+                    'etiqueta' => 'Exportar ingresos y gastos (.xlsx)',
+                    'tipo' => 'a',
+                    'href' => 'index.php?ruta=postgrado-exportar' . ($anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : ''),
+                ],
             ],
         ];
         if ($modoEdicion) {
-            $barraBotonesSecundarios[] = [
+            $barraGruposIconos['basico'][] = ['separador' => true];
+            $barraGruposIconos['basico'][] = [
                 'id' => 'boton-nuevo-item-desde-edicion',
                 'icono' => 'nuevo',
                 'etiqueta' => 'Nuevo ítem',
             ];
         }
+        $barraBotonEnviar = [
+            'id' => 'boton-abrir-modal-enviar-todo-postgrado',
+            'etiqueta' => 'Enviar todos los ingresos y egresos en borrador de este ítem',
+            'disabled' => $modoEdicion || !$puedeEnviarTodo,
+            'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Disponible cuando el total de egresos sea igual al total de ingresos de este ítem',
+        ];
+        $barraBuscar = $modoEdicion ? null : '[data-toggle-envio="postgrado"]';
         $barraBotonPrincipal = $modoEdicion
             ? ['id' => 'boton-guardar-edicion-postgrado', 'etiqueta' => 'Guardar', 'form' => $egresoParaEditar !== null ? 'form-editar-egreso' : 'form-editar-ingreso']
             : ($catalogosListos ? ['id' => 'boton-abrir-modal-gasto', 'etiqueta' => '+ Agregar ' . ($tab === 'ingresos' ? 'ingreso' : 'egreso')] : null);
@@ -211,14 +218,18 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php
         $egresosBorrador = array_values(array_filter($gastos, static fn (array $g): bool => $g['estado'] === 'borrador'));
         $egresosEnviado = array_values(array_filter($gastos, static fn (array $g): bool => $g['estado'] === 'enviado'));
-        $filaEgresoPostgrado = static function (array $gasto) use ($anioSeleccionadoId, $autogestionSeleccionadoId, $nombresMeses, $puedeAdministrarContribucion, $puedeAdministrarExcedentes): void {
+        $filaEgresoPostgrado = static function (array $gasto) use ($anioSeleccionadoId, $autogestionSeleccionadoId, $nombresMeses, $puedeAdministrarContribucion, $puedeAdministrarExcedentes, $permisosAutomaticosPorTipo): void {
             $mesesGasto = $gasto['meses'] !== ''
                 ? array_map(static fn ($mes) => $nombresMeses[(int) $mes] ?? $mes, explode(',', $gasto['meses']))
                 : [];
+            $tieneEdicionLegado = ($gasto['tipo_automatico'] === 'contrib_postgrado' && $puedeAdministrarContribucion)
+                || ($gasto['tipo_automatico'] === 'excedentes' && $puedeAdministrarExcedentes);
+            $tieneEdicionPorPermiso = !$tieneEdicionLegado && ($permisosAutomaticosPorTipo[$gasto['tipo_automatico']] ?? false);
+            $puedeGestionarFila = $gasto['tipo_automatico'] === null || $tieneEdicionLegado || $tieneEdicionPorPermiso;
             ?>
                     <tr>
                         <td class="columna-seleccion">
-                            <?php if ($gasto['tipo_automatico'] === null && $gasto['estado'] === 'borrador'): ?>
+                            <?php if ($puedeGestionarFila && $gasto['estado'] === 'borrador'): ?>
                             <input type="checkbox" class="checkbox-bulk-fila" data-id="<?= (int) $gasto['id'] ?>">
                             <?php endif; ?>
                         </td>
@@ -250,6 +261,20 @@ require __DIR__ . '/../parciales/encabezado.php';
                                 data-gasto="<?= htmlspecialchars(json_encode($gasto)) ?>"
                                 title="Convertir en Gastos o Inversión"
                             >Editar</button>
+                            <?php elseif ($tieneEdicionPorPermiso && $gasto['estado'] === 'borrador'): ?>
+                            <div class="acciones-fila">
+                                <a
+                                    href="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&editar_id=<?= (int) $gasto['id'] ?>"
+                                    class="boton-accion boton-accion-editar"
+                                >Editar</a>
+                                <form method="POST" action="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>" class="form-eliminar-egreso">
+                                    <input type="hidden" name="tab" value="egresos">
+                                    <input type="hidden" name="accion" value="eliminar">
+                                    <input type="hidden" name="id" value="<?= (int) $gasto['id'] ?>">
+                                    <button type="submit" class="boton-accion boton-accion-eliminar">Eliminar</button>
+                                </form>
+                                <span class="texto-atenuado" title="Fila calculada automáticamente; editarla la convierte en manual">Automático</span>
+                            </div>
                             <?php elseif ($gasto['tipo_automatico'] !== null): ?>
                             <span class="texto-atenuado">Automático</span>
                             <?php else: ?>
@@ -276,14 +301,16 @@ require __DIR__ . '/../parciales/encabezado.php';
         };
         ?>
 
-        <details class="acordeon-grupo" open>
-            <summary class="acordeon-cabecera">
-                <span class="acordeon-flecha">▸</span>
-                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></span>
-                <span class="acordeon-titulo">Borradores</span>
-                <span class="acordeon-contador"><?= count($egresosBorrador) ?></span>
-            </summary>
-            <div class="acordeon-cuerpo">
+        <?php
+        $cantidadLotes = count($lotesEnviados);
+        $textoToggleBorrador = 'Borrador · ' . count($egresosBorrador);
+        $textoToggleEnviado = 'Enviado · ' . $cantidadLotes . ' lote' . ($cantidadLotes === 1 ? '' : 's');
+        ?>
+        <div class="fila-chips-toggle solo-toggle">
+            <button type="button" class="toggle-envio-boton es-borrador" data-toggle-envio-boton="postgrado" data-texto-borrador="<?= htmlspecialchars($textoToggleBorrador) ?>" data-texto-enviado="<?= htmlspecialchars($textoToggleEnviado) ?>"><?= htmlspecialchars($textoToggleBorrador) ?></button>
+        </div>
+        <div data-toggle-envio="postgrado" data-mostrando="borrador">
+            <div class="panel-toggle-envio" data-panel-envio="borrador">
                 <div
                     class="tabla-scroll tabla-bulk-seleccionable"
                     data-boton-seleccionar="boton-seleccionar-postgrado"
@@ -329,51 +356,22 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </table>
                 </div>
             </div>
-        </details>
 
-        <details class="acordeon-grupo">
-            <summary class="acordeon-cabecera">
-                <span class="acordeon-flecha">▸</span>
-                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></span>
-                <span class="acordeon-titulo">Enviados</span>
-                <span class="acordeon-contador"><?= count($egresosEnviado) ?></span>
-            </summary>
-            <div class="acordeon-cuerpo">
-                <div class="tabla-scroll">
-                    <table class="tabla-usuarios">
-                        <thead>
-                            <tr>
-                                <th class="columna-seleccion"></th>
-                                <th>Acciones</th>
-                                <th>Estado</th>
-                                <th>Categoría</th>
-                                <th>Sede</th>
-                                <th>Dependencia</th>
-                                <th>Línea estratégica</th>
-                                <th>Motor de desarrollo</th>
-                                <th>Proyecto PDI</th>
-                                <th>Contratos comunes</th>
-                                <th>Actividad</th>
-                                <th>Rubro</th>
-                                <th>Insumo</th>
-                                <th>Cantidad</th>
-                                <th>Costo unitario</th>
-                                <th>Valor total</th>
-                                <th>Meses</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($egresosEnviado as $gasto): $filaEgresoPostgrado($gasto); endforeach; ?>
-                            <?php if (empty($egresosEnviado)): ?>
-                            <tr>
-                                <td colspan="17">No hay egresos enviados.</td>
-                            </tr>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
+            <div class="panel-toggle-envio oculto" data-panel-envio="enviado">
+                <div class="panel-lotes-enviados">
+                    <?php if (empty($lotesEnviados)): ?>
+                    <p class="texto-atenuado">No hay egresos enviados.</p>
+                    <?php endif; ?>
+                    <?php
+                    $rutaAccionLote = 'index.php?ruta=postgrado&tab=egresos&anio_id=' . (int) $anioSeleccionadoId . '&autogestion_id=' . (int) $autogestionSeleccionadoId;
+                    $origenLote = 'gasto_postgrado';
+                    foreach ($lotesEnviados as $loteVista) {
+                        require __DIR__ . '/../parciales/tarjeta-lote.php';
+                    }
+                    ?>
                 </div>
             </div>
-        </details>
+        </div>
         <?php else: ?>
         <?php
         $ingresosBorrador = array_values(array_filter($gastos, static fn (array $i): bool => $i['estado'] === 'borrador'));
@@ -433,14 +431,16 @@ require __DIR__ . '/../parciales/encabezado.php';
         };
         ?>
 
-        <details class="acordeon-grupo" open>
-            <summary class="acordeon-cabecera">
-                <span class="acordeon-flecha">▸</span>
-                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></span>
-                <span class="acordeon-titulo">Borradores</span>
-                <span class="acordeon-contador"><?= count($ingresosBorrador) ?></span>
-            </summary>
-            <div class="acordeon-cuerpo">
+        <?php
+        $cantidadLotes = count($lotesEnviados);
+        $textoToggleBorrador = 'Borrador · ' . count($ingresosBorrador);
+        $textoToggleEnviado = 'Enviado · ' . $cantidadLotes . ' lote' . ($cantidadLotes === 1 ? '' : 's');
+        ?>
+        <div class="fila-chips-toggle solo-toggle">
+            <button type="button" class="toggle-envio-boton es-borrador" data-toggle-envio-boton="postgrado" data-texto-borrador="<?= htmlspecialchars($textoToggleBorrador) ?>" data-texto-enviado="<?= htmlspecialchars($textoToggleEnviado) ?>"><?= htmlspecialchars($textoToggleBorrador) ?></button>
+        </div>
+        <div data-toggle-envio="postgrado" data-mostrando="borrador">
+            <div class="panel-toggle-envio" data-panel-envio="borrador">
                 <div
                     class="tabla-scroll tabla-bulk-seleccionable"
                     data-boton-seleccionar="boton-seleccionar-postgrado"
@@ -477,42 +477,22 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </table>
                 </div>
             </div>
-        </details>
 
-        <details class="acordeon-grupo">
-            <summary class="acordeon-cabecera">
-                <span class="acordeon-flecha">▸</span>
-                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></span>
-                <span class="acordeon-titulo">Enviados</span>
-                <span class="acordeon-contador"><?= count($ingresosEnviado) ?></span>
-            </summary>
-            <div class="acordeon-cuerpo">
-                <div class="tabla-scroll">
-                    <table class="tabla-usuarios">
-                        <thead>
-                            <tr>
-                                <th class="columna-seleccion"></th>
-                                <th>Acciones</th>
-                                <th>Estado</th>
-                                <th>Dependencia</th>
-                                <th>Concepto</th>
-                                <th>Valor</th>
-                                <th>Concepto adicional</th>
-                                <th>Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($ingresosEnviado as $ingreso): $filaIngresoPostgrado($ingreso); endforeach; ?>
-                            <?php if (empty($ingresosEnviado)): ?>
-                            <tr>
-                                <td colspan="8">No hay ingresos enviados.</td>
-                            </tr>
-                            <?php endif; ?>
-                        </tbody>
-                    </table>
+            <div class="panel-toggle-envio oculto" data-panel-envio="enviado">
+                <div class="panel-lotes-enviados">
+                    <?php if (empty($lotesEnviados)): ?>
+                    <p class="texto-atenuado">No hay ingresos enviados.</p>
+                    <?php endif; ?>
+                    <?php
+                    $rutaAccionLote = 'index.php?ruta=postgrado&tab=ingresos&anio_id=' . (int) $anioSeleccionadoId . '&autogestion_id=' . (int) $autogestionSeleccionadoId;
+                    $origenLote = 'ingreso_postgrado';
+                    foreach ($lotesEnviados as $loteVista) {
+                        require __DIR__ . '/../parciales/tarjeta-lote.php';
+                    }
+                    ?>
                 </div>
             </div>
-        </details>
+        </div>
         <?php endif; ?>
     </div>
 

@@ -1211,6 +1211,177 @@ input[type="file"]::-webkit-file-upload-button:hover {
     color: var(--color-naranja-texto);
 }
 
+/* Toggle único Borrador/Enviado (reemplaza el par de acordeones "Borradores"/"Enviados") y las
+   tarjetas de lote enviado — Gastos y los 4 módulos de Autogestión, ver plan aprobado
+   el-techo-no-deberia-kind-candle ("Snapshot al enviar"). */
+/* El botón va en la misma fila que las insignias (Techo total/Propio/...), a la derecha, con su
+   mismo tamaño — sin cabecera propia que le quite espacio a la tabla. */
+.fila-chips-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.6rem;
+}
+
+.fila-chips-toggle .chips-gasto {
+    flex: 1;
+    min-width: 0;
+    margin-top: 0;
+}
+
+.fila-chips-toggle.solo-toggle {
+    justify-content: flex-end;
+    margin: 0 0 0.75rem;
+}
+
+.toggle-envio-boton {
+    margin-left: auto;
+    flex-shrink: 0;
+    border: none;
+    border-radius: 999px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.76rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.toggle-envio-boton.es-borrador {
+    background: var(--color-naranja-fondo);
+    color: var(--color-naranja-texto);
+}
+
+.toggle-envio-boton.es-enviado {
+    background: var(--color-exito-fondo);
+    color: var(--color-exito-texto);
+}
+
+.panel-toggle-envio.oculto {
+    display: none;
+}
+
+.panel-lotes-enviados {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.lote-card {
+    border: 1px solid var(--color-borde);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--color-superficie);
+}
+
+.lote-card-cabecera {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--color-gris-fondo);
+    flex-wrap: wrap;
+}
+
+.lote-card-meta {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--color-texto);
+}
+
+.lote-card-sub {
+    font-size: 0.72rem;
+    color: var(--color-texto-tenue);
+    margin-top: 2px;
+    font-weight: 400;
+}
+
+.lote-card-botones {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.lote-boton {
+    background: none;
+    border: 1px solid var(--color-borde);
+    border-radius: 8px;
+    padding: 0.35rem 0.8rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--color-texto);
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.lote-boton.activo {
+    background: var(--color-primario);
+    color: #fff;
+    border-color: var(--color-primario);
+}
+
+.lote-boton-eliminar {
+    color: #c0392b;
+    border-color: #c0392b;
+}
+
+.panel-lote.oculto {
+    display: none;
+}
+
+.lote-card .tabla-scroll {
+    border: none;
+    border-radius: 0;
+}
+
+.lote-cambios-item {
+    margin: 14px 16px 0;
+    border: 1px solid var(--color-naranja-texto);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.lote-cambios-titulo {
+    background: var(--color-naranja-fondo);
+    color: var(--color-naranja-texto);
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 6px 12px;
+}
+
+.lote-cambios-item:last-child {
+    margin-bottom: 14px;
+}
+
+.celda-cambiada {
+    color: var(--color-naranja-texto) !important;
+    font-weight: 600;
+    background: var(--color-naranja-fondo) !important;
+}
+
+.fila-blanco-lote td {
+    border-bottom: none;
+    height: 14px;
+    background: var(--color-fondo);
+}
+
+.fila-total-lote td {
+    border-top: 2px solid var(--color-texto);
+    border-bottom: none;
+    font-weight: 700;
+    background: var(--color-gris-fondo);
+}
+
+.fila-techo-lote td {
+    border-bottom: none;
+    font-size: 0.78rem;
+    color: var(--color-texto-tenue);
+    background: var(--color-gris-fondo);
+}
+
 /* Filtro de texto de las tarjetas agrupadas de Archivados/Enviadas: vive en la zona 3 de
    barra-modulo.php (ver $barraAccionesExtra), a la izquierda de los botones de ícono — no en su
    propia fila, para no quitarle espacio a la tabla. */
@@ -4398,6 +4569,129 @@ a.barra-progreso:hover {
     background: var(--color-borde);
     margin: 0 0.15rem;
     flex-shrink: 0;
+}
+
+/* Barra de módulo en modo agrupado (vista/parciales/barra-modulo.php con $barraGruposIconos):
+   mismo patrón que Dev > Tabla — píldoras de íconos que se colapsan a "⋯ Más acciones" en
+   pantallas angostas, y grupo principal (botón azul + Enviar como ícono). */
+.icono-boton[aria-pressed="true"] {
+    background: var(--color-primario-suave);
+    color: var(--color-primario);
+}
+
+.oculta-busqueda {
+    display: none !important;
+}
+
+.grupo-iconos-colapsar {
+    display: none;
+    color: var(--color-texto-tenue);
+}
+
+@media (max-width: 900px) {
+    .grupo-iconos.colapsable > .icono-boton:not(.grupo-iconos-colapsar),
+    .grupo-iconos.colapsable > .separador-grupo-basico {
+        display: none;
+    }
+
+    .grupo-iconos.colapsable > .grupo-iconos-colapsar {
+        display: inline-flex;
+    }
+}
+
+.grupo-iconos-menu {
+    position: absolute;
+    top: calc(100% + 0.35rem);
+    right: 0;
+    display: none;
+    flex-direction: column;
+    min-width: 190px;
+    background: var(--color-superficie);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-chico);
+    box-shadow: var(--sombra);
+    padding: 0.3rem;
+    z-index: 6;
+}
+
+.grupo-iconos-menu.abierto {
+    display: flex;
+}
+
+.grupo-iconos-menu button,
+.grupo-iconos-menu a {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.4rem 0.55rem;
+    border: none;
+    background: transparent;
+    border-radius: var(--radio-chico);
+    text-align: left;
+    text-decoration: none;
+    font-family: inherit;
+    font-size: 0.82rem;
+    color: var(--color-texto);
+    cursor: pointer;
+}
+
+.grupo-iconos-menu button:hover,
+.grupo-iconos-menu a:hover {
+    background: var(--color-fondo);
+}
+
+.grupo-iconos-menu button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.grupo-boton-principal {
+    display: flex;
+    border-radius: 999px;
+    overflow: hidden;
+    box-shadow: var(--sombra);
+    flex-shrink: 0;
+}
+
+.boton-principal-azul {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0 1rem;
+    height: 34px;
+    border: none;
+    background: var(--color-primario);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background var(--transicion);
+}
+
+.boton-principal-azul:hover {
+    background: var(--color-primario-oscuro);
+}
+
+.boton-enviar-icono {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 34px;
+    border: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.35);
+    background: var(--color-gris-texto);
+    color: #fff;
+    cursor: not-allowed;
+    transition: background var(--transicion);
+}
+
+.boton-enviar-icono.habilitado {
+    background: var(--color-exito-texto);
+    cursor: pointer;
 }
 
 .tabla-scroll {
