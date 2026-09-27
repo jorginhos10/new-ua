@@ -212,6 +212,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <a href="index.php?ruta=usuarios" class="<?= $rutaActual === 'usuarios' ? 'activo' : '' ?>">Usuarios</a>
             <?php endif; ?>
             <?php if ($esDependenciaSuperadmin): ?>
+            <a href="index.php?ruta=analisis" class="<?= $rutaActual === 'analisis' ? 'activo' : '' ?>">Análisis</a>
             <a href="index.php?ruta=dev" class="<?= in_array($rutaActual, ['dev', 'dev-vista'], true) ? 'activo' : '' ?>">Dev</a>
             <?php endif; ?>
             <?php endif; ?>

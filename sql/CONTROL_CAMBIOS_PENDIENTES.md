@@ -339,6 +339,85 @@ de datos antes de correrlo.
 
 ---
 
+## 2026-09-26 — Versiones ligeras del árbol PDI (página Análisis, solo SA)
+
+- **Archivo:** `sql/arbol_versiones.sql`
+- **Cambio:** dos tablas nuevas. `arbol_versiones` (pestana ENUM 'articulacion_pdi'/
+  'programacion_presupuestal', nombre, creado_por, creado_en). `arbol_versiones_datos`
+  (version_id FK con `ON DELETE CASCADE`, tabla, datos LONGTEXT con el JSON de esa tabla en ese
+  momento).
+- **Motivo:** nueva página `?ruta=analisis` (solo superadmin de dependencia raíz) con un árbol
+  Línea/Motor/Proyecto/Gasto reutilizado del prototipo `vista/dev/pruebas/arbol.php`. A
+  diferencia de `modelo/Snapshot.php` (copia TODA la BD, usado por `?ruta=repositorios`), este
+  mecanismo solo congela las 5 tablas que el árbol necesita (`gastos`, `lineas`, `motores`,
+  `proyectos`, `anios_presupuestales`) — mucho más liviano, y cada pestaña del árbol (Articulación
+  PDI / Programación presupuestal) lista solo sus propias versiones. Ver plan aprobado
+  `el-techo-no-deberia-kind-candle`.
+- **Aplicado en local:** Sí (2026-09-26).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Acompañar con el despliegue de `modelo/VersionArbol.php` (nuevo),
+  `modelo/FuenteDatosAnalisis.php` (nuevo), `controlador/AnalisisControlador.php` (nuevo), la
+  nueva ruta `analisis` en `index.php`, y la nueva entrada del sidebar en
+  `vista/parciales/sidebar.php` — sin ese código, las tablas no tienen ningún efecto todavía.
+
+---
+
+## 2026-09-26 — Valor monetario de las solicitudes de Monitores
+
+- **Archivo:** `sql/agregar_valor_monitores.sql`
+- **Cambio:** `ALTER TABLE solicitudes_monitores ADD COLUMN valor DECIMAL(14,2) NULL AFTER
+  monitores_semestre2;`
+- **Motivo:** Monitores no tenía ningún concepto de valor monetario (solo conteos por semestre),
+  a diferencia de ARL/Extensión/Postgrado/Unisalud — hacía falta para poder mostrarlo en su
+  landing real (`?ruta=solicitudes&tab=monitores`) y para agregarlo al selector de la página
+  Análisis (`?ruta=analisis&tab=analisis`). Fórmula: `(monitores_semestre1 + monitores_semestre2)
+  * 2 * SMMLV` del año presupuestal de la solicitud (SMMLV vía `variables_macroeconomicas`,
+  ver `VariableMacroeconomica::obtenerPorNombreYAnio()`). `modelo/SolicitudMonitor.php` la calcula
+  y guarda en `crear()`/`actualizar()`; las filas ya existentes quedan en NULL y se recalculan al
+  vuelo en cada lectura (`aplicarRespaldoValor()`) hasta que alguien las edite y guarden con el
+  valor ya persistido — nunca se ve un valor vacío, viejo o nuevo.
+- **Aplicado en local:** Sí (2026-09-26).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Acompañar con el despliegue de `modelo/SolicitudMonitor.php`,
+  `controlador/PeticionesControlador.php` (columna 'Valor' agregada a la definición de columnas
+  del origen 'monitores') y las vistas `vista/solicitudes/index.php` / `detalle.php` (columna
+  "Valor" nueva) — sin ese código, la columna nueva no se lee ni se muestra en ningún lado.
+
+---
+
+## 2026-09-27 — Presupuesto institucional (pestaña Programación presupuestal, plantilla Egresos/Ingresos)
+
+- **Archivo:** `sql/presupuesto_institucional.sql`
+- **Cambio:** tres tablas nuevas. `presupuesto_institucional_lineas` (tipo ENUM 'ingreso'/'egreso',
+  codigo VARCHAR con el código jerárquico de puntos ej. `1.1.1.0`, es_total, descripcion, orden;
+  UNIQUE por (tipo, codigo) — Ingresos y Egresos numeran cada uno desde su propio `1.0`).
+  `presupuesto_institucional_valores` (linea_id FK, anio = año CALENDARIO real —no el id de
+  `anios_presupuestales`—, valor_final, valor_corte, fecha_corte; UNIQUE por (linea_id, anio)).
+  `presupuesto_institucional_linea_proyectos` (linea_id FK, proyecto_id FK — mapeo N:M, solo para
+  líneas hoja de Egresos).
+- **Motivo:** "Programación presupuestal" pasa de mostrar Línea/Motor/Proyecto a mostrar el
+  presupuesto institucional completo de la IES (nómina, obligaciones, inversión y demás capítulos
+  que el resto de la plataforma nunca capturó — esta solo cubre recursos distintos de esos tres),
+  cargado por una plantilla Excel de 2 hojas ("Egresos"/"Ingresos", mismo patrón de 2 hojas que ya
+  usan Extensión/Postgrado/Unisalud). Un código terminado en `.0` es una fila total (suma de sus
+  descendientes, recalculada al importar — nunca lo que traiga el archivo en esa celda). Cuando una
+  línea hoja de Egresos corresponde a Proyecto(s) PDI (referenciados por su `nit`, ya existente en
+  `proyectos` — no un código nuevo), su valor del año activo se reparte entre esos proyectos y se
+  SUMA al total que "Articulación PDI" ya calculaba — de paso se corrigió que ese total solo sumaba
+  `gastos` (gasto_principal) y no los 3 de autogestión (Extensión/Postgrado/Unisalud). Ver plan
+  `el-techo-no-deberia-kind-candle`.
+- **Aplicado en local:** Sí (2026-09-27).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Acompañar con `modelo/PresupuestoInstitucional.php` (nuevo), `modelo/Proyecto.php`
+  (nuevo `obtenerPorNit()`), `modelo/GeneradorXlsx.php` (nuevo `descargarPlantillaMultihoja()`),
+  `modelo/FuenteDatosAnalisis.php` (nuevo `obtenerGastosAutogestionPorAnio()`),
+  `modelo/VersionArbol.php` (ahora también congela `gastos_extension`/`postgrado`/`unisalud` —
+  antes solo `gastos` —, para que una versión de Articulación PDI incluya autogestión igual que en
+  vivo), `controlador/AnalisisControlador.php` y `vista/analisis/` — sin ese código, las tablas no
+  tienen ningún efecto todavía.
+
+---
+
 <!--
 Plantilla para la próxima entrada:
 

@@ -1,60 +1,29 @@
 <?php
 /**
- * Landing único de "Ver" en Peticiones: la tabla real de un origen (mismo estado/bandeja en la
- * que estaba el ítem clicado), con esa fila resaltada. Estructura y mecánica (buscar, filtrar por
- * columna, ordenar, ocultar/redimensionar columnas, vista de gráfica) portadas literalmente del
- * prototipo Dev > Tabla (vista/dev/pruebas/tabla.php). "Editar" navega al formulario real del
- * módulo dueño de la fila (ruta_editar, con ?editar_id= y volver de regreso a este landing);
- * "Eliminar" sí actúa aquí mismo, reutilizando el modelo real de cada origen vía
- * PeticionesControlador::procesarAccionCeldaTipoDetalle().
+ * Tabla + gráficas de la pestaña "Análisis de distribución" — mismo motor que
+ * vista/peticiones/tipo-detalle.php (estructura, tabla-real.js), adaptado: sin botón "Volver" ni
+ * exportar (no aplican aquí), y Editar/Eliminar solo se muestran en modo Tiempo real (en
+ * Repositorio/Usuario, $filasCompletas ya viene con 'puede_editar' forzado a false desde
+ * AnalisisControlador::obtenerFilasAnalisis()).
  *
- * Variables esperadas del controlador: $columnas, $clavesFila, $filasCompletas (cada fila incluye
- * 'ruta_editar' y 'puede_editar'), $anchosColumna, $indicesOcultosPorDefecto, $resaltarId, $origen,
- * $estado, $anioSeleccionadoId, $tituloPagina, $rutaVolver, $error, $dependenciaFiltro (si "Ver"
- * vino de una fila-grupo de Pendientes, ej. Gastos por dependencia), $pestanasGastoIngreso (null,
- * o ['egresos', 'ingresos', 'activo'] cuando el origen es un par gasto/ingreso de Autogestión —
- * ver PeticionesControlador::PARES_GASTO_INGRESO).
+ * Variables esperadas: $columnas, $clavesFila, $filasCompletas, $anchosColumna,
+ * $indicesOcultosPorDefecto, $origenActivo, $vista, $error.
  */
-require __DIR__ . '/../parciales/encabezado.php';
 
-$idTabla = 'tabla-' . $origen . '-' . $estado;
+$etiquetasModuloTabla = [
+    'gasto_principal' => 'Gasto',
+    'gasto_extension' => 'Extensión',
+    'gasto_postgrado' => 'Postgrado',
+    'gasto_unisalud' => 'Unisalud',
+    'monitores' => 'Monitores',
+    'arl' => 'ARL',
+];
+$idTabla = 'tabla-analisis-' . $origenActivo;
 ?>
 
-<style>
-    /* Cadena de alto (html/body → layout → contenido → área → tarjeta → tabla) fijada a 100vh para
-       que esta página no haga scroll completo: el único scroll debe ser el interno de
-       .tabla-scroll, con su propia barra — mismo patrón ya usado en el prototipo
-       vista/dev/pruebas/tabla.php. Estilo local a esta vista, no toca estilo.css ni el resto del
-       sistema. */
-    html, body {
-        height: 100%;
-        overflow: hidden;
-    }
-
-    .layout {
-        height: 100vh;
-        min-height: 0;
-    }
-
-    .contenido-principal {
-        min-height: 0;
-    }
-
-    .area-contenido {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        flex: 1;
-    }
-</style>
-
-<div class="tarjeta tarjeta-tabla">
+<div class="tarjeta tarjeta-tabla" style="flex:1; min-height:0; display:flex; flex-direction:column;">
     <div class="tabla-topbar">
-        <a href="<?= htmlspecialchars($rutaVolver) ?>" class="tabla-boton-volver" title="Volver">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-        </a>
-
-        <h2 class="tabla-nombre"><?= htmlspecialchars($tituloPagina) ?></h2>
+        <h2 class="tabla-nombre"><?= htmlspecialchars($etiquetasModuloTabla[$origenActivo] ?? $origenActivo) ?></h2>
 
         <div class="tabla-acciones">
             <div class="grupo-iconos grupo-basico" data-grupo="basico">
@@ -92,6 +61,7 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
                 <button type="button" class="icono-boton" id="tdt-boton-vista-grafica" title="Vista de gráfica (dashboard)" aria-pressed="false">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
                 </button>
+                <?php if ($vista === 'tiempo_real'): ?>
                 <span class="separador-grupo-basico"></span>
                 <button type="button" class="icono-boton" id="tdt-boton-editar" title="Editar" disabled>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
@@ -99,22 +69,10 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
                 <button type="button" class="icono-boton" id="tdt-boton-eliminar" title="Eliminar" disabled>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
                 </button>
-                <?php if (!empty($filasCompletas)): ?>
-                <span class="separador-grupo-basico"></span>
-                <a href="index.php?ruta=peticiones-tipo-detalle&estado=<?= urlencode($estado) ?>&origen=<?= urlencode($origen) ?>&anio_id=<?= (int) $anioSeleccionadoId ?><?= $dependenciaFiltro !== '' ? '&dependencia=' . urlencode($dependenciaFiltro) : '' ?>&exportar=xlsx" class="icono-boton icono-exportar" title="Exportar a Excel">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                </a>
                 <?php endif; ?>
             </div>
         </div>
     </div>
-
-    <?php if ($pestanasGastoIngreso !== null): ?>
-    <div class="pestanas">
-        <a href="<?= htmlspecialchars($pestanasGastoIngreso['egresos']) ?>" class="pestana<?= $pestanasGastoIngreso['activo'] === 'egresos' ? ' activa' : '' ?>">Egresos</a>
-        <a href="<?= htmlspecialchars($pestanasGastoIngreso['ingresos']) ?>" class="pestana<?= $pestanasGastoIngreso['activo'] === 'ingresos' ? ' activa' : '' ?>">Ingresos</a>
-    </div>
-    <?php endif; ?>
 
     <?php if (!empty($error)): ?>
     <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
@@ -124,7 +82,7 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
     <p class="texto-atenuado">No hay elementos para mostrar.</p>
     <?php else: ?>
     <div class="tabla-scroll">
-        <table class="tabla-dev-datos" id="<?= htmlspecialchars($idTabla) ?>" data-origen="<?= htmlspecialchars($origen) ?>" data-estado="<?= htmlspecialchars($estado) ?>">
+        <table class="tabla-dev-datos" id="<?= htmlspecialchars($idTabla) ?>" data-origen="<?= htmlspecialchars($origenActivo) ?>" data-estado="analisis">
             <colgroup>
                 <col style="width: 34px;">
                 <?php foreach ($columnas as $indice => $columna): ?>
@@ -164,7 +122,6 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
                     data-origen-id="<?= (int) $filaCompleta['origen_id'] ?>"
                     data-ruta-editar="<?= htmlspecialchars($filaCompleta['ruta_editar'] ?? '') ?>"
                     data-puede-editar="<?= !empty($filaCompleta['puede_editar']) ? '1' : '0' ?>"
-                    class="<?= (int) $filaCompleta['origen_id'] === (int) $resaltarId ? 'fila-resaltada' : '' ?>"
                 >
                     <td class="col-seleccion"><input type="checkbox" class="tabla-seleccion-fila"></td>
                     <?php foreach ($clavesFila as $indice => $clave): ?>
@@ -199,16 +156,16 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
     <?php endif; ?>
 </div>
 
-<form method="POST" id="tdt-form-accion" action="index.php?ruta=peticiones-tipo-detalle&estado=<?= urlencode($estado) ?>&origen=<?= urlencode($origen) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&resaltar_id=<?= (int) $resaltarId ?><?= $dependenciaFiltro !== '' ? '&dependencia=' . urlencode($dependenciaFiltro) : '' ?>" style="display:none;">
+<?php if ($vista === 'tiempo_real'): ?>
+<form method="POST" id="tdt-form-accion" action="<?= htmlspecialchars(analisisUrl('analisis', $vista, ['origen' => $origenActivo])) ?>" style="display:none;">
     <input type="hidden" name="accion" id="tdt-form-accion-valor" value="">
     <input type="hidden" name="origen_id" id="tdt-form-origen-id" value="">
 </form>
+<?php endif; ?>
 
 <script>
 var tdtColumnas = <?php echo json_encode($columnas, JSON_UNESCAPED_UNICODE); ?>;
 var tdtClavesFila = <?php echo json_encode($clavesFila, JSON_UNESCAPED_UNICODE); ?>;
-var tdtNamespace = <?php echo json_encode($origen . '_' . $estado); ?>;
+var tdtNamespace = <?php echo json_encode('analisis_' . $origenActivo); ?>;
 </script>
 <script src="publico/js/tabla-real.js"></script>
-
-<?php require __DIR__ . '/../parciales/pie.php'; ?>

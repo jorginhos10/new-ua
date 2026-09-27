@@ -44,6 +44,28 @@ class Proyecto
     }
 
     /**
+     * El NIT (línea+motor+proyecto, 2 dígitos cada uno) es la referencia estable a un proyecto
+     * que se usa en la plantilla de presupuesto institucional (?ruta=analisis) — a diferencia de
+     * `codigo` ("P3"), que se repite entre motores distintos, el NIT es único en toda la tabla.
+     */
+    public function obtenerPorNit(string $nit): ?array
+    {
+        $consulta = $this->db->prepare(
+            'SELECT p.id, p.codigo, p.nit, p.nombre, p.motor_id, p.creado_en,
+                    m.codigo AS motor_codigo, m.nombre AS motor_nombre,
+                    l.id AS linea_id, l.codigo AS linea_codigo, l.nombre AS linea_nombre
+             FROM proyectos p
+             JOIN motores m ON m.id = p.motor_id
+             JOIN lineas l ON l.id = m.linea_id
+             WHERE p.nit = :nit'
+        );
+        $consulta->execute(['nit' => $nit]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
+    /**
      * El NIT es el código numérico de 6 dígitos del PDI (línea+motor+proyecto, 2 dígitos cada
      * uno), calculado a partir de los códigos "L1"/"M1"/"P1" ya existentes de cada nivel.
      */

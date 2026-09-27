@@ -88,6 +88,24 @@ class Snapshot
     }
 
     /**
+     * Filas de UNA tabla dentro de un snapshot guardado, con el mismo shape que devolvería un
+     * `SELECT * FROM <tabla>` real en ese momento — usado por la página ?ruta=analisis (modo
+     * Repositorio) para leer solo el módulo que necesita, sin cargar el snapshot completo.
+     */
+    public function obtenerTablaDeSnapshot(int $snapshotId, string $tabla): array
+    {
+        $consulta = $this->db->prepare('SELECT datos FROM snapshots_datos WHERE snapshot_id = :snapshot_id AND tabla = :tabla');
+        $consulta->execute(['snapshot_id' => $snapshotId, 'tabla' => $tabla]);
+        $fila = $consulta->fetch();
+
+        if ($fila === false) {
+            return [];
+        }
+
+        return json_decode($fila['datos'], true) ?? [];
+    }
+
+    /**
      * Nombres de todas las tablas base de la propia base de datos (no vistas), excluyendo las del
      * mecanismo de snapshots. Se leen de INFORMATION_SCHEMA en vez de mantener una lista fija a
      * mano, para que un snapshot siempre incluya cualquier tabla nueva que se agregue después.

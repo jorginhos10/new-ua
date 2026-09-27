@@ -358,6 +358,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         actualizarGrafica();
+        construirFilaTotales();
     }
 
     filtros.forEach(function (campo) { campo.addEventListener('input', aplicarFiltros); });
@@ -396,6 +397,9 @@ document.addEventListener('DOMContentLoaded', function () {
     // nombre de la columna), así sirve igual para ARL, Monitores, OPS, Otros o Necesidad. ---
     var vistaGraficaActiva = false;
     var PALETA_SERIES_TDT = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+    // Pareto 80/20 solo en estos paneles (pedido explícito) — Dependencia/Sede/Categoría/Riesgo y
+    // cualquier otra dimensión auto-detectada quedan igual que hoy, sin este tratamiento.
+    var DIMENSIONES_CON_PARETO = ['Rubro', 'Actividad', 'Proyecto PDI'];
     var claveTipoGrafico = 'peticiones_tabla_grafica_tipo_' + namespace;
 
     function colorSerieTdt(indice) {
@@ -458,6 +462,41 @@ document.addEventListener('DOMContentLoaded', function () {
         return !textos.every(function (t) { return /^[\d.,\s$%-]+$/.test(t); });
     }
 
+    // --- Fila fija de totales (pie de la tabla, no de la gráfica): suma cada columna numérica
+    // (valores Y cantidades, cualquiera que tenga solo texto numérico en sus filas visibles —
+    // mismo criterio que esDimensionCandidata, invertido) sobre las filas que el filtro deje
+    // visibles. Una columna se muestra en pesos solo si sus celdas ya vienen formateadas como tal
+    // (terminan en ",NN" — así las guarda PHP con number_format() para cualquier valor float);
+    // una columna de enteros simples (cantidades) se suma y se muestra sin símbolo de moneda, para
+    // no confundir "2 monitores" con "$2".
+    function construirFilaTotales() {
+        var filaTotales = tabla.querySelector('tfoot .fila-totales-tdt');
+        if (!filaTotales) {
+            return;
+        }
+
+        var filasDatos = filasVisiblesParaGrafica();
+
+        for (var indice = 0; indice < tdtColumnas.length; indice++) {
+            var celda = filaTotales.children[indice + 1];
+            if (!celda) {
+                continue;
+            }
+
+            var textos = filasDatos.map(function (fila) { return (fila[indice] || '').trim(); }).filter(function (t) { return t !== '' && t !== '—'; });
+            var esNumerica = textos.length > 0 && textos.every(function (t) { return /^[\d.,\s$%-]+$/.test(t); });
+
+            if (!esNumerica) {
+                celda.textContent = '';
+                continue;
+            }
+
+            var suma = textos.reduce(function (acumulado, t) { return acumulado + parseNumeroCeldaTdt(t); }, 0);
+            var esMoneda = textos.some(function (t) { return /,\d{2}$/.test(t); });
+            celda.textContent = esMoneda ? formatoMonedaTdt(suma) : Math.round(suma).toLocaleString('es-CO');
+        }
+    }
+
     function agruparYSumar(filasDatos, indiceDimension, indiceValor) {
         var totalesPorCategoria = {};
         var orden = [];
@@ -474,6 +513,44 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         return orden.map(function (categoria) { return { categoria: categoria, valor: totalesPorCategoria[categoria] }; })
+            .sort(function (a, b) { return b.valor - a.valor; });
+    }
+
+    // --- Paneles "melt": cuando una tabla trae varias columnas monetarias independientes en vez de
+    // una sola dimensión por fila (ej. ARL: "Riesgo I (valor)".."Riesgo V (valor)"), cada columna es
+    // una categoría propia — no se puede agrupar por FILA como agruparYSumar(). Se detecta por el
+    // nombre de columna (termina en "(valor)"), nunca por el origen, para que sirva igual con
+    // cualquier tabla futura que use la misma convención de nombres. ---
+    function detectarColumnasMelt() {
+        var sufijoValor = /\(valor\)\s*$/i;
+        var numeralFinal = /\s+([ivxlcdm]+|\d+)$/i;
+        var gruposPorPrefijo = {};
+        var orden = [];
+
+        tdtColumnas.forEach(function (nombre, indice) {
+            if (!sufijoValor.test(nombre)) { return; }
+
+            var etiqueta = nombre.replace(sufijoValor, '').trim();
+            var prefijo = etiqueta.replace(numeralFinal, '').trim() || etiqueta;
+
+            if (!Object.prototype.hasOwnProperty.call(gruposPorPrefijo, prefijo)) {
+                gruposPorPrefijo[prefijo] = [];
+                orden.push(prefijo);
+            }
+            gruposPorPrefijo[prefijo].push({ etiqueta: etiqueta, indice: indice });
+        });
+
+        return orden
+            .map(function (prefijo) { return { prefijo: prefijo, columnas: gruposPorPrefijo[prefijo] }; })
+            .filter(function (grupo) { return grupo.columnas.length >= 2; });
+    }
+
+    function agruparPorColumnasValor(filasDatos, columnas) {
+        return columnas
+            .map(function (columna) {
+                var total = filasDatos.reduce(function (acc, fila) { return acc + parseNumeroCeldaTdt(fila[columna.indice]); }, 0);
+                return { categoria: columna.etiqueta, valor: total };
+            })
             .sort(function (a, b) { return b.valor - a.valor; });
     }
 
@@ -501,20 +578,34 @@ document.addEventListener('DOMContentLoaded', function () {
         if (elementoTooltipGrafica) { elementoTooltipGrafica.style.display = 'none'; }
     }
 
-    function construirCuerpoBarras(agregados, totalGeneral) {
+    // --- Pareto 80/20 (Rubro, Actividad, Proyecto PDI, Meses/PAC — ver DIMENSIONES_CON_PARETO):
+    // las categorías cuyo % acumulado (de mayor a menor valor) todavía no cruza el 80% se marcan
+    // "vitales" — el color de la barra/porción no cambia (ni engorda el texto), solo baja de
+    // opacidad la cola larga, y el texto usa un tono distinto en cada grupo para que ambos sigan
+    // siendo legibles (nunca color solo-atenuado, que era difícil de leer). ---
+    function construirCuerpoBarras(agregados, totalGeneral, aplicarPareto) {
         var contenedor = document.createElement('div');
         contenedor.className = 'grafica-panel-cuerpo';
         var maxValor = agregados.reduce(function (acc, a) { return Math.max(acc, a.valor); }, 0) || 1;
+        var acumuladoPct = 0;
 
         agregados.forEach(function (item, indice) {
             var fila = document.createElement('div');
             fila.className = 'grafica-fila-barra';
             fila.tabIndex = 0;
 
+            var porcentaje = totalGeneral > 0 ? (item.valor / totalGeneral) * 100 : 0;
+            var esVital = true;
+            if (aplicarPareto) {
+                esVital = acumuladoPct < 80;
+                acumuladoPct += porcentaje;
+            }
+
             var etiqueta = document.createElement('span');
             etiqueta.className = 'grafica-barra-etiqueta';
             etiqueta.textContent = item.categoria;
             etiqueta.title = item.categoria;
+            if (aplicarPareto) { etiqueta.style.color = esVital ? 'var(--color-pareto-destacado)' : 'var(--color-texto)'; }
             fila.appendChild(etiqueta);
 
             var pista = document.createElement('div');
@@ -523,15 +614,16 @@ document.addEventListener('DOMContentLoaded', function () {
             relleno.className = 'grafica-barra-relleno';
             relleno.style.background = colorSerieTdt(indice);
             relleno.style.width = Math.max(1, (item.valor / maxValor) * 100) + '%';
+            if (aplicarPareto && !esVital) { relleno.style.opacity = '0.35'; }
             pista.appendChild(relleno);
             fila.appendChild(pista);
 
             var valorSpan = document.createElement('span');
             valorSpan.className = 'grafica-barra-valor';
-            valorSpan.textContent = formatoMonedaTdt(item.valor);
+            valorSpan.textContent = formatoMonedaTdt(item.valor) + ' (' + porcentaje.toFixed(1) + '%)';
+            if (aplicarPareto) { valorSpan.style.color = esVital ? 'var(--color-pareto-destacado)' : 'var(--color-texto)'; }
             fila.appendChild(valorSpan);
 
-            var porcentaje = totalGeneral > 0 ? (item.valor / totalGeneral) * 100 : 0;
             fila.addEventListener('mouseenter', function () { mostrarTooltipGrafica(fila, item.categoria, item.valor, porcentaje); });
             fila.addEventListener('mouseleave', ocultarTooltipGrafica);
             fila.addEventListener('focus', function () { mostrarTooltipGrafica(fila, item.categoria, item.valor, porcentaje); });
@@ -555,9 +647,24 @@ document.addEventListener('DOMContentLoaded', function () {
         return ['M', cx, cy, 'L', p1.x, p1.y, 'A', r, r, 0, grande, 1, p2.x, p2.y, 'Z'].join(' ');
     }
 
-    function construirCuerpoTorta(agregados, totalGeneral, tamanoGrande) {
+    function construirCuerpoTorta(agregados, totalGeneral, tamanoGrande, aplicarPareto) {
         var contenedor = document.createElement('div');
         contenedor.className = 'grafica-panel-cuerpo grafica-torta-cuerpo';
+
+        // Mismo cálculo de Pareto que construirCuerpoBarras(), una sola vez, para que la porción y
+        // su fila de leyenda (dos bucles separados) queden de acuerdo en qué es "vital".
+        var esVitalPorIndice = [];
+        if (aplicarPareto) {
+            var acumuladoPct = 0;
+            agregados.forEach(function (item) {
+                var pct = totalGeneral > 0 ? (item.valor / totalGeneral) * 100 : 0;
+                esVitalPorIndice.push(acumuladoPct < 80);
+                acumuladoPct += pct;
+            });
+        }
+        function colorTextoPareto(indice) {
+            return esVitalPorIndice[indice] ? 'var(--color-pareto-destacado)' : 'var(--color-texto)';
+        }
 
         var svgNS = 'http://www.w3.org/2000/svg';
         var lado = tamanoGrande ? 240 : 100;
@@ -590,6 +697,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 porcion.setAttribute('fill', colorSerieTdt(indice));
                 porcion.setAttribute('class', 'grafica-torta-porcion');
                 porcion.dataset.indice = String(indice);
+                if (aplicarPareto && !esVitalPorIndice[indice]) { porcion.setAttribute('opacity', '0.35'); }
                 svg.appendChild(porcion);
             });
         }
@@ -608,17 +716,20 @@ document.addEventListener('DOMContentLoaded', function () {
             var punto = document.createElement('span');
             punto.className = 'grafica-torta-leyenda-punto';
             punto.style.background = colorSerieTdt(indice);
+            if (aplicarPareto && !esVitalPorIndice[indice]) { punto.style.opacity = '0.35'; }
             filaLeyenda.appendChild(punto);
 
             var etiqueta = document.createElement('span');
             etiqueta.className = 'grafica-torta-leyenda-etiqueta';
             etiqueta.textContent = item.categoria;
             etiqueta.title = item.categoria;
+            if (aplicarPareto) { etiqueta.style.color = colorTextoPareto(indice); }
             filaLeyenda.appendChild(etiqueta);
 
             var valorSpan = document.createElement('span');
             valorSpan.className = 'grafica-torta-leyenda-valor';
             valorSpan.textContent = porcentaje.toFixed(1) + '%';
+            if (aplicarPareto) { valorSpan.style.color = colorTextoPareto(indice); }
             filaLeyenda.appendChild(valorSpan);
 
             var porcionSvg = svg.querySelector('[data-indice="' + indice + '"]');
@@ -670,6 +781,23 @@ document.addEventListener('DOMContentLoaded', function () {
         return totalesPorMes;
     }
 
+    // Igual que en barras/torta: cuáles categorías (aquí, meses) todavía no cruzan el 80%
+    // acumulado, calculado de mayor a menor valor — devuelto en el ORDEN ORIGINAL del array
+    // recibido (cronológico para el PAC), para no reordenar el eje.
+    function calcularVitalesPareto(valores) {
+        var total = valores.reduce(function (a, b) { return a + b; }, 0);
+        var orden = valores.map(function (valor, indice) { return indice; })
+            .sort(function (a, b) { return valores[b] - valores[a]; });
+        var acumuladoPct = 0;
+        var vital = valores.map(function () { return false; });
+        orden.forEach(function (indice) {
+            var pct = total > 0 ? (valores[indice] / total) * 100 : 0;
+            vital[indice] = acumuladoPct < 80;
+            acumuladoPct += pct;
+        });
+        return vital;
+    }
+
     function construirCuerpoLinea(valoresPorMes, etiquetasMeses) {
         var contenedor = document.createElement('div');
         contenedor.className = 'grafica-panel-cuerpo grafica-linea-cuerpo';
@@ -684,6 +812,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var altoUtil = altoBase - padSuperior - padInferior;
         var maxValor = Math.max.apply(null, valoresPorMes.concat([0])) || 1;
         var totalGeneral = valoresPorMes.reduce(function (a, b) { return a + b; }, 0);
+        var esVitalPorMes = calcularVitalesPareto(valoresPorMes);
 
         var svg = document.createElementNS(svgNS, 'svg');
         svg.setAttribute('viewBox', '0 0 ' + anchoBase + ' ' + altoBase);
@@ -717,6 +846,7 @@ document.addEventListener('DOMContentLoaded', function () {
             circulo.setAttribute('r', 4);
             circulo.setAttribute('class', 'grafica-linea-punto');
             circulo.setAttribute('tabindex', '0');
+            if (!esVitalPorMes[indice]) { circulo.setAttribute('opacity', '0.35'); }
 
             var porcentaje = totalGeneral > 0 ? (p.valor / totalGeneral) * 100 : 0;
             function mostrar() { mostrarTooltipGrafica(circulo, etiquetasMeses[indice], p.valor, porcentaje); }
@@ -732,10 +862,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
         var filaEtiquetas = document.createElement('div');
         filaEtiquetas.className = 'grafica-linea-meses-etiquetas';
-        etiquetasMeses.forEach(function (etiqueta) {
+        etiquetasMeses.forEach(function (etiqueta, indice) {
             var span = document.createElement('span');
             span.className = 'grafica-linea-mes-etiqueta';
             span.textContent = etiqueta;
+            span.style.color = esVitalPorMes[indice] ? 'var(--color-pareto-destacado)' : 'var(--color-texto)';
             filaEtiquetas.appendChild(span);
         });
         contenedor.appendChild(filaEtiquetas);
@@ -770,6 +901,8 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     var panelExpandidoNombre = null;
+    var indiceTarjetaGrafica = 0;
+    var TAMANO_TARJETA_GRAFICA = 6;
 
     function expandirPanel(nombreDimension) {
         panelExpandidoNombre = (panelExpandidoNombre === nombreDimension) ? null : nombreDimension;
@@ -846,9 +979,10 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             var tipo = leerTipoGrafico(dimension.nombre);
+            var aplicarPareto = DIMENSIONES_CON_PARETO.indexOf(dimension.nombre) !== -1;
             var cuerpo2 = tipo === 'torta'
-                ? construirCuerpoTorta(agregados, totalGeneral, esExpandido)
-                : construirCuerpoBarras(agregados, totalGeneral);
+                ? construirCuerpoTorta(agregados, totalGeneral, esExpandido, aplicarPareto)
+                : construirCuerpoBarras(agregados, totalGeneral, aplicarPareto);
             panel.appendChild(cuerpo2);
         }
 
@@ -859,6 +993,70 @@ document.addEventListener('DOMContentLoaded', function () {
         });
 
         contenedorPadre.appendChild(panel);
+    }
+
+    // --- Paginador de tarjetas: la cuadrícula de paneles (.tabla-grafica-paneles) tiene capacidad
+    // para 6 (3×2) — con más de 6 gráficas relevantes para un origen, se reparten en "tarjetas" de
+    // hasta 6, con un botón chico para pasar de una a otra. Se reconstruye en cada llamada a
+    // actualizarGrafica(), igual que el resto de esta vista — nunca depende de app.js (que solo
+    // engancha los `[data-mini-slider]` que ya existen al cargar la página, no los que se crean
+    // después dinámicamente). ---
+    function construirBarraPaginacionGrafica(totalPaneles) {
+        var contenedorGrafica = document.getElementById('tdt-grafica');
+        var contenedorPaneles = document.getElementById('tdt-grafica-paneles');
+        var barra = document.getElementById('tdt-grafica-paginador');
+        var totalPaginas = Math.max(1, Math.ceil(totalPaneles / TAMANO_TARJETA_GRAFICA));
+
+        if (totalPaginas <= 1 || panelExpandidoNombre) {
+            if (barra) { barra.remove(); }
+            return totalPaginas;
+        }
+
+        if (indiceTarjetaGrafica >= totalPaginas) { indiceTarjetaGrafica = totalPaginas - 1; }
+        if (indiceTarjetaGrafica < 0) { indiceTarjetaGrafica = 0; }
+
+        if (!barra) {
+            barra = document.createElement('div');
+            barra.id = 'tdt-grafica-paginador';
+            barra.className = 'mini-slider-cabecera grafica-paginador';
+            contenedorGrafica.insertBefore(barra, contenedorPaneles);
+        }
+
+        barra.innerHTML = '';
+
+        var titulo = document.createElement('span');
+        titulo.className = 'mini-slider-titulo';
+        titulo.textContent = 'Página ' + (indiceTarjetaGrafica + 1) + ' de ' + totalPaginas;
+        barra.appendChild(titulo);
+
+        var nav = document.createElement('div');
+        nav.className = 'mini-slider-nav';
+
+        var botonPrev = document.createElement('button');
+        botonPrev.type = 'button';
+        botonPrev.className = 'mini-slider-flecha';
+        botonPrev.setAttribute('aria-label', 'Anterior');
+        botonPrev.innerHTML = '&#8249;';
+        botonPrev.addEventListener('click', function () {
+            indiceTarjetaGrafica -= 1;
+            actualizarGrafica();
+        });
+
+        var botonNext = document.createElement('button');
+        botonNext.type = 'button';
+        botonNext.className = 'mini-slider-flecha';
+        botonNext.setAttribute('aria-label', 'Siguiente');
+        botonNext.innerHTML = '&#8250;';
+        botonNext.addEventListener('click', function () {
+            indiceTarjetaGrafica += 1;
+            actualizarGrafica();
+        });
+
+        nav.appendChild(botonPrev);
+        nav.appendChild(botonNext);
+        barra.appendChild(nav);
+
+        return totalPaginas;
     }
 
     window.addEventListener('resize', function () {
@@ -885,19 +1083,28 @@ document.addEventListener('DOMContentLoaded', function () {
         var indiceValor = obtenerIndiceValorTdt();
 
         // Estas son las dimensiones reales para tomar decisiones (Dependencia, Actividad, Rubro,
-        // Proyecto PDI, Sede) — cuando existen en esta tabla (Gasto/Ingreso), son siempre las que
-        // se usan, en este orden. Si el origen no las tiene (ARL, Monitores, OPS, Otros, Necesidad),
-        // se cae al detector genérico (cualquier columna de texto, no numérica).
+        // Proyecto PDI, Sede, y Categoría cuando existe — Autogestión) — cuando existen en esta
+        // tabla (Gasto/Ingreso), son siempre las que se usan, en este orden. Para el resto de
+        // orígenes (ARL, Monitores, OPS, Otros, Necesidad, ingresos) se SUMAN además las demás
+        // columnas de texto candidatas — antes, en cuanto una sola dimensión preferida coincidía
+        // (ej. "Dependencia"), nunca se revisaban las demás columnas reales de la tabla (ej. "Tipo"
+        // en Monitores, "Perfil" en OPS), aunque existieran.
+        var ORIGENES_ESTRUCTURA_FIJA = ['gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes'];
         var DIMENSIONES_PREFERIDAS = ['Dependencia', 'Actividad', 'Rubro', 'Proyecto PDI', 'Sede'];
+        if (indiceColumnaTdt('Categoría') !== -1) { DIMENSIONES_PREFERIDAS = DIMENSIONES_PREFERIDAS.concat('Categoría'); }
+
         var dimensiones = DIMENSIONES_PREFERIDAS
             .map(function (nombre) { return { nombre: nombre, indice: indiceColumnaTdt(nombre) }; })
             .filter(function (d) { return d.indice !== -1 && d.indice !== indiceValor; });
 
-        if (dimensiones.length === 0) {
-            dimensiones = tdtColumnas
+        var esEstructuraFija = ORIGENES_ESTRUCTURA_FIJA.indexOf(tabla.dataset.origen || '') !== -1;
+
+        if (!esEstructuraFija) {
+            var indicesYaIncluidos = dimensiones.map(function (d) { return d.indice; });
+            var extras = tdtColumnas
                 .map(function (nombre, indice) { return { nombre: nombre, indice: indice }; })
-                .filter(function (d) { return d.indice !== indiceValor && esDimensionCandidata(d.indice, filasDatos); })
-                .slice(0, 5);
+                .filter(function (d) { return d.indice !== indiceValor && indicesYaIncluidos.indexOf(d.indice) === -1 && esDimensionCandidata(d.indice, filasDatos); });
+            dimensiones = dimensiones.concat(extras);
         }
 
         contenedorKpis.innerHTML = '';
@@ -938,8 +1145,13 @@ document.addEventListener('DOMContentLoaded', function () {
             avisoSinValor.className = 'grafica-panel-vacio';
             avisoSinValor.textContent = 'Esta tabla no tiene una columna de valor/total para agregar.';
             contenedorPaneles.appendChild(avisoSinValor);
+            construirBarraPaginacionGrafica(0);
         } else {
             var paneles = dimensiones.slice();
+
+            detectarColumnasMelt().forEach(function (grupo) {
+                paneles.push({ nombre: grupo.prefijo, esMelt: true, columnasMelt: grupo.columnas });
+            });
 
             var indiceMeses = indiceColumnaTdt('Meses');
             if (indiceMeses !== -1) {
@@ -955,13 +1167,21 @@ document.addEventListener('DOMContentLoaded', function () {
                 });
             }
 
-            var panelesAMostrar = panelExpandidoNombre
-                ? paneles.filter(function (p) { return p.nombre === panelExpandidoNombre; })
-                : paneles;
+            var panelesAMostrar;
 
-            if (panelExpandidoNombre && panelesAMostrar.length === 0) {
-                panelExpandidoNombre = null;
-                panelesAMostrar = paneles;
+            if (panelExpandidoNombre) {
+                panelesAMostrar = paneles.filter(function (p) { return p.nombre === panelExpandidoNombre; });
+
+                if (panelesAMostrar.length === 0) {
+                    panelExpandidoNombre = null;
+                    panelesAMostrar = paneles;
+                }
+            }
+
+            if (!panelExpandidoNombre) {
+                var totalPaginas = construirBarraPaginacionGrafica(paneles.length);
+                var inicioPagina = indiceTarjetaGrafica * TAMANO_TARJETA_GRAFICA;
+                panelesAMostrar = totalPaginas > 1 ? paneles.slice(inicioPagina, inicioPagina + TAMANO_TARJETA_GRAFICA) : paneles;
             }
 
             contenedorPaneles.classList.toggle('un-panel', !!panelExpandidoNombre);
@@ -974,7 +1194,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     return;
                 }
 
-                var agregados = agruparYSumar(filasDatos, panelDato.indice, indiceValor);
+                var agregados = panelDato.esMelt
+                    ? agruparPorColumnasValor(filasDatos, panelDato.columnasMelt)
+                    : agruparYSumar(filasDatos, panelDato.indice, indiceValor);
                 var totalGeneral = agregados.reduce(function (acc, a) { return acc + a.valor; }, 0);
                 panelDato.titulo = panelDato.nombre;
                 panelDato.subtitulo = agregados.length + ' ' + panelDato.nombre.toLowerCase() + (agregados.length === 1 ? '' : 's') + ' con datos en el filtro actual';
@@ -1031,8 +1253,8 @@ document.addEventListener('DOMContentLoaded', function () {
     function actualizarBotonesSeleccion() {
         var fila = filaSeleccionadaUnica();
         var puedeEditar = fila && fila.dataset.puedeEditar === '1' && fila.dataset.rutaEditar;
-        botonEditar.disabled = !puedeEditar;
-        botonEliminar.disabled = !fila;
+        if (botonEditar) { botonEditar.disabled = !puedeEditar; }
+        if (botonEliminar) { botonEliminar.disabled = !fila; }
         cuerpo.querySelectorAll('tr').forEach(function (tr) {
             tr.classList.toggle('fila-seleccionada', tr.querySelector('.tabla-seleccion-fila:checked') !== null);
         });
@@ -1082,4 +1304,5 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     actualizarBotonesSeleccion();
+    construirFilaTotales();
 });

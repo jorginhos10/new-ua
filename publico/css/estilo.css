@@ -2,6 +2,7 @@
     --color-primario: #0071e3;
     --color-primario-oscuro: #0058b0;
     --color-primario-suave: #e8f2ff;
+    --color-pareto-destacado: #0b4f6c;
     --color-texto: #1d1d1f;
     --color-texto-secundario: #424245;
     --color-texto-tenue: #86868b;
@@ -4863,6 +4864,24 @@ body.tabla-redimensionando-cursor * {
     outline-offset: -2px;
 }
 
+/* Fila fija de totales, pegada abajo del área con scroll (mismo mecanismo sticky que ya usa el
+   encabezado arriba, ver .tabla-dev-datos thead th) — construida y actualizada por
+   construirFilaTotales() en tabla-real.js, no por PHP. */
+.tabla-dev-datos tfoot td {
+    position: sticky;
+    bottom: 0;
+    background: var(--color-fondo);
+    z-index: 2;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    border-top: 2px solid var(--color-borde-hover);
+    border-bottom: none;
+}
+
+.tabla-dev-datos.modo-grafica tfoot {
+    display: none;
+}
+
 /* --- Combobox propio (buscar/filtrar): predicción en gris dentro del mismo input, y tarjeta
    desplegable con los valores únicos solo para Filtrar --- */
 .combo-envoltorio {
@@ -5078,6 +5097,15 @@ body.tabla-redimensionando-cursor * {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     grid-template-rows: minmax(0, 2fr) minmax(0, 1fr);
     gap: 0.75rem;
+}
+
+.grafica-paginador {
+    flex-shrink: 0;
+}
+
+.grafica-paginador .mini-slider-titulo {
+    font-size: 0.85rem;
+    color: var(--color-texto-secundario);
 }
 
 .grafica-panel {

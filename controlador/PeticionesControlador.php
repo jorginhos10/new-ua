@@ -68,6 +68,14 @@ class PeticionesControlador
     // lo mismo fila por fila cuando el landing de Peticiones lista cientos/miles de ítems — ver
     // obtenerRegistroGastoCacheado(), obtenerUsuarioActualCacheado() y esSuperAdminRaiz().
     private array $cacheRegistroPorClave = [];
+
+    /**
+     * Registros ya resueltos por el llamador (clave 'origen:origen_id' => fila), usados en vez de
+     * ir a la BD en vivo cuando existen — así ?ruta=analisis puede alimentar estas mismas columnas
+     * desde un snapshot/versión congelada (modo Repositorio/Usuario) sin duplicar la lógica de
+     * joins de construirFilasDetalleCompleto(). Ver establecerRegistrosPrecargados().
+     */
+    private array $registrosPrecargadosPorClave = [];
     private bool $usuarioActualCargado = false;
     private ?array $usuarioActualCache = null;
     private ?bool $cacheEsSuperAdminRaiz = null;
@@ -710,12 +718,23 @@ class PeticionesControlador
      * Otros: concepto/semestres; Necesidad: sus propios campos), consultados con el modelo real de
      * cada uno (obtenerModeloPorOrigen()) — nunca se fuerza un origen a las columnas de otro.
      */
-    private function construirFilasPorOrigen(string $origen, array $itemsCrudos, int $anioPresupuestalId, string $estado, string $rutaVolverEditar = 'index.php?ruta=peticiones'): array
+    public function construirFilasPorOrigen(string $origen, array $itemsCrudos, int $anioPresupuestalId, string $estado, string $rutaVolverEditar = 'index.php?ruta=peticiones'): array
     {
         if (in_array($origen, self::ORIGENES_GASTO, true)) {
+            $columnas = ['Dependencia', 'Sede', 'Línea estratégica', 'Motor de desarrollo', 'Proyecto PDI', 'Objeto/Proyecto (PAA)', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Meses', 'Techo presupuestal'];
+            $claves = ['dependencia', 'sede', 'linea', 'motor', 'proyecto', 'objeto_proyecto_paa', 'actividad', 'rubro', 'insumo', 'cantidad', 'costo_unitario', 'valor_total', 'meses', 'techo'];
+
+            // Gasto principal no tiene concepto de categoría (Costos/Inversión/Excedentes) — se
+            // deja su tabla intacta. Los 4 orígenes de Autogestión sí, y agregarla aquí es lo que
+            // permite la gráfica de participación por categoría (ver tabla-real.js).
+            if ($origen !== 'gasto_principal') {
+                $columnas[] = 'Categoría';
+                $claves[] = 'categoria';
+            }
+
             return [
-                'columnas' => ['Dependencia', 'Sede', 'Línea estratégica', 'Motor de desarrollo', 'Proyecto PDI', 'Objeto/Proyecto (PAA)', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Meses', 'Techo presupuestal'],
-                'claves' => ['dependencia', 'sede', 'linea', 'motor', 'proyecto', 'objeto_proyecto_paa', 'actividad', 'rubro', 'insumo', 'cantidad', 'costo_unitario', 'valor_total', 'meses', 'techo'],
+                'columnas' => $columnas,
+                'claves' => $claves,
                 'filas' => $this->construirFilasDetalleCompleto($itemsCrudos, $anioPresupuestalId, $estado, $rutaVolverEditar),
             ];
         }
@@ -726,8 +745,13 @@ class PeticionesControlador
         foreach ($itemsCrudos as $item) {
             // OPS solo trae los códigos/nombres de sede/línea/motor/proyecto/rubro (columnas
             // reales que se muestran aquí) con obtenerDetallePorId(); obtenerPorId() no los une.
-            $metodoObtener = ($origen === 'ops' && method_exists($modelo, 'obtenerDetallePorId')) ? 'obtenerDetallePorId' : 'obtenerPorId';
-            $registro = $modelo !== null ? $modelo->$metodoObtener((int) $item['origen_id']) : null;
+            $clavePrecargada = $origen . ':' . (int) $item['origen_id'];
+            if (array_key_exists($clavePrecargada, $this->registrosPrecargadosPorClave)) {
+                $registro = $this->registrosPrecargadosPorClave[$clavePrecargada];
+            } else {
+                $metodoObtener = ($origen === 'ops' && method_exists($modelo, 'obtenerDetallePorId')) ? 'obtenerDetallePorId' : 'obtenerPorId';
+                $registro = $modelo !== null ? $modelo->$metodoObtener((int) $item['origen_id']) : null;
+            }
             if ($registro === null) {
                 continue;
             }
@@ -767,6 +791,7 @@ class PeticionesControlador
                 $fila['monitores_semestre1'] = (int) ($registro['monitores_semestre1'] ?? 0);
                 $fila['monitores_semestre2'] = (int) ($registro['monitores_semestre2'] ?? 0);
                 $fila['monitores_total'] = $fila['monitores_semestre1'] + $fila['monitores_semestre2'];
+                $fila['valor'] = (float) ($registro['valor'] ?? 0);
             } elseif ($origen === 'ops') {
                 $fila['sede'] = trim(($registro['sede_codigo'] ?? '') . ' - ' . ($registro['sede_nombre'] ?? ''), ' -');
                 $fila['dependencia'] = $registro['dependencia'] ?? '—';
@@ -812,8 +837,12 @@ class PeticionesControlador
                 'claves' => ['facultad', 'riesgo1_estudiantes', 'riesgo1_valor', 'riesgo2_estudiantes', 'riesgo2_valor', 'riesgo3_estudiantes', 'riesgo3_valor', 'riesgo4_estudiantes', 'riesgo4_valor', 'riesgo5_estudiantes', 'riesgo5_valor', 'total_estudiantes', 'total_valor'],
             ],
             'monitores' => [
-                'columnas' => ['Dependencia', 'Tipo', 'Semestre I', 'Semestre II', 'Total'],
-                'claves' => ['dependencia', 'tipo_monitor', 'monitores_semestre1', 'monitores_semestre2', 'monitores_total'],
+                // "N° de monitores" (no "Total" a secas): un "Total" junto a "Valor" hacía que
+                // tabla-real.js (obtenerIndiceValorTdt(), que prioriza cualquier columna llamada
+                // exactamente "Total") tomara la CANTIDAD de monitores como si fuera dinero, y
+                // "Valor" (el monto real) nunca se usaba en las gráficas.
+                'columnas' => ['Dependencia', 'Tipo', 'Semestre I', 'Semestre II', 'N° de monitores', 'Valor'],
+                'claves' => ['dependencia', 'tipo_monitor', 'monitores_semestre1', 'monitores_semestre2', 'monitores_total', 'valor'],
             ],
             'ops' => [
                 'columnas' => ['Sede', 'Dependencia', 'Línea', 'Motor', 'Proyecto', 'Rubro', 'Perfil', 'Valor unitario', 'Cantidad', 'Total'],
@@ -1152,7 +1181,7 @@ class PeticionesControlador
         return $fila[$campo] ?? null;
     }
 
-    private function construirFilasDetalleCompleto(array $aprobados, int $anioPresupuestalId, string $estado = 'aprobada', string $rutaVolverEditar = 'index.php?ruta=peticiones'): array
+    public function construirFilasDetalleCompleto(array $aprobados, int $anioPresupuestalId, string $estado = 'aprobada', string $rutaVolverEditar = 'index.php?ruta=peticiones'): array
     {
         // El PAC (línea de "Meses" en la vista de gráfica del landing) agrupa por nombre de mes,
         // no por el número crudo que guarda la tabla — sin esta conversión "1,2,3" nunca calzaría
@@ -1231,6 +1260,7 @@ class PeticionesControlador
                 'costo_unitario' => null,
                 'valor_total' => $item['valor'] !== null ? (float) $item['valor'] : null,
                 'meses' => '—',
+                'categoria' => '—',
                 'techo' => $techo !== null ? (float) $techo : null,
                 'ruta_ver' => $this->construirRutaVer($item['origen'], (int) $item['origen_id'], $estado),
                 'ruta_origen' => $item['ruta_origen'] ?? 'index.php?ruta=peticiones',
@@ -1246,6 +1276,7 @@ class PeticionesControlador
                 $fila['objeto_proyecto_paa'] = $gastoOriginal['objeto_proyecto_paa'] ?? '—';
                 $fila['actividad'] = $gastoOriginal['actividad'] ?? '—';
                 $fila['insumo'] = $gastoOriginal['insumo'] ?? '—';
+                $fila['categoria'] = $gastoOriginal['categoria'] ?? '—';
                 $fila['cantidad'] = isset($gastoOriginal['cantidad']) ? (float) $gastoOriginal['cantidad'] : $fila['cantidad'];
                 $fila['costo_unitario'] = isset($gastoOriginal['costo_unitario']) ? (float) $gastoOriginal['costo_unitario'] : null;
                 $fila['meses'] = $gastoOriginal['meses'] !== ''
@@ -1583,12 +1614,25 @@ class PeticionesControlador
      * listar cientos/miles de filas en el landing de Peticiones — sin este cache, cada fila
      * disparaba varias consultas repetidas por el mismo id.
      */
+    /**
+     * Ver el docblock de $registrosPrecargadosPorClave — usado por AnalisisControlador para que
+     * el modo Repositorio/Usuario lea de un snapshot en vez de la BD en vivo.
+     */
+    public function establecerRegistrosPrecargados(array $registrosPorClave): void
+    {
+        $this->registrosPrecargadosPorClave = $registrosPorClave;
+    }
+
     private function obtenerRegistroPorOrigenCacheado(string $origen, int $origenId): ?array
     {
         $clave = $origen . ':' . $origenId;
 
         if (array_key_exists($clave, $this->cacheRegistroPorClave)) {
             return $this->cacheRegistroPorClave[$clave];
+        }
+
+        if (array_key_exists($clave, $this->registrosPrecargadosPorClave)) {
+            return $this->cacheRegistroPorClave[$clave] = $this->registrosPrecargadosPorClave[$clave];
         }
 
         $modelosPorOrigen = [

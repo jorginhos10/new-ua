@@ -91,6 +91,7 @@ $titulosPorTipo = [
                             <th>Semestre I</th>
                             <th>Semestre II</th>
                             <th>Total</th>
+                            <th>Valor</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -98,6 +99,7 @@ $titulosPorTipo = [
                             <td><?= (int) $registro['monitores_semestre1'] ?></td>
                             <td><?= (int) $registro['monitores_semestre2'] ?></td>
                             <td><strong><?= (int) $registro['monitores_semestre1'] + (int) $registro['monitores_semestre2'] ?></strong></td>
+                            <td>$<?= number_format((float) $registro['valor'], 2, ',', '.') ?></td>
                         </tr>
                     </tbody>
                 </table>

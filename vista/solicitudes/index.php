@@ -286,6 +286,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <td><?= (int) $solicitudMonitor['monitores_semestre1'] ?></td>
                         <td><?= (int) $solicitudMonitor['monitores_semestre2'] ?></td>
                         <td><?= $totalMonitores > 0 ? $totalMonitores : '-' ?></td>
+                        <td>$<?= number_format((float) $solicitudMonitor['valor'], 2, ',', '.') ?></td>
                         <td class="celda-acciones">
                             <div class="acciones-fila">
                                 <a
@@ -354,6 +355,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                 <th>Monitores semestre I</th>
                                 <th>Monitores semestre II</th>
                                 <th>N° de monitores</th>
+                                <th>Valor</th>
                                 <th></th>
                             </tr>
                         </thead>
@@ -361,7 +363,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                             <?php foreach ($monitoresBorrador as $solicitudMonitor): $filaSolicitudMonitor($solicitudMonitor); endforeach; ?>
                             <?php if (empty($monitoresBorrador)): ?>
                             <tr>
-                                <td colspan="8">No hay borradores.</td>
+                                <td colspan="9">No hay borradores.</td>
                             </tr>
                             <?php endif; ?>
                         </tbody>
@@ -389,6 +391,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                                 <th>Monitores semestre I</th>
                                 <th>Monitores semestre II</th>
                                 <th>N° de monitores</th>
+                                <th>Valor</th>
                                 <th></th>
                             </tr>
                         </thead>
@@ -396,7 +399,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                             <?php foreach ($monitoresEnviados as $solicitudMonitor): $filaSolicitudMonitor($solicitudMonitor); endforeach; ?>
                             <?php if (empty($monitoresEnviados)): ?>
                             <tr>
-                                <td colspan="8">No hay solicitudes enviadas.</td>
+                                <td colspan="9">No hay solicitudes enviadas.</td>
                             </tr>
                             <?php endif; ?>
                         </tbody>
