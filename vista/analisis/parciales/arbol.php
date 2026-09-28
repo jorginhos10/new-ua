@@ -25,7 +25,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
 {
     $tieneHijos = !empty($nodo['hijos']);
     $esTotal = $nodo['esTotal'] ?? false;
-    $clases = 'arbol-fila nivel-' . $nodo['nivel'] . ($esTotal ? ' arbol-fila-total' : '');
+    $clases = 'arbol-fila nivel-' . $nodo['nivel'] . ($esTotal ? ' arbol-fila-total' : '') . ($tieneHijos ? ' arbol-fila-expandible' : '');
     echo '<tr class="' . $clases . '" data-id="' . htmlspecialchars($nodo['id']) . '"'
         . ($padreId !== null ? ' data-padre="' . htmlspecialchars($padreId) . '"' : '')
         . ' data-expandido="1">';
@@ -34,17 +34,20 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         echo '<td class="arbol-celda-extra">' . htmlspecialchars((string) ($nodo[$columnaExtra['clave']] ?? '')) . '</td>';
     }
 
-    echo '<td class="arbol-celda-etiqueta">';
-    echo '<span class="arbol-sangria" style="width:' . ($nodo['nivel'] * 22) . 'px"></span>';
+    // El flex vive en un <div> interno, nunca en el <td>: un <td> con display:flex deja de ser
+    // celda de tabla y descuadra sus bordes/ancho contra el resto de la columna.
+    echo '<td class="arbol-celda-etiqueta"><div class="arbol-etiqueta-contenido">';
+    echo '<span class="arbol-sangria" style="width:' . ($nodo['nivel'] * 24) . 'px"></span>';
     if ($tieneHijos) {
-        echo '<button type="button" class="arbol-boton-expandir" data-id="' . htmlspecialchars($nodo['id']) . '" title="Contraer/expandir">'
-            . '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>'
+        echo '<button type="button" class="arbol-boton-expandir" data-id="' . htmlspecialchars($nodo['id']) . '" title="Contraer/expandir" aria-label="Contraer/expandir" aria-expanded="true">'
+            . '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>'
             . '</button>';
     } else {
         echo '<span class="arbol-punto" aria-hidden="true"></span>';
     }
-    echo '<span class="arbol-etiqueta-texto" title="Doble clic para renombrar (solo Tiempo real)">' . htmlspecialchars($nodo['etiqueta']) . '</span>';
-    echo '</td>';
+    $tituloEtiqueta = $tieneHijos ? 'Clic para contraer/expandir · doble clic para renombrar (solo Tiempo real)' : 'Doble clic para renombrar (solo Tiempo real)';
+    echo '<span class="arbol-etiqueta-texto" title="' . $tituloEtiqueta . '">' . htmlspecialchars($nodo['etiqueta']) . '</span>';
+    echo '</div></td>';
 
     foreach ($columnasAnios as $columna) {
         $valor = $nodo['valores'][$columna['clave']] ?? 0.0;
@@ -164,10 +167,21 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         vertical-align: middle;
     }
 
-    .arbol-tabla th:first-child,
-    .arbol-tabla td.arbol-celda-etiqueta {
+    /* Columnas de texto (Código, Proyecto(s) PDI, Descripción) a la izquierda — encabezado,
+       fila Total y filas de datos con la misma alineación; las cifras quedan a la derecha. */
+    .arbol-tabla .arbol-celda-extra,
+    .arbol-tabla .arbol-celda-etiqueta {
         text-align: left;
+    }
+
+    .arbol-tabla .arbol-celda-etiqueta {
         white-space: normal;
+        min-width: 240px;
+    }
+
+    .arbol-tabla td.arbol-celda-vacia {
+        text-align: center;
+        padding: 1.5rem 0.85rem;
     }
 
     .arbol-tabla thead th {
@@ -317,10 +331,22 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         display: none;
     }
 
-    .arbol-celda-etiqueta {
+    .arbol-tabla {
+        --arbol-control: 32px;
+    }
+
+    /* Táctil: el botón de despliegue crece a un tamaño cómodo para el dedo. */
+    @media (pointer: coarse) {
+        .arbol-tabla {
+            --arbol-control: 40px;
+        }
+    }
+
+    .arbol-etiqueta-contenido {
         display: flex;
         align-items: center;
-        gap: 0.3rem;
+        gap: 0.35rem;
+        min-height: var(--arbol-control);
     }
 
     .arbol-sangria {
@@ -328,23 +354,37 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         flex-shrink: 0;
     }
 
+    /* Filas con hijos: toda la celda de descripción sirve para contraer/expandir. */
+    .arbol-fila-expandible .arbol-celda-etiqueta {
+        cursor: pointer;
+        user-select: none;
+    }
+
     .arbol-boton-expandir {
-        border: none;
+        border: 1px solid transparent;
         background: transparent;
         cursor: pointer;
         color: var(--color-texto-secundario);
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 20px;
-        height: 20px;
+        width: var(--arbol-control);
+        height: var(--arbol-control);
+        padding: 0;
         flex-shrink: 0;
-        border-radius: 4px;
-        transition: background var(--transicion);
+        border-radius: 6px;
+        transition: background var(--transicion), border-color var(--transicion);
+        touch-action: manipulation;
     }
 
-    .arbol-boton-expandir:hover {
+    .arbol-boton-expandir:hover,
+    .arbol-fila-expandible .arbol-celda-etiqueta:hover .arbol-boton-expandir {
         background: rgba(0, 0, 0, 0.08);
+    }
+
+    .arbol-boton-expandir:focus-visible {
+        outline: 2px solid var(--color-primario);
+        outline-offset: 1px;
     }
 
     .arbol-boton-expandir svg {
@@ -355,6 +395,8 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         transform: rotate(-90deg);
     }
 
+    /* Mismo ancho que el botón de despliegue, para que las hojas queden alineadas con sus
+       hermanas que sí tienen hijos. */
     .arbol-punto {
         display: inline-block;
         width: 4px;
@@ -362,7 +404,8 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         min-width: 4px;
         border-radius: 50%;
         background: var(--color-borde-hover);
-        margin: 0 8px;
+        margin: 0 calc((var(--arbol-control) - 4px) / 2);
+        flex-shrink: 0;
     }
 </style>
 
@@ -393,7 +436,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
                     <?php foreach ($columnasExtra as $columnaExtra): ?>
                     <th class="arbol-celda-extra"><?= htmlspecialchars($columnaExtra['etiqueta']) ?></th>
                     <?php endforeach; ?>
-                    <th><?= htmlspecialchars($etiquetaColumnaArbol ?? 'Línea / Motor / Proyecto') ?></th>
+                    <th class="arbol-celda-etiqueta"><?= htmlspecialchars($etiquetaColumnaArbol ?? 'Línea / Motor / Proyecto') ?></th>
                     <?php foreach ($columnasAnios as $columna): ?>
                     <th class="<?= $columna['grupo'] ?>" data-clave="<?= htmlspecialchars($columna['clave']) ?>"><?= htmlspecialchars($columna['etiqueta']) ?></th>
                     <?php endforeach; ?>
@@ -410,7 +453,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
             </thead>
             <tbody>
                 <?php if (empty($arbolDatos)): ?>
-                <tr><td colspan="<?= count($columnasAnios) + 1 + count($columnasExtra) ?>" class="texto-atenuado">No hay datos para mostrar.</td></tr>
+                <tr><td colspan="<?= count($columnasAnios) + 1 + count($columnasExtra) ?>" class="texto-atenuado arbol-celda-vacia">No hay datos para mostrar.</td></tr>
                 <?php endif; ?>
                 <?php foreach ($arbolDatos as $nodoLinea): ?>
                 <?php renderFilaArbolAnalisis($nodoLinea, $columnasAnios, null, $columnasExtra); ?>
@@ -544,13 +587,26 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    tabla.querySelectorAll('.arbol-boton-expandir').forEach(function (boton) {
-        boton.addEventListener('click', function () {
-            var fila = boton.closest('.arbol-fila');
-            var expandidoActual = fila.dataset.expandido !== '0';
-            fila.dataset.expandido = expandidoActual ? '0' : '1';
-            fila.classList.toggle('arbol-contraido', expandidoActual);
-            actualizarVisibilidad();
+    function alternarFila(fila) {
+        var expandidoActual = fila.dataset.expandido !== '0';
+        fila.dataset.expandido = expandidoActual ? '0' : '1';
+        fila.classList.toggle('arbol-contraido', expandidoActual);
+        var boton = fila.querySelector('.arbol-boton-expandir');
+        if (boton) {
+            boton.setAttribute('aria-expanded', expandidoActual ? 'false' : 'true');
+        }
+        actualizarVisibilidad();
+    }
+
+    // Un solo listener por celda de descripción: cubre el clic en el botón y en el texto
+    // (pensado para táctil, donde el botón solo es un blanco pequeño). Se ignora mientras se
+    // está renombrando (hay un <input> dentro).
+    tabla.querySelectorAll('.arbol-fila-expandible .arbol-celda-etiqueta').forEach(function (celda) {
+        celda.addEventListener('click', function (evento) {
+            if (evento.target.closest('input')) {
+                return;
+            }
+            alternarFila(celda.closest('.arbol-fila'));
         });
     });
 
