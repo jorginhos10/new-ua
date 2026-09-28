@@ -2,9 +2,9 @@
 /**
  * Cáscara de ?ruta=analisis (solo SA raíz — ver AnalisisControlador::verificarAcceso()): sin la
  * barra de módulo habitual, en su lugar una franja de máx. 2rem con las 4 pestañas a la
- * izquierda y el toggle de 3 vías (Tiempo real/Repositorio/Usuario) a la derecha. El sidebar se
- * colapsa automáticamente al entrar (ver script al final), reutilizando tal cual el mecanismo de
- * app.js — no se toca su localStorage, solo se fuerza la clase en esta página.
+ * izquierda y el toggle de 3 vías (Tiempo real/Repositorio/Usuario) a la derecha. El sidebar ya
+ * viene colapsado desde el HTML en esta página (ver vista/parciales/sidebar.php) — sin JS, para
+ * que no se vea abrirse y cerrarse al cargar.
  *
  * Variables esperadas del controlador (con valores por defecto cuando no aplican a la pestaña
  * activa): $tab, $vista, $tituloPagina, $rolVista, $pestanaArbol, $versiones, $versionIdActual,
@@ -339,11 +339,6 @@ require __DIR__ . '/../parciales/encabezado.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    var barraLateral = document.querySelector('.barra-lateral');
-    if (barraLateral) {
-        barraLateral.classList.add('colapsada');
-    }
-
     var botonImportarPresupuesto = document.getElementById('analisis-boton-importar-presupuesto');
     var archivoImportarPresupuesto = document.getElementById('analisis-archivo-importar-presupuesto');
     var formImportarPresupuesto = document.getElementById('analisis-form-importar-presupuesto');
