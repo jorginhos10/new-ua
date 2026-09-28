@@ -352,7 +352,112 @@ class AnalisisControlador
         ];
         $tituloPagina = $tituloPaginaPorTab[$tab] ?? 'Análisis · Articulación PDI';
 
+        // Exportar (GET, las 3 pestañas de árbol, en los 3 modos): se resuelve aquí, después de
+        // armar el árbol, para que el archivo salga exactamente con lo que la página mostraría
+        // (misma versión, dependencia, lado y fecha de corte).
+        if (($_GET['accion'] ?? '') === 'exportar_arbol') {
+            $this->exportarArbol($tab, $vista, $lado, $arbolDatos, $totalesGenerales, $columnasAnios, $columnasExtra, $etiquetaColumnaArbol, $versiones, $versionIdActual, $dependenciaFiltroActual, $anioVigenteNumero, $fechaCorte, $modoColumnas);
+
+            return;
+        }
+
         require __DIR__ . '/../vista/analisis/index.php';
+    }
+
+    /**
+     * .xlsx de solo lectura con el árbol tal como se ve: columnas extra (Código / Proyecto(s) PDI),
+     * descripción sangrada por nivel, todas las columnas de año disponibles (también las que la
+     * página tiene plegadas con "Año anterior"/"Últimos 5 años") y la fila Total al final.
+     */
+    private function exportarArbol(string $tab, string $vista, string $lado, array $arbolDatos, array $totalesGenerales, array $columnasAnios, array $columnasExtra, string $etiquetaColumnaArbol, array $versiones, ?int $versionIdActual, ?string $dependenciaFiltroActual, int $anioVigenteNumero, string $fechaCorte, string $modoColumnas): void
+    {
+        $nombreHoja = match ($tab) {
+            'programacion' => $lado === 'ingresos' ? 'Ingresos' : 'Egresos',
+            'proyectos' => 'Proyectos',
+            default => 'Articulación PDI',
+        };
+        $titulo = match ($tab) {
+            'programacion' => 'Programación presupuestal ' . $anioVigenteNumero . ' — ' . $nombreHoja,
+            'proyectos' => 'Proyectos',
+            default => 'Articulación PDI',
+        };
+
+        $descripcionModo = 'Tiempo real';
+        if ($vista === 'repositorio') {
+            $nombreVersion = 'sin versiones guardadas';
+            foreach ($versiones as $version) {
+                if ((int) $version['id'] === (int) $versionIdActual) {
+                    $nombreVersion = $version['nombre'] . ' (' . date('d/m/Y H:i', strtotime($version['creado_en'])) . ')';
+                    break;
+                }
+            }
+            $descripcionModo = 'Repositorio — ' . $nombreVersion;
+        } elseif ($vista === 'usuario') {
+            $descripcionModo = 'Usuario — ' . ($dependenciaFiltroActual ?? '');
+        }
+
+        $encabezados = array_merge(
+            array_column($columnasExtra, 'etiqueta'),
+            [$etiquetaColumnaArbol],
+            array_column($columnasAnios, 'etiqueta')
+        );
+
+        $filas = [];
+        $this->aplanarArbolParaExportar($arbolDatos, 0, $columnasAnios, $columnasExtra, $filas);
+
+        if (!empty($filas)) {
+            $filaTotal = array_fill(0, count($columnasExtra), ['valor' => '', 'estilo' => 3]);
+            $filaTotal[] = ['valor' => 'Total', 'estilo' => 3];
+            foreach ($columnasAnios as $columna) {
+                $filaTotal[] = ['valor' => $this->formatoMonedaExportar((float) ($totalesGenerales[$columna['clave']] ?? 0.0)), 'estilo' => 3];
+            }
+            $filas[] = $filaTotal;
+        }
+
+        $filasPrevias = [
+            [['valor' => $titulo, 'estilo' => 4]],
+            ['Modo', $descripcionModo],
+        ];
+        if ($modoColumnas === 'completo') {
+            $filasPrevias[] = ['Fecha de corte', date('d/m/Y', strtotime($fechaCorte))];
+        }
+        $filasPrevias[] = ['Generado', date('d/m/Y H:i')];
+        $filasPrevias[] = [];
+
+        $prefijoArchivo = match ($tab) {
+            'programacion' => 'programacion_' . ($lado === 'ingresos' ? 'ingresos' : 'egresos'),
+            'proyectos' => 'proyectos',
+            default => 'articulacion_pdi',
+        };
+
+        GeneradorXlsx::descargarHojas($prefijoArchivo . '_' . $anioVigenteNumero . '_' . $vista . '.xlsx', [[
+            'nombre' => $nombreHoja,
+            'filasPrevias' => $filasPrevias,
+            'encabezados' => $encabezados,
+            'filas' => empty($filas) ? [['No hay datos para mostrar.']] : $filas,
+        ]]);
+        exit;
+    }
+
+    /** Padre antes que sus hijos; la profundidad sangra la descripción y las raíces/totales van en negrita. */
+    private function aplanarArbolParaExportar(array $nodos, int $profundidad, array $columnasAnios, array $columnasExtra, array &$filas): void
+    {
+        foreach ($nodos as $nodo) {
+            $enNegrita = $profundidad === 0 || !empty($nodo['esTotal']);
+            $celda = static fn (string $texto): array|string => $enNegrita ? ['valor' => $texto, 'estilo' => 4] : $texto;
+
+            $fila = [];
+            foreach ($columnasExtra as $columnaExtra) {
+                $fila[] = $celda((string) ($nodo[$columnaExtra['clave']] ?? ''));
+            }
+            $fila[] = $celda(str_repeat('    ', $profundidad) . $nodo['etiqueta']);
+            foreach ($columnasAnios as $columna) {
+                $fila[] = $celda($this->formatoMonedaExportar((float) ($nodo['valores'][$columna['clave']] ?? 0.0)));
+            }
+            $filas[] = $fila;
+
+            $this->aplanarArbolParaExportar($nodo['hijos'] ?? [], $profundidad + 1, $columnasAnios, $columnasExtra, $filas);
+        }
     }
 
     /** Árbol Línea > Motor > Proyecto de siempre — portado de vista/dev/pruebas/arbol.php. */

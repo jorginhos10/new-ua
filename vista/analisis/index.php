@@ -225,6 +225,12 @@ require __DIR__ . '/../parciales/encabezado.php';
     </nav>
 
     <div class="analisis-acciones">
+        <?php
+        // Exportar de las pestañas de árbol: la misma URL que se está viendo (lado, versión,
+        // dependencia, fecha de corte) + accion — el controlador arma el árbol igual que para la
+        // página y lo descarga (ver AnalisisControlador::exportarArbol()).
+        $urlExportarArbol = 'index.php?' . http_build_query(array_merge($_GET, ['ruta' => 'analisis', 'tab' => $tab, 'vista' => $vista, 'accion' => 'exportar_arbol']));
+        ?>
         <?php if ($tab === 'programacion' && $vista === 'tiempo_real'): ?>
         <div class="analisis-grupo-datos" title="Plantilla / Importar / Exportar">
             <a class="analisis-icono-boton" href="<?= htmlspecialchars(analisisUrl('programacion', 'tiempo_real', ['lado' => $lado, 'accion' => 'exportar_plantilla_presupuesto'])) ?>" title="Plantilla">
@@ -233,9 +239,9 @@ require __DIR__ . '/../parciales/encabezado.php';
             <button type="button" class="analisis-icono-boton" id="analisis-boton-importar-presupuesto" title="Importar">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </button>
-            <button type="button" class="analisis-icono-boton analisis-icono-exportar" onclick="alert('Prueba de interfaz: esta página todavía no exporta datos reales.')" title="Exportar">
+            <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </button>
+            </a>
         </div>
 
         <form method="POST" action="<?= htmlspecialchars(analisisUrl('programacion', 'tiempo_real', ['lado' => $lado])) ?>" enctype="multipart/form-data" id="analisis-form-importar-presupuesto" style="display:none;">
@@ -250,9 +256,9 @@ require __DIR__ . '/../parciales/encabezado.php';
             <button type="button" class="analisis-icono-boton" id="analisis-boton-importar-presupuesto" title="Importar">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </button>
-            <button type="button" class="analisis-icono-boton analisis-icono-exportar" onclick="alert('Prueba de interfaz: esta página todavía no exporta datos reales.')" title="Exportar">
+            <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </button>
+            </a>
         </div>
 
         <form method="POST" action="<?= htmlspecialchars(analisisUrl('proyectos', 'tiempo_real')) ?>" enctype="multipart/form-data" id="analisis-form-importar-presupuesto" style="display:none;">
@@ -282,9 +288,15 @@ require __DIR__ . '/../parciales/encabezado.php';
             <button type="button" class="analisis-icono-boton" onclick="alert('Prueba de interfaz: esta página todavía no importa datos reales.')" title="Importar">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </button>
-            <button type="button" class="analisis-icono-boton analisis-icono-exportar" onclick="alert('Prueba de interfaz: esta página todavía no exporta datos reales.')" title="Exportar">
+            <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </button>
+            </a>
+        </div>
+        <?php elseif (in_array($tab, ['pdi', 'programacion', 'proyectos'], true)): ?>
+        <div class="analisis-grupo-datos" title="Exportar">
+            <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </a>
         </div>
         <?php endif; ?>
 
