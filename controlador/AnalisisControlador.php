@@ -9,6 +9,8 @@ require_once __DIR__ . '/../modelo/Proyecto.php';
 require_once __DIR__ . '/../modelo/Gasto.php';
 require_once __DIR__ . '/../modelo/GastoExtension.php';
 require_once __DIR__ . '/../modelo/GastoPostgrado.php';
+require_once __DIR__ . '/../modelo/IngresoExtension.php';
+require_once __DIR__ . '/../modelo/IngresoPostgrado.php';
 require_once __DIR__ . '/../modelo/GastoUnisalud.php';
 require_once __DIR__ . '/../modelo/SolicitudMonitor.php';
 require_once __DIR__ . '/../modelo/SolicitudArl.php';
@@ -33,12 +35,24 @@ class AnalisisControlador
 
     private const VISTAS_VALIDAS = ['tiempo_real', 'repositorio', 'usuario'];
 
-    private const ORIGENES_ANALISIS = ['gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'monitores', 'arl'];
+    private const ORIGENES_ANALISIS = ['gasto_principal', 'gasto_extension', 'ingreso_extension', 'gasto_postgrado', 'ingreso_postgrado', 'gasto_unisalud', 'monitores', 'arl'];
+
+    /**
+     * Módulos de Autogestión con ingresos y egresos separados: una sola tarjeta en el selector
+     * (con ambos totales) y pestañas Egresos/Ingresos sobre la tabla — mismo par que usa
+     * PeticionesControlador::PARES_GASTO_INGRESO para peticiones-tipo-detalle.
+     */
+    private const PARES_GASTO_INGRESO = [
+        'gasto_extension' => 'ingreso_extension',
+        'gasto_postgrado' => 'ingreso_postgrado',
+    ];
 
     private const TABLAS_POR_ORIGEN = [
         'gasto_principal' => 'gastos',
         'gasto_extension' => 'gastos_extension',
+        'ingreso_extension' => 'ingresos_extension',
         'gasto_postgrado' => 'gastos_postgrado',
+        'ingreso_postgrado' => 'ingresos_postgrado',
         'gasto_unisalud' => 'gastos_unisalud',
         'monitores' => 'solicitudes_monitores',
         'arl' => 'solicitudes_arl',
@@ -47,7 +61,9 @@ class AnalisisControlador
     private const ETIQUETAS_ORIGEN = [
         'gasto_principal' => 'Gasto',
         'gasto_extension' => 'Extensión',
+        'ingreso_extension' => 'Extensión',
         'gasto_postgrado' => 'Postgrado',
+        'ingreso_postgrado' => 'Postgrado',
         'gasto_unisalud' => 'Unisalud',
         'monitores' => 'Monitores',
         'arl' => 'ARL',
@@ -169,6 +185,15 @@ class AnalisisControlador
         }
 
         $modelo = $this->obtenerModeloModulo($origen);
+
+        // Igual que Extensión/Postgrado al eliminar un ingreso: primero sus gastos automáticos
+        // (por ingreso_id) y LUEGO el ingreso — al revés, la FK ON DELETE SET NULL deja esos
+        // gastos huérfanos para siempre.
+        $origenGastoPar = array_search($origen, self::PARES_GASTO_INGRESO, true);
+        if ($origenGastoPar !== false) {
+            $this->obtenerModeloModulo($origenGastoPar)->eliminarAutomaticosPorIngreso($id);
+        }
+
         $modelo->eliminar($id);
 
         return '';
@@ -607,7 +632,21 @@ class AnalisisControlador
             array_flip($clavesOcultasPorDefecto)
         ));
 
-        $tituloPagina = 'Análisis · Análisis de distribución — ' . self::ETIQUETAS_ORIGEN[$origenActivo];
+        // Pestañas Egresos/Ingresos (null si el módulo activo no tiene ingresos separados).
+        $origenGastoActivo = isset(self::PARES_GASTO_INGRESO[$origenActivo])
+            ? $origenActivo
+            : (array_search($origenActivo, self::PARES_GASTO_INGRESO, true) ?: null);
+        $pestanasGastoIngreso = $origenGastoActivo !== null
+            ? [
+                'egresos' => $origenGastoActivo,
+                'ingresos' => self::PARES_GASTO_INGRESO[$origenGastoActivo],
+                'activo' => $origenActivo === $origenGastoActivo ? 'egresos' : 'ingresos',
+            ]
+            : null;
+        $paresGastoIngreso = self::PARES_GASTO_INGRESO;
+
+        $tituloPagina = 'Análisis · Análisis de distribución — ' . self::ETIQUETAS_ORIGEN[$origenActivo]
+            . ($pestanasGastoIngreso !== null ? ($pestanasGastoIngreso['activo'] === 'ingresos' ? ' · Ingresos' : ' · Egresos') : '');
         $tab = 'analisis';
 
         require __DIR__ . '/../vista/analisis/index.php';
@@ -731,7 +770,9 @@ class AnalisisControlador
         return match ($origen) {
             'gasto_principal' => new Gasto(),
             'gasto_extension' => new GastoExtension(),
+            'ingreso_extension' => new IngresoExtension(),
             'gasto_postgrado' => new GastoPostgrado(),
+            'ingreso_postgrado' => new IngresoPostgrado(),
             'gasto_unisalud' => new GastoUnisalud(),
             'monitores' => new SolicitudMonitor(),
             'arl' => new SolicitudArl(),

@@ -7,17 +7,30 @@
  * AnalisisControlador::obtenerFilasAnalisis()).
  *
  * Variables esperadas: $columnas, $clavesFila, $filasCompletas, $anchosColumna,
- * $indicesOcultosPorDefecto, $origenActivo, $vista, $error.
+ * $indicesOcultosPorDefecto, $origenActivo, $vista, $error, $pestanasGastoIngreso (null, o
+ * ['egresos' => origen, 'ingresos' => origen, 'activo'] para Extensión/Postgrado — mismas
+ * pestañas que peticiones-tipo-detalle).
  */
+
+$pestanasGastoIngreso = $pestanasGastoIngreso ?? null;
 
 $etiquetasModuloTabla = [
     'gasto_principal' => 'Gasto',
     'gasto_extension' => 'Extensión',
+    'ingreso_extension' => 'Extensión',
     'gasto_postgrado' => 'Postgrado',
+    'ingreso_postgrado' => 'Postgrado',
     'gasto_unisalud' => 'Unisalud',
     'monitores' => 'Monitores',
     'arl' => 'ARL',
 ];
+
+$extraPestanaAnalisis = [];
+if ($vista === 'repositorio' && !empty($snapshotIdActual)) {
+    $extraPestanaAnalisis['snapshot_id'] = $snapshotIdActual;
+} elseif ($vista === 'usuario' && !empty($dependenciaFiltroActual)) {
+    $extraPestanaAnalisis['dependencia'] = $dependenciaFiltroActual;
+}
 $idTabla = 'tabla-analisis-' . $origenActivo;
 ?>
 
@@ -73,6 +86,14 @@ $idTabla = 'tabla-analisis-' . $origenActivo;
             </div>
         </div>
     </div>
+
+    <?php if ($pestanasGastoIngreso !== null): ?>
+    <div class="pestanas analisis-pestanas-modulo" style="margin: 0 0 0.5rem;">
+        <?php foreach (['egresos' => 'Egresos', 'ingresos' => 'Ingresos'] as $clavePestana => $etiquetaPestana): ?>
+        <a href="<?= htmlspecialchars(analisisUrl('analisis', $vista, ['origen' => $pestanasGastoIngreso[$clavePestana]] + $extraPestanaAnalisis)) ?>" class="pestana<?= $pestanasGastoIngreso['activo'] === $clavePestana ? ' activa' : '' ?>"><?= $etiquetaPestana ?></a>
+        <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
 
     <?php if (!empty($error)): ?>
     <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
