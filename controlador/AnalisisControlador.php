@@ -99,6 +99,13 @@ class AnalisisControlador
             return;
         }
 
+        // Exportar de "Análisis de distribución": en los 3 modos (exporta lo que se está viendo).
+        if ($tab === 'analisis' && ($_GET['accion'] ?? '') === 'exportar_analisis') {
+            $this->exportarAnalisis($vista);
+
+            return;
+        }
+
         $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
         $anioActivo = $aniosActivos[0] ?? null;
         $dependenciasTodas = (new Dependencia())->obtenerTodas();
@@ -576,23 +583,8 @@ class AnalisisControlador
         $origenActivo = in_array($_GET['origen'] ?? '', self::ORIGENES_ANALISIS, true) ? $_GET['origen'] : 'gasto_principal';
         $anioPresupuestalId = $anioActivo !== null ? (int) $anioActivo['id'] : 0;
 
-        $modeloSnapshot = new Snapshot();
-        $snapshots = $modeloSnapshot->obtenerTodos();
-
-        $snapshotIdActual = null;
-        $dependenciaFiltroActual = null;
-
-        if ($vista === 'repositorio') {
-            $snapshotIdActual = (int) ($_GET['snapshot_id'] ?? ($snapshots[0]['id'] ?? 0));
-            if ($snapshotIdActual <= 0) {
-                $snapshotIdActual = null;
-            }
-        } elseif ($vista === 'usuario') {
-            $dependenciaFiltroActual = trim((string) ($_GET['dependencia'] ?? ''));
-            if ($dependenciaFiltroActual === '' && !empty($dependenciasTodas)) {
-                $dependenciaFiltroActual = $dependenciasTodas[0]['nombre'];
-            }
-        }
+        $snapshots = (new Snapshot())->obtenerTodos();
+        [$snapshotIdActual, $dependenciaFiltroActual] = $this->resolverFiltrosAnalisis($vista, $snapshots, $dependenciasTodas);
 
         $error = $_SESSION['analisis_flash_error'] ?? '';
         unset($_SESSION['analisis_flash_error']);
@@ -650,6 +642,177 @@ class AnalisisControlador
         $tab = 'analisis';
 
         require __DIR__ . '/../vista/analisis/index.php';
+    }
+
+    /**
+     * [snapshot_id, dependencia] de "Análisis de distribución" según el modo: Repositorio → el
+     * snapshot de la URL (o el más reciente); Usuario → la dependencia de la URL (o la primera).
+     * Compartido por la página y por su Exportar, para que el archivo sea exactamente lo que se ve.
+     */
+    private function resolverFiltrosAnalisis(string $vista, array $snapshots, array $dependenciasTodas): array
+    {
+        $snapshotId = null;
+        $dependenciaFiltro = null;
+
+        if ($vista === 'repositorio') {
+            $snapshotId = (int) ($_GET['snapshot_id'] ?? ($snapshots[0]['id'] ?? 0));
+            if ($snapshotId <= 0) {
+                $snapshotId = null;
+            }
+        } elseif ($vista === 'usuario') {
+            $dependenciaFiltro = trim((string) ($_GET['dependencia'] ?? ''));
+            if ($dependenciaFiltro === '' && !empty($dependenciasTodas)) {
+                $dependenciaFiltro = $dependenciasTodas[0]['nombre'];
+            }
+        }
+
+        return [$snapshotId, $dependenciaFiltro];
+    }
+
+    /**
+     * Exportar (GET, botón "Exportar" de Análisis de distribución): un .xlsx de solo lectura con
+     * una hoja "Resumen" (registros y total por módulo) y una hoja por módulo con todas sus
+     * columnas — Extensión y Postgrado en dos hojas (Egresos/Ingresos). Respeta el modo activo:
+     * Tiempo real, el snapshot elegido en Repositorio o la dependencia elegida en Usuario.
+     */
+    private function exportarAnalisis(string $vista): void
+    {
+        $anioActivo = (new AnioPresupuestal())->obtenerActivos()[0] ?? null;
+        $anioPresupuestalId = $anioActivo !== null ? (int) $anioActivo['id'] : 0;
+        $anioTexto = $anioActivo !== null ? (string) $anioActivo['anio'] : date('Y');
+
+        $snapshots = (new Snapshot())->obtenerTodos();
+        [$snapshotId, $dependenciaFiltro] = $this->resolverFiltrosAnalisis($vista, $snapshots, (new Dependencia())->obtenerTodas());
+
+        $descripcionModo = 'Tiempo real';
+        if ($vista === 'repositorio') {
+            $nombreSnapshot = 'sin snapshots guardados';
+            foreach ($snapshots as $snapshot) {
+                if ((int) $snapshot['id'] === $snapshotId) {
+                    $nombreSnapshot = $snapshot['nombre'] . ' (' . date('d/m/Y H:i', strtotime($snapshot['creado_en'])) . ')';
+                    break;
+                }
+            }
+            $descripcionModo = 'Repositorio — ' . $nombreSnapshot;
+        } elseif ($vista === 'usuario') {
+            $descripcionModo = 'Usuario — ' . ($dependenciaFiltro ?? '');
+        }
+
+        $filasResumen = [];
+        $hojasModulo = [];
+        $totalEgresos = 0.0;
+        $totalIngresos = 0.0;
+
+        foreach (self::ORIGENES_ANALISIS as $origen) {
+            $nombreHoja = $this->nombreHojaAnalisis($origen);
+            $resultado = $anioPresupuestalId > 0
+                ? $this->obtenerFilasAnalisis($origen, $anioPresupuestalId, $vista, $snapshotId, $dependenciaFiltro)
+                : ['columnas' => [], 'claves' => [], 'filas' => []];
+            $totalModulo = $anioPresupuestalId > 0
+                ? $this->obtenerTotalModulo($origen, $anioPresupuestalId, $vista, $snapshotId, $dependenciaFiltro)
+                : 0.0;
+
+            if (in_array($origen, self::PARES_GASTO_INGRESO, true)) {
+                $totalIngresos += $totalModulo;
+            } else {
+                $totalEgresos += $totalModulo;
+            }
+
+            $filasResumen[] = [$nombreHoja, (string) count($resultado['filas']), $this->formatoMonedaExportar($totalModulo)];
+            $hojasModulo[] = $this->construirHojaAnalisis($nombreHoja, $resultado);
+        }
+
+        // Egresos e Ingresos nunca se suman entre sí: dos totales separados.
+        $filasResumen[] = [
+            ['valor' => 'Total egresos', 'estilo' => 3],
+            ['valor' => '', 'estilo' => 3],
+            ['valor' => $this->formatoMonedaExportar($totalEgresos), 'estilo' => 3],
+        ];
+        $filasResumen[] = [
+            ['valor' => 'Total ingresos', 'estilo' => 3],
+            ['valor' => '', 'estilo' => 3],
+            ['valor' => $this->formatoMonedaExportar($totalIngresos), 'estilo' => 3],
+        ];
+
+        $hojaResumen = [
+            'nombre' => 'Resumen',
+            'filasPrevias' => [
+                [['valor' => 'Análisis de distribución', 'estilo' => 4]],
+                ['Año presupuestal', $anioTexto],
+                ['Modo', $descripcionModo],
+                ['Generado', date('d/m/Y H:i')],
+                [],
+            ],
+            'encabezados' => ['Módulo', 'Registros', 'Total'],
+            'filas' => $filasResumen,
+        ];
+
+        GeneradorXlsx::descargarHojas('analisis_distribucion_' . $anioTexto . '_' . $vista . '.xlsx', array_merge([$hojaResumen], $hojasModulo));
+        exit;
+    }
+
+    /** "Gasto", "Extensión - Egresos", "Extensión - Ingresos"... (nombre de hoja y fila del Resumen). */
+    private function nombreHojaAnalisis(string $origen): string
+    {
+        $etiqueta = self::ETIQUETAS_ORIGEN[$origen];
+        if (isset(self::PARES_GASTO_INGRESO[$origen])) {
+            return $etiqueta . ' - Egresos';
+        }
+        if (in_array($origen, self::PARES_GASTO_INGRESO, true)) {
+            return $etiqueta . ' - Ingresos';
+        }
+
+        return $etiqueta;
+    }
+
+    /**
+     * Una hoja con las mismas columnas y valores que la tabla de la página (incluidas las que
+     * vienen ocultas por defecto) y una fila de total al final para las columnas de valor.
+     */
+    private function construirHojaAnalisis(string $nombreHoja, array $resultado): array
+    {
+        $claves = $resultado['claves'];
+        $sumasPorClave = array_fill_keys($claves, 0.0);
+        $clavesNumericas = array_fill_keys($claves, false);
+
+        $filas = [];
+        foreach ($resultado['filas'] as $filaCompleta) {
+            $fila = [];
+            foreach ($claves as $clave) {
+                $valor = $filaCompleta[$clave] ?? null;
+                if (is_float($valor)) {
+                    $sumasPorClave[$clave] += $valor;
+                    $clavesNumericas[$clave] = true;
+                    $fila[] = $this->formatoMonedaExportar($valor);
+                } else {
+                    $fila[] = $valor === null ? '—' : (string) $valor;
+                }
+            }
+            $filas[] = $fila;
+        }
+
+        // Cantidad/Costo unitario/Techo también pueden venir como float, pero sumarlos no
+        // significa nada: solo se totalizan las columnas de valor.
+        if (!empty($filas)) {
+            $filaTotal = [];
+            foreach ($claves as $indice => $clave) {
+                $esSumable = $clavesNumericas[$clave] && !in_array($clave, ['cantidad', 'costo_unitario', 'techo'], true);
+                $texto = $indice === 0 ? 'Total' : ($esSumable ? $this->formatoMonedaExportar($sumasPorClave[$clave]) : '');
+                $filaTotal[] = ['valor' => $texto, 'estilo' => 3];
+            }
+            $filas[] = $filaTotal;
+        }
+
+        return [
+            'nombre' => $nombreHoja,
+            'encabezados' => !empty($resultado['columnas']) ? $resultado['columnas'] : ['Sin registros'],
+            'filas' => $filas,
+        ];
+    }
+
+    private function formatoMonedaExportar(float $valor): string
+    {
+        return number_format($valor, 2, ',', '.');
     }
 
     /** Filas crudas (SELECT * equivalente) de un módulo, ya resueltas según el modo de datos. */
