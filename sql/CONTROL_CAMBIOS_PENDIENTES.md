@@ -418,6 +418,125 @@ de datos antes de correrlo.
 
 ---
 
+## 2026-09-27 — Versiones (snapshots) del presupuesto institucional, una lista por lado
+
+- **Archivo:** `sql/presupuesto_institucional_versiones.sql`
+- **Cambio:** dos tablas nuevas. `presupuesto_institucional_versiones` (tipo ENUM
+  'ingreso'/'egreso', nombre, creado_por, creado_en). `presupuesto_institucional_versiones_datos`
+  (version_id FK con `ON DELETE CASCADE`, datos LONGTEXT — un solo JSON con las líneas + valores +
+  mapeo a Proyecto(s) PDI de ese lado en ese momento).
+- **Motivo:** "Guardar versión" (Articulación PDI / Programación presupuestal) vivía en modo
+  Tiempo real y, para Programación presupuestal, seguía usando `VersionArbol` (pensada para
+  Línea/Motor/Proyecto) — pero esa pestaña ya no muestra eso, muestra el presupuesto
+  institucional (ver entrada anterior). Se corrigió doble: (1) "Guardar versión" se movió a modo
+  Repositorio (junto al selector de qué versión ver, no en Tiempo real); (2) Programación
+  presupuestal ahora congela sus propias tablas (`presupuesto_institucional_*`) en vez de
+  reutilizar `VersionArbol` — con lista de versiones INDEPENDIENTE por lado (Egresos e Ingresos
+  nunca comparten versiones, igual que ya no comparten numeración de código). Articulación PDI no
+  cambia: sigue con `VersionArbol` tal cual. Ver plan `el-techo-no-deberia-kind-candle`.
+- **Aplicado en local:** Sí (2026-09-27).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Acompañar con `modelo/PresupuestoInstitucional.php` (nuevos `crearVersion()`,
+  `obtenerVersiones()`, `obtenerArbolConValoresDeVersion()`) y `controlador/AnalisisControlador.php`
+  (selector de versiones acotado por `$lado`) — sin ese código, las tablas no tienen ningún efecto
+  todavía. La creación de estas versiones ya NO vive en `AnalisisControlador` — ver entrada
+  siguiente.
+
+---
+
+## 2026-09-27 — Crear versiones/snapshots se centralizó en ?ruta=repositorios
+
+- **Archivo:** sin cambio de esquema (solo controladores/vistas).
+- **Cambio:** "Guardar versión" (Árbol PDI y Programación presupuestal Egresos/Ingresos) se quitó
+  por completo de `?ruta=analisis` — ese formulario ya no existe ahí, ni en modo Tiempo real ni en
+  Repositorio. Las 3 acciones de creación (`crear_arbol`, `crear_presupuesto` con `tipo`
+  ingreso/egreso) se movieron a `RepositorioControlador`, como secciones nuevas en la página
+  `?ruta=repositorios` que ya existía para el snapshot de BD completa — junto con sus
+  `eliminar_arbol`/`eliminar_presupuesto`. `?ruta=analisis` conserva únicamente el selector de CUÁL
+  versión ver (modo Repositorio), nunca la creación.
+- **Motivo:** el usuario señaló, con una captura de la UI vieja en `?ruta=analisis`, que crear
+  versiones "solo debe ser visible pra superadmin" — `?ruta=analisis` se gatea por
+  `dependencias.es_raiz_superadmin` (a nivel de dependencia), mientras que `?ruta=repositorios` ya
+  se gateaba por `usuarios.es_super_admin` (a nivel de usuario, más estricto) para el snapshot
+  completo. En vez de duplicar ese gate más estricto dentro de Análisis, se centralizó toda
+  creación de versiones/snapshots en la página que ya tenía el gate correcto.
+- **Aplicado en local:** Sí (2026-09-27) — verificado por HTTP+BD: crear/listar/eliminar las 3
+  (Árbol PDI, Egresos, Ingresos) desde `?ruta=repositorios`, confirmando que aparecen sin
+  mezclarse entre secciones ni con snapshots; que las creadas ahí sí aparecen en los selectores de
+  `?ruta=analisis`; que `eliminar` borra la fila padre y sus filas hijas (`ON DELETE CASCADE`); y
+  que un usuario sin `es_super_admin` sigue siendo redirigido fuera de `?ruta=repositorios`.
+- **Aplicado en producción:** Pendiente.
+- **Nota:** `procesarGuardarVersion()`/`procesarGuardarVersionPresupuesto()` (y sus ramas de
+  dispatch en `procesarPost()`) se eliminaron de `AnalisisControlador.php` — quedaron sin uso al
+  quitar el formulario que los disparaba.
+
+---
+
+## 2026-09-27 — La versión elegida en "Repositorio" queda pegada hasta que el admin la cambie
+
+- **Archivo:** `sql/versiones_activas.sql`
+- **Cambio:** columna `activa TINYINT(1) NOT NULL DEFAULT 0` nueva en `arbol_versiones` y en
+  `presupuesto_institucional_versiones`. Solo una fila por grupo (`pestana` en la primera, `tipo`
+  en la segunda) puede tener `activa = 1` a la vez. El script deja marcada como activa la más
+  reciente de cada grupo al migrar, para no cambiar el comportamiento de golpe en las que ya
+  existían.
+- **Motivo:** el selector de "¿qué versión ver?" en modo Repositorio (`?ruta=analisis`) vivía
+  solo en la URL (`?version_id=N`) — sin ese parámetro en la URL (un enlace del menú, otra
+  pestaña del navegador, otro admin entrando de nuevo) siempre se caía a la más reciente por
+  fecha, sin memoria de cuál había elegido el admin la última vez. Se pidió que, una vez elegida,
+  esa quede como la que se muestra hasta que el admin la cambie él mismo — sin depender de que la
+  URL siga cargando el parámetro.
+- **Aplicado en local:** Sí (2026-09-27) — verificado por HTTP+BD (Árbol PDI y Programación
+  presupuestal Egresos): elegir una versión por el selector la marca `activa=1` y desmarca las
+  demás de su grupo; recargar la página sin `version_id` en la URL sigue mostrando esa misma
+  elegida; elegir otra la reemplaza; borrar la versión activa promueve automáticamente la más
+  reciente que quede de su grupo a `activa=1` (para que la columna "Activa" de
+  `?ruta=repositorios` nunca quede vacía mientras Análisis sigue mostrando algo).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Acompañar con `modelo/VersionArbol.php` (`obtenerActiva()`, `marcarActiva()`, y
+  `eliminar()` ahora promueve la siguiente al borrar la activa),
+  `modelo/PresupuestoInstitucional.php` (mismo par de métodos con sufijo `Version*`) y
+  `controlador/AnalisisControlador.php::renderizarArbol()` (ya no usa `$versiones[0]` como
+  respaldo, usa la fila `activa` de cada modelo). También se agregó una columna "Activa" a las
+  tablas de versiones en `vista/repositorios/index.php` para que se vea cuál es, sin tener que
+  entrar a Análisis.
+
+---
+
+## 2026-09-27 — La plantilla de Programación presupuestal deja de traer "Fecha de corte"
+
+- **Archivo:** `sql/presupuesto_institucional_quitar_fecha_corte.sql`
+- **Cambio:** se elimina la columna `fecha_corte` de `presupuesto_institucional_valores`. La
+  columna `valor_corte` (la cifra "Año anterior a corte") se queda igual — solo se quita la
+  FECHA asociada, no el valor.
+- **Motivo:** "esto es netamente de la página" — la fecha que rotula la columna "Año anterior (a
+  corte)" no es un dato del presupuesto institucional que tenga sentido traer por línea en la
+  plantilla (cada línea traía su propia fecha, y encima `obtenerFechaCorteReferencia()` solo
+  tomaba la primera que encontrara con `LIMIT 1`, sin ORDER BY — arbitrario). Ahora esa fecha es
+  exactamente lo mismo que ya existía para Articulación PDI: un `<input type="date">` en la
+  página, vía `$_GET['corte']`, sin persistir en ningún lado ni depender de lo importado.
+- **Bug encontrado y corregido de paso:** al quitar la columna "Fecha de corte" de la plantilla,
+  los índices de las columnas de años históricos en `validarFilasPresupuesto()` tenían un
+  desfase de una columna respecto a como los escribe `exportarPlantillaPresupuesto()` — ya
+  existía ANTES de este cambio (no lo introdujo esta corrección): al reimportar una plantilla
+  recién exportada por la misma plataforma, los 4 valores históricos quedaban corridos una
+  columna a la derecha (el de hace 2 años se guardaba como si fuera el de hace 3, etc., y el de
+  hace 5 años se perdía). Verificado por HTTP con un archivo real (una fila con un valor distinto
+  por año) que cada año importado cae exactamente en su columna.
+- **Aplicado en local:** Sí (2026-09-27) — verificado por HTTP+BD: plantilla exportada sin la
+  columna "Fecha de corte" (6 encabezados fijos + 4 años históricos, en vez de 7 + 4); una fila de
+  prueba con valores distintos por año importa cada uno en el año correcto; la página muestra el
+  `<input type="date">` editable de nuevo (antes un `<span>` de solo lectura) y su cambio por URL
+  (`?corte=AAAA-MM-DD`) sigue funcionando igual que en Articulación PDI.
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Acompañar con `modelo/PresupuestoInstitucional.php` (se quitó
+  `obtenerFechaCorteReferencia()`, ya sin uso, y `fecha_corte` de todo el resto del archivo),
+  `controlador/AnalisisControlador.php` (plantilla export/import sin esa columna, `$fechaCorte`
+  se resuelve igual para las 2 pestañas) y `vista/analisis/parciales/arbol.php` (input de fecha
+  de vuelta, con su manejador en JS).
+
+---
+
 <!--
 Plantilla para la próxima entrada:
 

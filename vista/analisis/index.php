@@ -8,7 +8,8 @@
  *
  * Variables esperadas del controlador (con valores por defecto cuando no aplican a la pestaña
  * activa): $tab, $vista, $tituloPagina, $rolVista, $pestanaArbol, $versiones, $versionIdActual,
- * $snapshots, $snapshotIdActual, $dependenciasTodas, $dependenciaFiltroActual, $error.
+ * $snapshots, $snapshotIdActual, $dependenciasTodas, $dependenciaFiltroActual, $cuadreProyectos
+ * (solo tab=proyectos, Tiempo real), $error.
  */
 
 require_once __DIR__ . '/../../modelo/AnioPresupuestal.php';
@@ -24,6 +25,7 @@ $snapshots = $snapshots ?? [];
 $snapshotIdActual = $snapshotIdActual ?? null;
 $dependenciasTodas = $dependenciasTodas ?? [];
 $dependenciaFiltroActual = $dependenciaFiltroActual ?? null;
+$cuadreProyectos = $cuadreProyectos ?? [];
 $error = $error ?? '';
 $exito = $exito ?? '';
 
@@ -183,34 +185,6 @@ require __DIR__ . '/../parciales/encabezado.php';
         max-width: 220px;
     }
 
-    .analisis-guardar-version {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-    }
-
-    .analisis-guardar-version input[type="text"] {
-        font-size: 0.78rem;
-        border: 1px solid var(--color-borde);
-        border-radius: 6px;
-        padding: 0.2rem 0.4rem;
-        width: 140px;
-    }
-
-    .analisis-guardar-version button {
-        font-size: 0.78rem;
-        border: 1px solid var(--color-borde);
-        border-radius: 6px;
-        padding: 0.22rem 0.6rem;
-        background: var(--color-superficie);
-        cursor: pointer;
-        white-space: nowrap;
-    }
-
-    .analisis-guardar-version button:hover {
-        border-color: var(--color-borde-hover);
-    }
-
     .analisis-contenido {
         flex: 1;
         min-height: 0;
@@ -268,6 +242,23 @@ require __DIR__ . '/../parciales/encabezado.php';
             <input type="hidden" name="accion" value="importar_presupuesto">
             <input type="file" name="archivo" id="analisis-archivo-importar-presupuesto" accept=".xlsx" hidden>
         </form>
+        <?php elseif ($tab === 'proyectos' && $vista === 'tiempo_real'): ?>
+        <div class="analisis-grupo-datos" title="Plantilla / Importar / Exportar">
+            <a class="analisis-icono-boton" href="<?= htmlspecialchars(analisisUrl('proyectos', 'tiempo_real', ['accion' => 'exportar_plantilla_proyectos'])) ?>" title="Plantilla">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            </a>
+            <button type="button" class="analisis-icono-boton" id="analisis-boton-importar-presupuesto" title="Importar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            </button>
+            <button type="button" class="analisis-icono-boton analisis-icono-exportar" onclick="alert('Prueba de interfaz: esta página todavía no exporta datos reales.')" title="Exportar">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </button>
+        </div>
+
+        <form method="POST" action="<?= htmlspecialchars(analisisUrl('proyectos', 'tiempo_real')) ?>" enctype="multipart/form-data" id="analisis-form-importar-presupuesto" style="display:none;">
+            <input type="hidden" name="accion" value="importar_proyectos">
+            <input type="file" name="archivo" id="analisis-archivo-importar-presupuesto" accept=".xlsx" hidden>
+        </form>
         <?php elseif (in_array($tab, ['pdi', 'programacion'], true) && $vista === 'tiempo_real'): ?>
         <div class="analisis-grupo-datos" title="Plantilla / Importar / Exportar (todavía sin conectar a un backend real)">
             <button type="button" class="analisis-icono-boton" onclick="alert('Prueba de interfaz: esta página todavía no genera una plantilla real de este árbol.')" title="Plantilla">
@@ -280,14 +271,6 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             </button>
         </div>
-        <?php endif; ?>
-
-        <?php if (in_array($tab, ['pdi', 'programacion'], true) && $vista === 'tiempo_real'): ?>
-        <form method="POST" action="<?= htmlspecialchars(analisisUrl($tab, $vista, $tab === 'programacion' ? ['lado' => $lado] : [])) ?>" class="analisis-guardar-version">
-            <input type="hidden" name="accion" value="guardar_version">
-            <input type="text" name="nombre" placeholder="Nombre de la versión…" maxlength="150">
-            <button type="submit" title="Congela gastos/lineas/motores/proyectos/años tal como están ahora">Guardar versión</button>
-        </form>
         <?php endif; ?>
 
         <div class="analisis-toggle">
@@ -335,9 +318,12 @@ require __DIR__ . '/../parciales/encabezado.php';
 <?php endif; ?>
 
 <div class="analisis-contenido">
-    <?php if ($tab === 'pdi' || $tab === 'programacion'): ?>
+    <?php if ($tab === 'pdi' || $tab === 'programacion' || $tab === 'proyectos'): ?>
+        <?php if ($tab === 'proyectos'): ?>
+            <?php require __DIR__ . '/parciales/proyectos-cuadre.php'; ?>
+        <?php endif; ?>
         <?php require __DIR__ . '/parciales/arbol.php'; ?>
-    <?php elseif ($tab === 'analisis'): ?>
+    <?php else: ?>
         <div style="display:flex; gap:0.75rem; flex:1; min-height:0; padding:0.5rem;">
             <div style="width:220px; flex-shrink:0;">
                 <?php require __DIR__ . '/parciales/selector-modulos.php'; ?>
@@ -345,10 +331,6 @@ require __DIR__ . '/../parciales/encabezado.php';
             <div style="flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;">
                 <?php require __DIR__ . '/parciales/tabla-modulo.php'; ?>
             </div>
-        </div>
-    <?php else: ?>
-        <div class="tarjeta" style="margin: 0.5rem; flex: 1; display:flex; align-items:center; justify-content:center;">
-            <p class="texto-atenuado">Proyectos — en blanco hasta nuevo aviso.</p>
         </div>
     <?php endif; ?>
 </div>

@@ -31,7 +31,7 @@ class VersionArbol
     public function obtenerTodos(string $pestana): array
     {
         $consulta = $this->db->prepare(
-            'SELECT v.id, v.nombre, v.creado_en, u.nombre AS creado_por_nombre
+            'SELECT v.id, v.nombre, v.activa, v.creado_en, u.nombre AS creado_por_nombre
              FROM arbol_versiones v
              LEFT JOIN usuarios u ON u.id = v.creado_por
              WHERE v.pestana = :pestana
@@ -42,9 +42,55 @@ class VersionArbol
         return $consulta->fetchAll();
     }
 
+    /**
+     * La versión que "Repositorio" debe mostrar cuando el admin no acaba de elegir otra —
+     * la última que él marcó vía marcarActiva(), o, si ninguna está marcada todavía (o la
+     * marcada se eliminó), la más reciente, igual que el comportamiento de siempre.
+     */
+    public function obtenerActiva(string $pestana): ?array
+    {
+        $consulta = $this->db->prepare(
+            'SELECT id, pestana, nombre, activa, creado_en, creado_por
+             FROM arbol_versiones
+             WHERE pestana = :pestana
+             ORDER BY activa DESC, creado_en DESC, id DESC
+             LIMIT 1'
+        );
+        $consulta->execute(['pestana' => $pestana]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
+    /**
+     * El admin elige, desde el selector de "Repositorio", cuál versión ver — esa elección
+     * queda como la activa para todos (no solo para su propia visita) hasta que él la
+     * cambie de nuevo.
+     */
+    public function marcarActiva(int $id, string $pestana): void
+    {
+        $consultaVerificar = $this->db->prepare('SELECT id FROM arbol_versiones WHERE id = :id AND pestana = :pestana');
+        $consultaVerificar->execute(['id' => $id, 'pestana' => $pestana]);
+        if ($consultaVerificar->fetch() === false) {
+            return;
+        }
+
+        $this->db->beginTransaction();
+
+        try {
+            $this->db->prepare('UPDATE arbol_versiones SET activa = 0 WHERE pestana = :pestana')->execute(['pestana' => $pestana]);
+            $this->db->prepare('UPDATE arbol_versiones SET activa = 1 WHERE id = :id')->execute(['id' => $id]);
+            $this->db->commit();
+        } catch (Throwable $excepcion) {
+            $this->db->rollBack();
+
+            throw $excepcion;
+        }
+    }
+
     public function obtenerPorId(int $id): ?array
     {
-        $consulta = $this->db->prepare('SELECT id, pestana, nombre, creado_en, creado_por FROM arbol_versiones WHERE id = :id');
+        $consulta = $this->db->prepare('SELECT id, pestana, nombre, activa, creado_en, creado_por FROM arbol_versiones WHERE id = :id');
         $consulta->execute(['id' => $id]);
         $fila = $consulta->fetch();
 
@@ -93,9 +139,26 @@ class VersionArbol
 
     public function eliminar(int $id): bool
     {
-        $consulta = $this->db->prepare('DELETE FROM arbol_versiones WHERE id = :id');
+        $fila = $this->obtenerPorId($id);
+        if ($fila === null) {
+            return false;
+        }
 
-        return $consulta->execute(['id' => $id]);
+        $consulta = $this->db->prepare('DELETE FROM arbol_versiones WHERE id = :id');
+        $resultado = $consulta->execute(['id' => $id]);
+
+        if ($resultado && !empty($fila['activa'])) {
+            // Se borró la que estaba marcada como activa: si queda alguna otra de esta
+            // pestaña, la más reciente pasa a ser la nueva activa — para que "Activa" nunca
+            // quede vacía mientras Análisis sigue mostrando algo (el fallback de
+            // obtenerActiva()) y ambos queden de acuerdo.
+            $siguiente = $this->obtenerActiva($fila['pestana']);
+            if ($siguiente !== null) {
+                $this->marcarActiva((int) $siguiente['id'], $fila['pestana']);
+            }
+        }
+
+        return $resultado;
     }
 
     /**

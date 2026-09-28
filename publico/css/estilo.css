@@ -3374,6 +3374,10 @@ a.barra-progreso:hover {
     box-shadow: var(--sombra);
 }
 
+.tarjeta + .tarjeta {
+    margin-top: 1.5rem;
+}
+
 .tarjeta h1 {
     font-size: 1.3rem;
 }

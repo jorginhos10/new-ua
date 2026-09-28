@@ -66,13 +66,19 @@ class AnalisisControlador
         $lado = ($_GET['lado'] ?? '') === 'ingresos' ? 'ingresos' : 'egresos';
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $this->procesarPost($tab, $vista, $pestanaArbol, $lado);
+            $this->procesarPost($tab, $vista);
 
             return;
         }
 
         if ($tab === 'programacion' && $vista === 'tiempo_real' && ($_GET['accion'] ?? '') === 'exportar_plantilla_presupuesto') {
             $this->exportarPlantillaPresupuesto();
+
+            return;
+        }
+
+        if ($tab === 'proyectos' && $vista === 'tiempo_real' && ($_GET['accion'] ?? '') === 'exportar_plantilla_proyectos') {
+            $this->exportarPlantillaProyectos();
 
             return;
         }
@@ -84,19 +90,13 @@ class AnalisisControlador
         // Compartidas por las 4 pestañas — ver vista/analisis/index.php.
         $rolVista = $vista === 'tiempo_real' ? 'admin' : 'consulta';
 
-        if ($tab === 'pdi' || $tab === 'programacion') {
+        if ($tab === 'pdi' || $tab === 'programacion' || $tab === 'proyectos') {
             $this->renderizarArbol($tab, $vista, $pestanaArbol, $rolVista, $dependenciasTodas, $lado);
 
             return;
         }
 
-        if ($tab === 'analisis') {
-            $this->renderizarAnalisis($vista, $rolVista, $anioActivo, $dependenciasTodas);
-
-            return;
-        }
-
-        $this->renderizarProyectos($tab, $vista);
+        $this->renderizarAnalisis($vista, $rolVista, $anioActivo, $dependenciasTodas);
     }
 
     private function verificarAcceso(): void
@@ -124,19 +124,19 @@ class AnalisisControlador
         }
     }
 
-    private function procesarPost(string $tab, string $vista, string $pestanaArbol, string $lado): void
+    private function procesarPost(string $tab, string $vista): void
     {
         $error = '';
         $exito = '';
 
         if ($tab === 'analisis' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'eliminar_celda') {
             $error = $this->procesarEliminarModulo((string) ($_GET['origen'] ?? ''));
-        } elseif (in_array($tab, ['pdi', 'programacion'], true) && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'guardar_version') {
-            $this->procesarGuardarVersion($pestanaArbol);
-            $exito = 'Versión guardada correctamente.';
         } elseif ($tab === 'programacion' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'importar_presupuesto') {
             $error = $this->importarPresupuestoInstitucional();
             $exito = $error === '' ? 'Presupuesto institucional importado correctamente.' : '';
+        } elseif ($tab === 'proyectos' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'importar_proyectos') {
+            $error = $this->importarPresupuestoProyectos();
+            $exito = $error === '' ? 'Proyectos importado correctamente.' : '';
         }
 
         if ($error !== '') {
@@ -174,45 +174,62 @@ class AnalisisControlador
         return '';
     }
 
-    private function procesarGuardarVersion(string $pestana): void
-    {
-        $nombre = trim((string) ($_POST['nombre'] ?? ''));
-        if ($nombre === '') {
-            $etiquetaPestana = $pestana === 'programacion_presupuestal' ? 'Programación presupuestal' : 'Articulación PDI';
-            $nombre = $etiquetaPestana . ' — ' . date('d/m/Y H:i');
-        }
-
-        (new VersionArbol())->crear($pestana, $nombre, (int) $_SESSION['usuario_id']);
-    }
-
     /**
-     * Pestañas 1 y 2 (Articulación PDI / Programación presupuestal). Articulación PDI sigue
-     * siendo el árbol Línea > Motor > Proyecto de siempre (portado de vista/dev/pruebas/arbol.php,
-     * ver construirArbolPdi()); Programación presupuestal ahora muestra el presupuesto
-     * institucional (código jerárquico propio, dos lados Egresos/Ingresos — ver
-     * construirArbolPresupuesto()) en su lugar. Ambos comparten la cáscara (franja superior,
-     * toggle Tiempo real/Repositorio/Usuario, columnas de año) — ver
+     * Pestañas 1, 2 y 4 (Articulación PDI / Programación presupuestal / Proyectos). Articulación
+     * PDI sigue siendo el árbol Línea > Motor > Proyecto de siempre (portado de
+     * vista/dev/pruebas/arbol.php, ver construirArbolPdi()); Programación presupuestal y
+     * Proyectos muestran el presupuesto institucional (código jerárquico propio — ver
+     * construirArbolPresupuesto()), cada una con su propio `tipo` ('ingreso'/'egreso' según
+     * $lado, o 'proyecto' — nunca se mezclan, ver PresupuestoInstitucional). Las 3 comparten la
+     * cáscara (franja superior, toggle Tiempo real/Repositorio/Usuario, columnas de año) — ver
      * vista/analisis/parciales/arbol.php, que solo conoce id/etiqueta/nivel/valores/hijos y no
-     * sabe cuál de los dos árboles está dibujando.
+     * sabe cuál árbol está dibujando.
      */
     private function renderizarArbol(string $tab, string $vista, string $pestanaArbol, string $rolVista, array $dependenciasTodas, string $lado): void
     {
-        $modeloVersion = new VersionArbol();
-        $versiones = $modeloVersion->obtenerTodos($pestanaArbol);
+        $tipoPresupuesto = $lado === 'ingresos' ? 'ingreso' : 'egreso';
+        $esArbolPresupuesto = $tab === 'programacion' || $tab === 'proyectos';
+        $tipoVersion = $tab === 'proyectos' ? 'proyecto' : $tipoPresupuesto;
+
+        // Cada pestaña tiene su propio mecanismo de versiones, cada una con su propia lista:
+        // Articulación PDI sigue usando VersionArbol (gastos/lineas/motores/proyectos);
+        // Programación presupuestal y Proyectos usan PresupuestoInstitucional::obtenerVersiones(),
+        // acotada por `tipo` ('egreso'/'ingreso' o 'proyecto') — nunca comparten lista de
+        // versiones entre sí.
+        $modeloVersiones = $esArbolPresupuesto ? new PresupuestoInstitucional() : new VersionArbol();
+        $versiones = $esArbolPresupuesto
+            ? $modeloVersiones->obtenerVersiones($tipoVersion)
+            : $modeloVersiones->obtenerTodos($pestanaArbol);
 
         $versionIdActual = null;
         $dependenciaFiltroActual = null;
 
-        // Si "Repositorio" está activo pero esta pestaña todavía no tiene ninguna versión
-        // guardada, el árbol debe quedar vacío — sin esto, FuenteDatosAnalisis (versionId=null)
-        // caería de vuelta a los datos en vivo y los mostraría con la etiqueta "Repositorio"
-        // puesta encima, dando cifras que no corresponden a ninguna versión congelada. Solo
-        // aplica al árbol PDI (VersionArbol) — el presupuesto institucional no se congela (fuera
-        // de alcance) y se ve igual en los 3 modos.
+        // Si "Repositorio" está activo pero esta pestaña/lado todavía no tiene ninguna versión
+        // guardada, el árbol debe quedar vacío — sin esto, se caería de vuelta a los datos en
+        // vivo y se mostrarían con la etiqueta "Repositorio" puesta encima, dando cifras que no
+        // corresponden a ninguna versión congelada.
         $sinDatosRepositorio = false;
 
         if ($vista === 'repositorio') {
-            $versionIdActual = (int) ($_GET['version_id'] ?? ($versiones[0]['id'] ?? 0));
+            $versionIdSolicitada = (int) ($_GET['version_id'] ?? 0);
+
+            if ($versionIdSolicitada > 0) {
+                // El admin acaba de elegir, desde el selector, cuál versión ver — esa elección
+                // queda como la activa para todos hasta que él la cambie de nuevo (no solo
+                // para esta visita ni solo mientras la URL conserve version_id).
+                if ($esArbolPresupuesto) {
+                    $modeloVersiones->marcarVersionActiva($versionIdSolicitada, $tipoVersion);
+                } else {
+                    $modeloVersiones->marcarActiva($versionIdSolicitada, $pestanaArbol);
+                }
+                $versionIdActual = $versionIdSolicitada;
+            } else {
+                $versionActiva = $esArbolPresupuesto
+                    ? $modeloVersiones->obtenerVersionActiva($tipoVersion)
+                    : $modeloVersiones->obtenerActiva($pestanaArbol);
+                $versionIdActual = $versionActiva !== null ? (int) $versionActiva['id'] : 0;
+            }
+
             if ($versionIdActual <= 0) {
                 $versionIdActual = null;
                 $sinDatosRepositorio = true;
@@ -236,20 +253,15 @@ class AnalisisControlador
         $anioVigenteNumero = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['anio'] : (int) date('Y');
         $anioAnteriorNumero = $anioVigenteNumero - 1;
 
-        $modoColumnas = $tab === 'programacion' ? 'completo' : 'estructura';
-        $tipoPresupuesto = $lado === 'ingresos' ? 'ingreso' : 'egreso';
+        $modoColumnas = $esArbolPresupuesto ? 'completo' : 'estructura';
 
-        if ($tab === 'programacion') {
-            // La fecha de corte ya no se elige con un selector: es la que quedó guardada al
-            // importar (ver vista/analisis/parciales/arbol.php, sin el <input type="date"> de PDI).
-            $fechaCorteGuardada = (new PresupuestoInstitucional())->obtenerFechaCorteReferencia($tipoPresupuesto, $anioAnteriorNumero);
-            $fechaCorte = $fechaCorteGuardada ?? ($anioAnteriorNumero . date('-m-d'));
-        } else {
-            $fechaCorteDefecto = $anioAnteriorNumero . date('-m-d');
-            $fechaCorte = (string) ($_GET['corte'] ?? $fechaCorteDefecto);
-            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaCorte)) {
-                $fechaCorte = $fechaCorteDefecto;
-            }
+        // La fecha de corte es netamente de la página (una etiqueta para la columna "a corte",
+        // elegida con el <input type="date"> del topbar) — nunca viene de la plantilla, ni se
+        // guarda en BD; por eso ambas pestañas la resuelven igual, desde la URL.
+        $fechaCorteDefecto = $anioAnteriorNumero . date('-m-d');
+        $fechaCorte = (string) ($_GET['corte'] ?? $fechaCorteDefecto);
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaCorte)) {
+            $fechaCorte = $fechaCorteDefecto;
         }
 
         $columnasAnios = [
@@ -276,13 +288,23 @@ class AnalisisControlador
 
         $columnasExtra = [];
         $etiquetaColumnaArbol = 'Línea / Motor / Proyecto';
+        $cuadreProyectos = [];
         if ($tab === 'programacion') {
-            [$arbolDatos, $totalesGenerales] = $this->construirArbolPresupuesto($tipoPresupuesto, $clavesColumnas, $anioVigenteNumero);
+            [$arbolDatos, $totalesGenerales] = $this->construirArbolPresupuesto($tipoPresupuesto, $clavesColumnas, $anioVigenteNumero, $versionIdActual, $sinDatosRepositorio);
             $columnasExtra = [
                 ['clave' => 'codigo', 'etiqueta' => 'Código'],
                 ['clave' => 'proyectosPdi', 'etiqueta' => 'Proyecto(s) PDI'],
             ];
             $etiquetaColumnaArbol = 'Descripción';
+        } elseif ($tab === 'proyectos') {
+            [$arbolDatos, $totalesGenerales] = $this->construirArbolPresupuesto('proyecto', $clavesColumnas, $anioVigenteNumero, $versionIdActual, $sinDatosRepositorio);
+            $columnasExtra = [
+                ['clave' => 'codigo', 'etiqueta' => 'Código'],
+            ];
+            $etiquetaColumnaArbol = 'Descripción';
+            if ($vista === 'tiempo_real') {
+                $cuadreProyectos = $this->calcularCuadreProyectos($arbolDatos, $anioVigenteNumero);
+            }
         } else {
             $fuenteDatos = new FuenteDatosAnalisis($versionIdActual, $dependenciaFiltroActual);
             [$arbolDatos, $totalesGenerales] = $this->construirArbolPdi($fuenteDatos, $columnasAnios, $clavesColumnas, $sinDatosRepositorio);
@@ -292,10 +314,11 @@ class AnalisisControlador
         $exito = $_SESSION['analisis_flash_exito'] ?? '';
         unset($_SESSION['analisis_flash_error'], $_SESSION['analisis_flash_exito']);
 
-        $tituloPagina = 'Análisis · ' . ($tab === 'programacion' ? 'Programación presupuestal' : 'Articulación PDI');
-        if ($tab === 'programacion') {
-            $tituloPagina .= ' ' . $anioVigenteNumero;
-        }
+        $tituloPaginaPorTab = [
+            'programacion' => 'Análisis · Programación presupuestal ' . $anioVigenteNumero,
+            'proyectos' => 'Análisis · Proyectos',
+        ];
+        $tituloPagina = $tituloPaginaPorTab[$tab] ?? 'Análisis · Articulación PDI';
 
         require __DIR__ . '/../vista/analisis/index.php';
     }
@@ -393,12 +416,21 @@ class AnalisisControlador
      * presupuestal — reemplaza ahí a Línea/Motor/Proyecto. $tipo ya es 'ingreso'/'egreso' (no
      * 'ingresos'/'egresos' — esa es la forma de $_GET['lado'], ver resolverAniosPorClave()).
      */
-    private function construirArbolPresupuesto(string $tipo, array $clavesColumnas, int $anioVigenteNumero): array
+    private function construirArbolPresupuesto(string $tipo, array $clavesColumnas, int $anioVigenteNumero, ?int $versionId, bool $sinDatosRepositorio): array
     {
         $anioPorClave = $this->resolverAniosPorClave($anioVigenteNumero);
         $anios = array_values(array_unique(array_values($anioPorClave)));
 
-        $arbolCrudo = (new PresupuestoInstitucional())->obtenerArbolConValores($tipo, $anios);
+        $modeloPresupuesto = new PresupuestoInstitucional();
+
+        if ($sinDatosRepositorio) {
+            $arbolCrudo = [];
+        } elseif ($versionId !== null) {
+            $arbolCrudo = $modeloPresupuesto->obtenerArbolConValoresDeVersion($versionId, $anios);
+        } else {
+            $arbolCrudo = $modeloPresupuesto->obtenerArbolConValores($tipo, $anios);
+        }
+
         $arbolDatos = $this->remapArbolPresupuesto($arbolCrudo, $anioPorClave);
 
         $totalesGenerales = array_fill_keys($clavesColumnas, 0.0);
@@ -409,6 +441,38 @@ class AnalisisControlador
         }
 
         return [$arbolDatos, $totalesGenerales];
+    }
+
+    /**
+     * Cuadre por código raíz entre "Proyectos" (tipo 'proyecto') y Programación presupuestal
+     * Egresos — solo informativo (nunca bloquea guardar/importar), y solo por nivel raíz (no
+     * línea a línea): cuando un código de capítulo (ej. '1.6.0') existe en ambos árboles, se
+     * compara el total del año vigente de cada lado. $arbolDatos ya viene remapeado por clave
+     * ('vigente', no el año literal — ver remapArbolPresupuesto()); Egresos se lee crudo (por
+     * año literal) porque aquí solo hace falta el año vigente, no todo el remapeo de columnas.
+     */
+    private function calcularCuadreProyectos(array $arbolDatos, int $anioVigenteNumero): array
+    {
+        $raicesEgresos = (new PresupuestoInstitucional())->obtenerArbolConValores('egreso', [$anioVigenteNumero]);
+        $totalesEgresosPorCodigo = [];
+        foreach ($raicesEgresos as $raiz) {
+            $totalesEgresosPorCodigo[$raiz['codigo']] = (float) ($raiz['valores'][$anioVigenteNumero] ?? 0.0);
+        }
+
+        $cuadre = [];
+        foreach ($arbolDatos as $raizProyecto) {
+            $totalPresupuesto = $totalesEgresosPorCodigo[$raizProyecto['codigo']] ?? null;
+            $totalProyectos = (float) ($raizProyecto['valores']['vigente'] ?? 0.0);
+            $cuadre[] = [
+                'codigo' => $raizProyecto['codigo'],
+                'descripcion' => $raizProyecto['etiqueta'],
+                'totalProyectos' => $totalProyectos,
+                'totalPresupuesto' => $totalPresupuesto,
+                'diferencia' => $totalPresupuesto !== null ? $totalProyectos - $totalPresupuesto : null,
+            ];
+        }
+
+        return $cuadre;
     }
 
     /** clave de columna de año ('vigente'/'anterior_total'/...) => año calendario real. */
@@ -706,7 +770,7 @@ class AnalisisControlador
         $anioPorClave = $this->resolverAniosPorClave($anioVigenteNumero);
         $anios = array_values(array_unique(array_values($anioPorClave)));
 
-        $encabezados = ['Código', 'Descripción', 'Proyecto(s) PDI', (string) $anioVigenteNumero, 'Año anterior (Final)', 'Año anterior (a corte)', 'Fecha de corte'];
+        $encabezados = ['Código', 'Descripción', 'Proyecto(s) PDI', (string) $anioVigenteNumero, 'Año anterior (Final)', 'Año anterior (a corte)'];
         for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
             $encabezados[] = (string) ($anioVigenteNumero - $desplazamiento);
         }
@@ -726,7 +790,6 @@ class AnalisisControlador
                     $this->formatoNumeroExportar($nodo['valores'][$anioPorClave['vigente']] ?? 0.0),
                     $this->formatoNumeroExportar($nodo['valores'][$anioPorClave['anterior_total']] ?? 0.0),
                     $nodo['valorCorte'] !== null ? $this->formatoNumeroExportar($nodo['valorCorte']) : '',
-                    $nodo['fechaCorte'] ?? '',
                 ];
                 for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
                     $fila[] = $this->formatoNumeroExportar($nodo['valores'][$anioVigenteNumero - $desplazamiento] ?? 0.0);
@@ -833,9 +896,14 @@ class AnalisisControlador
         $modeloProyecto = new Proyecto();
         $lineasValidas = [];
 
+        // 6 columnas fijas (índices 0-5: Código, Descripción, Proyecto(s) PDI, vigente, Año
+        // anterior Final, Año anterior a corte) — los históricos empiezan justo después, en el
+        // índice 6, no en el 7 (antes de quitar "Fecha de corte" había 7 columnas fijas, pero el
+        // desplazamiento seguía sumando como si hubiera 8 — un año histórico se leía siempre una
+        // columna corrida hacia la derecha de la que en verdad le correspondía).
         $indicesHistoricos = [];
         for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
-            $indicesHistoricos[6 + $desplazamiento] = $anioVigenteNumero - $desplazamiento;
+            $indicesHistoricos[4 + $desplazamiento] = $anioVigenteNumero - $desplazamiento;
         }
 
         foreach ($filas as $indice => $fila) {
@@ -893,7 +961,6 @@ class AnalisisControlador
 
             $crudoAnteriorFinal = trim((string) ($fila[4] ?? ''));
             $crudoAnteriorCorte = trim((string) ($fila[5] ?? ''));
-            $fechaCorte = trim((string) ($fila[6] ?? ''));
 
             if ($crudoAnteriorFinal !== '' && !is_numeric($crudoAnteriorFinal)) {
                 $errores[] = "$nombreHoja, fila $numeroFilaExcel: \"Año anterior (Final)\" no es un número válido.";
@@ -903,15 +970,10 @@ class AnalisisControlador
                 $errores[] = "$nombreHoja, fila $numeroFilaExcel: \"Año anterior (a corte)\" no es un número válido.";
                 $filaValida = false;
             }
-            if ($fechaCorte !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaCorte)) {
-                $errores[] = "$nombreHoja, fila $numeroFilaExcel: \"Fecha de corte\" debe tener formato AAAA-MM-DD.";
-                $filaValida = false;
-            }
 
             $valores[$anioAnteriorNumero] = [
                 'valor_final' => $crudoAnteriorFinal !== '' && is_numeric($crudoAnteriorFinal) ? (float) $crudoAnteriorFinal : 0.0,
                 'valor_corte' => $crudoAnteriorCorte !== '' && is_numeric($crudoAnteriorCorte) ? (float) $crudoAnteriorCorte : null,
-                'fecha_corte' => $fechaCorte !== '' ? $fechaCorte : null,
             ];
 
             foreach ($indicesHistoricos as $indiceColumna => $anioHistorico) {
@@ -938,11 +1000,186 @@ class AnalisisControlador
         return $lineasValidas;
     }
 
-    /** Pestaña 4: en blanco "hasta nuevo aviso" (instrucción explícita del usuario). */
-    private function renderizarProyectos(string $tab, string $vista): void
+    /**
+     * Plantilla de "Proyectos" (GET, botón "Plantilla" — solo Tiempo real): una sola hoja
+     * "Proyectos", sin columna Proyecto(s) PDI (esta pestaña no se asocia a la tabla `proyectos`
+     * real) ni Fecha de corte (esa es siempre de la página, ver renderizarArbol()).
+     */
+    private function exportarPlantillaProyectos(): void
     {
-        $tituloPagina = 'Análisis · Proyectos';
+        $usuarioActual = (new Usuario())->obtenerPorId((int) $_SESSION['usuario_id']);
+        $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
+        $anioVigenteRegistro = $aniosActivos[0] ?? null;
+        $anioVigenteNumero = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['anio'] : (int) date('Y');
+        $anioPorClave = $this->resolverAniosPorClave($anioVigenteNumero);
+        $anios = array_values(array_unique(array_values($anioPorClave)));
 
-        require __DIR__ . '/../vista/analisis/index.php';
+        $encabezados = ['Código', 'Descripción', (string) $anioVigenteNumero, 'Año anterior (Final)', 'Año anterior (a corte)'];
+        for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
+            $encabezados[] = (string) ($anioVigenteNumero - $desplazamiento);
+        }
+
+        $planas = $this->aplanarArbolPresupuesto((new PresupuestoInstitucional())->obtenerArbolConValores('proyecto', $anios));
+
+        $filas = [];
+        foreach ($planas as $nodo) {
+            $fila = [
+                $nodo['codigo'],
+                $nodo['etiqueta'],
+                $this->formatoNumeroExportar($nodo['valores'][$anioPorClave['vigente']] ?? 0.0),
+                $this->formatoNumeroExportar($nodo['valores'][$anioPorClave['anterior_total']] ?? 0.0),
+                $nodo['valorCorte'] !== null ? $this->formatoNumeroExportar($nodo['valorCorte']) : '',
+            ];
+            for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
+                $fila[] = $this->formatoNumeroExportar($nodo['valores'][$anioVigenteNumero - $desplazamiento] ?? 0.0);
+            }
+            $filas[] = $fila;
+        }
+
+        GeneradorXlsx::descargarPlantillaMultihoja('proyectos.xlsx', [
+            ['nombre' => 'Proyectos', 'encabezados' => $encabezados, 'filas' => $filas],
+        ], [
+            'plantilla' => 'presupuesto_proyectos',
+            'usuario_id' => (int) $_SESSION['usuario_id'],
+            'usuario_nombre' => $usuarioActual['nombre'] ?? '',
+        ]);
+        exit;
+    }
+
+    /**
+     * Importa "Proyectos" desde el archivo subido (POST, botón "Importar" — solo Tiempo real).
+     * Una sola hoja, todo o nada — mismo patrón que importarPresupuestoInstitucional() pero sin
+     * la pareja Egresos/Ingresos.
+     */
+    private function importarPresupuestoProyectos(): string
+    {
+        if (empty($_FILES['archivo']['tmp_name']) || $_FILES['archivo']['error'] !== UPLOAD_ERR_OK) {
+            return 'Selecciona un archivo .xlsx válido para importar.';
+        }
+
+        $ruta = $_FILES['archivo']['tmp_name'];
+
+        try {
+            $metadatos = LectorXlsx::leerMetadatos($ruta);
+        } catch (Throwable $excepcion) {
+            return 'No se pudo leer el archivo: ' . $excepcion->getMessage();
+        }
+
+        if (($metadatos['SPPI_Origen'] ?? '') !== GeneradorXlsx::FIRMA_PLATAFORMA || ($metadatos['SPPI_Plantilla'] ?? '') !== 'presupuesto_proyectos') {
+            return 'Este archivo no parece haber sido descargado desde la plataforma. Usa el botón "Plantilla" para descargar una plantilla nueva y diligénciala sin quitarle sus metadatos.';
+        }
+
+        try {
+            $filas = LectorXlsx::leerHojaPorNombre($ruta, 'Proyectos');
+        } catch (Throwable $excepcion) {
+            return 'No se pudo leer el archivo: ' . $excepcion->getMessage();
+        }
+
+        array_shift($filas);
+
+        $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
+        $anioVigenteRegistro = $aniosActivos[0] ?? null;
+        $anioVigenteNumero = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['anio'] : (int) date('Y');
+
+        $errores = [];
+        $lineas = $this->validarFilasProyectos($filas, $anioVigenteNumero, $errores);
+
+        if (!empty($errores)) {
+            return "No se importó nada porque se encontraron errores:\n" . implode("\n", $errores);
+        }
+
+        if (empty($lineas)) {
+            return 'No hay filas válidas para importar.';
+        }
+
+        try {
+            (new PresupuestoInstitucional())->guardarLoteUnico('proyecto', $lineas, (int) $_SESSION['usuario_id']);
+        } catch (Throwable $excepcion) {
+            return 'No se pudo importar el archivo. Verifica los datos e inténtalo de nuevo.';
+        }
+
+        return '';
+    }
+
+    /**
+     * Igual espíritu que validarFilasPresupuesto(), pero para la hoja única de "Proyectos": 5
+     * columnas fijas (índices 0-4: Código, Descripción, vigente, Año anterior Final, Año
+     * anterior a corte — sin Proyecto(s) PDI), históricos en los índices 3+$desplazamiento
+     * (5,6,7,8) — verificado a mano contra exportarPlantillaProyectos().
+     */
+    private function validarFilasProyectos(array $filas, int $anioVigenteNumero, array &$errores): array
+    {
+        $anioAnteriorNumero = $anioVigenteNumero - 1;
+        $lineasValidas = [];
+
+        $indicesHistoricos = [];
+        for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
+            $indicesHistoricos[3 + $desplazamiento] = $anioVigenteNumero - $desplazamiento;
+        }
+
+        foreach ($filas as $indice => $fila) {
+            $numeroFilaExcel = $indice + 2;
+
+            $codigo = trim((string) ($fila[0] ?? ''));
+            $descripcion = trim((string) ($fila[1] ?? ''));
+
+            if ($codigo === '' && $descripcion === '') {
+                continue;
+            }
+
+            if (!preg_match('/^\d+(\.\d+)*$/', $codigo)) {
+                $errores[] = "Proyectos, fila $numeroFilaExcel: código inválido \"$codigo\".";
+                continue;
+            }
+
+            $filaValida = true;
+            $valores = [];
+
+            $crudoVigente = trim((string) ($fila[2] ?? ''));
+            if ($crudoVigente !== '' && !is_numeric($crudoVigente)) {
+                $errores[] = "Proyectos, fila $numeroFilaExcel: \"$anioVigenteNumero\" no es un número válido.";
+                $filaValida = false;
+            }
+            $valores[$anioVigenteNumero] = ['valor_final' => $crudoVigente !== '' && is_numeric($crudoVigente) ? (float) $crudoVigente : 0.0];
+
+            $crudoAnteriorFinal = trim((string) ($fila[3] ?? ''));
+            $crudoAnteriorCorte = trim((string) ($fila[4] ?? ''));
+
+            if ($crudoAnteriorFinal !== '' && !is_numeric($crudoAnteriorFinal)) {
+                $errores[] = "Proyectos, fila $numeroFilaExcel: \"Año anterior (Final)\" no es un número válido.";
+                $filaValida = false;
+            }
+            if ($crudoAnteriorCorte !== '' && !is_numeric($crudoAnteriorCorte)) {
+                $errores[] = "Proyectos, fila $numeroFilaExcel: \"Año anterior (a corte)\" no es un número válido.";
+                $filaValida = false;
+            }
+
+            $valores[$anioAnteriorNumero] = [
+                'valor_final' => $crudoAnteriorFinal !== '' && is_numeric($crudoAnteriorFinal) ? (float) $crudoAnteriorFinal : 0.0,
+                'valor_corte' => $crudoAnteriorCorte !== '' && is_numeric($crudoAnteriorCorte) ? (float) $crudoAnteriorCorte : null,
+            ];
+
+            foreach ($indicesHistoricos as $indiceColumna => $anioHistorico) {
+                $crudo = trim((string) ($fila[$indiceColumna] ?? ''));
+                if ($crudo !== '' && !is_numeric($crudo)) {
+                    $errores[] = "Proyectos, fila $numeroFilaExcel: \"$anioHistorico\" no es un número válido.";
+                    $filaValida = false;
+                }
+                $valores[$anioHistorico] = ['valor_final' => $crudo !== '' && is_numeric($crudo) ? (float) $crudo : 0.0];
+            }
+
+            if (!$filaValida) {
+                continue;
+            }
+
+            $lineasValidas[] = [
+                'codigo' => $codigo,
+                'descripcion' => $descripcion,
+                'proyectos_ids' => [],
+                'valores' => $valores,
+            ];
+        }
+
+        return $lineasValidas;
     }
 }

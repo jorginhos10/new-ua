@@ -15,8 +15,10 @@
  *   se muestran los controles de Año anterior/Últimos 5 años/fecha de corte.
  *
  * Variables esperadas: $arbolDatos, $columnasAnios, $totalesGenerales, $rolVista, $modoColumnas,
- * $fechaCorte, $anioAnteriorNumero, $pestanaArbol, $columnasExtra (array de ['clave'=>...,
- * 'etiqueta'=>...], vacío para Articulación PDI — ver AnalisisControlador::renderizarArbol()).
+ * $fechaCorte, $anioAnteriorNumero, $pestanaArbol, $tab, $vista, $lado, $columnasExtra (array de
+ * ['clave'=>..., 'etiqueta'=>...], vacío para Articulación PDI — ver
+ * AnalisisControlador::renderizarArbol()). El toggle Egresos/Ingresos solo se dibuja para
+ * $tab === 'programacion' — "Proyectos" también usa $modoColumnas 'completo' pero no tiene lados.
  */
 
 function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $padreId, array $columnasExtra = []): void
@@ -367,14 +369,17 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
 <div class="tarjeta arbol-tarjeta">
     <?php if ($modoColumnas === 'completo'): ?>
     <div class="arbol-topbar">
+        <?php if ($tab === 'programacion'): ?>
         <div class="arbol-lado-toggle">
             <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => 'egresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'egresos' ? 'activo' : '' ?>">Egresos</a>
             <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => 'ingresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'ingresos' ? 'activo' : '' ?>">Ingresos</a>
         </div>
+        <?php endif; ?>
         <div class="arbol-acciones">
             <button type="button" class="arbol-boton-toggle" id="arbol-boton-anterior">Año anterior</button>
             <div class="arbol-corte-envoltorio" id="arbol-corte-envoltorio" hidden>
-                <span>Corte <?= $anioAnteriorNumero ?>: <strong><?= htmlspecialchars($fechaCorte) ?></strong></span>
+                <label for="arbol-fecha-corte">Corte <?= $anioAnteriorNumero ?>:</label>
+                <input type="date" id="arbol-fecha-corte" value="<?= htmlspecialchars($fechaCorte) ?>">
             </div>
             <button type="button" class="arbol-boton-toggle" id="arbol-boton-historico" hidden>Últimos 5 años</button>
         </div>
@@ -504,6 +509,15 @@ document.addEventListener('DOMContentLoaded', function () {
             var nuevoValor = !tabla.classList.contains('mostrar-historico');
             aplicarMostrarHistorico(nuevoValor);
             guardarBool(CLAVE_HISTORICO, nuevoValor);
+        });
+    }
+
+    var campoCorte = document.getElementById('arbol-fecha-corte');
+    if (campoCorte) {
+        campoCorte.addEventListener('change', function () {
+            var url = new URL(window.location.href);
+            url.searchParams.set('corte', campoCorte.value);
+            window.location.href = url.toString();
         });
     }
 
