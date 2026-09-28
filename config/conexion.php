@@ -3,8 +3,8 @@
 class Conexion
 {
     private static $host = 'localhost';
-    private static $bd = 'jorginho_presupuesto';
-    private static $usuario = 'jorginho_presupuesto';
+    private static $bd = 'jorginho_presupuestos';
+    private static $usuario = 'jorginho_presupuestos';
     private static $password = 'jorginho10.';
     private static $pdo = null;
 
