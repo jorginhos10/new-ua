@@ -21,14 +21,16 @@
  * $tab === 'programacion' — "Proyectos" también usa $modoColumnas 'completo' pero no tiene lados.
  */
 
-function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $padreId, array $columnasExtra = []): void
+function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $padreId, array $columnasExtra = [], bool $mostrarVariacion = false, bool $expandido = true): void
 {
     $tieneHijos = !empty($nodo['hijos']);
     $esTotal = $nodo['esTotal'] ?? false;
-    $clases = 'arbol-fila nivel-' . $nodo['nivel'] . ($esTotal ? ' arbol-fila-total' : '') . ($tieneHijos ? ' arbol-fila-expandible' : '');
+    // Recogido por defecto: todas las filas con hijos salen contraídas y solo se ven las raíces.
+    $clases = 'arbol-fila nivel-' . $nodo['nivel'] . ($esTotal ? ' arbol-fila-total' : '') . ($tieneHijos ? ' arbol-fila-expandible' : '')
+        . (!$expandido && $tieneHijos ? ' arbol-contraido' : '') . (!$expandido && $padreId !== null ? ' arbol-fila-oculta' : '');
     echo '<tr class="' . $clases . '" data-id="' . htmlspecialchars($nodo['id']) . '"'
         . ($padreId !== null ? ' data-padre="' . htmlspecialchars($padreId) . '"' : '')
-        . ' data-expandido="1">';
+        . ' data-expandido="' . ($expandido ? '1' : '0') . '">';
 
     foreach ($columnasExtra as $columnaExtra) {
         echo '<td class="arbol-celda-extra">' . htmlspecialchars((string) ($nodo[$columnaExtra['clave']] ?? '')) . '</td>';
@@ -39,7 +41,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
     echo '<td class="arbol-celda-etiqueta"><div class="arbol-etiqueta-contenido">';
     echo '<span class="arbol-sangria" style="width:' . ($nodo['nivel'] * 24) . 'px"></span>';
     if ($tieneHijos) {
-        echo '<button type="button" class="arbol-boton-expandir" data-id="' . htmlspecialchars($nodo['id']) . '" title="Contraer/expandir" aria-label="Contraer/expandir" aria-expanded="true">'
+        echo '<button type="button" class="arbol-boton-expandir" data-id="' . htmlspecialchars($nodo['id']) . '" title="Contraer/expandir" aria-label="Contraer/expandir" aria-expanded="' . ($expandido ? 'true' : 'false') . '">'
             . '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>'
             . '</button>';
     } else {
@@ -52,12 +54,16 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
     foreach ($columnasAnios as $columna) {
         $valor = $nodo['valores'][$columna['clave']] ?? 0.0;
         echo '<td class="arbol-celda-valor ' . $columna['grupo'] . '" data-clave="' . htmlspecialchars($columna['clave']) . '" data-valor="' . number_format($valor, 2, '.', '') . '">$' . number_format($valor, 2, ',', '.') . '</td>';
+        // Celda vacía: el % lo llena el JS (actualizarVariacionesArbol), así también se recalcula al editar.
+        if ($mostrarVariacion && $columna['clave'] === 'vigente') {
+            echo '<td class="arbol-celda-variacion variacion"></td>';
+        }
     }
 
     echo '</tr>';
 
     foreach ($nodo['hijos'] as $hijo) {
-        renderFilaArbolAnalisis($hijo, $columnasAnios, $nodo['id'], $columnasExtra);
+        renderFilaArbolAnalisis($hijo, $columnasAnios, $nodo['id'], $columnasExtra, $mostrarVariacion, $expandido);
     }
 }
 ?>
@@ -200,10 +206,14 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         color: var(--color-texto-secundario);
     }
 
+    /* Misma altura que una fila del árbol (su celda de descripción mide --arbol-control + el
+       padding común) y letra un poco más grande que el resto. */
     .arbol-fila-totales th {
         background: var(--color-fondo);
         border-bottom: 2px solid var(--color-borde-hover);
         font-weight: 700;
+        font-size: 1.05rem;
+        line-height: var(--arbol-control);
     }
 
     /* Filas '.0' del presupuesto institucional (suma de sus descendientes) — mismo tratamiento
@@ -251,6 +261,32 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
     .arbol-tabla.mostrar-historico th.historico,
     .arbol-tabla.mostrar-historico td.historico {
         display: table-cell;
+    }
+
+    .arbol-tabla th.variacion,
+    .arbol-tabla td.variacion {
+        display: none;
+        width: 1%;
+        min-width: 64px;
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .arbol-tabla.mostrar-variacion th.variacion,
+    .arbol-tabla.mostrar-variacion td.variacion {
+        display: table-cell;
+    }
+
+    .arbol-tabla .variacion-positiva {
+        color: var(--color-exito-texto);
+    }
+
+    .arbol-tabla .variacion-negativa {
+        color: var(--color-error-texto);
+    }
+
+    .arbol-tabla .variacion-na {
+        color: var(--color-texto-tenue);
     }
 
     .arbol-fila.nivel-0 {
@@ -409,22 +445,37 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
     }
 </style>
 
+<?php
+// Variación % (vigente vs año anterior Final): solo en la página, nunca en la plantilla.
+$clavesColumnasArbol = array_column($columnasAnios, 'clave');
+$mostrarVariacion = $tab === 'programacion' && in_array('vigente', $clavesColumnasArbol, true) && in_array('anterior_total', $clavesColumnasArbol, true);
+$esSuperAdmin = $esSuperAdmin ?? false;
+$arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
+?>
 <div class="tarjeta arbol-tarjeta">
-    <?php if ($modoColumnas === 'completo'): ?>
+    <?php if ($modoColumnas === 'completo' || $esSuperAdmin): ?>
     <div class="arbol-topbar">
         <?php if ($tab === 'programacion'): ?>
         <div class="arbol-lado-toggle">
-            <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => 'egresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'egresos' ? 'activo' : '' ?>">Egresos</a>
             <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => 'ingresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'ingresos' ? 'activo' : '' ?>">Ingresos</a>
+            <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => 'egresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'egresos' ? 'activo' : '' ?>">Egresos</a>
         </div>
         <?php endif; ?>
         <div class="arbol-acciones">
+            <?php if ($esSuperAdmin): ?>
+            <button type="button" class="arbol-boton-toggle <?= $arbolExpandidoPorDefecto ? 'activo' : '' ?>" id="arbol-boton-expansion-defecto" aria-pressed="<?= $arbolExpandidoPorDefecto ? 'true' : 'false' ?>" title="Solo SA: define si las listas de esta pestaña salen desplegadas (activo) o recogidas para todos">Listas desplegadas</button>
+            <?php endif; ?>
+            <?php if ($modoColumnas === 'completo'): ?>
+            <?php if ($mostrarVariacion): ?>
+            <button type="button" class="arbol-boton-toggle" id="arbol-boton-variacion">Variación</button>
+            <?php endif; ?>
             <button type="button" class="arbol-boton-toggle" id="arbol-boton-anterior">Año anterior</button>
             <div class="arbol-corte-envoltorio" id="arbol-corte-envoltorio" hidden>
                 <label for="arbol-fecha-corte">Corte <?= $anioAnteriorNumero ?>:</label>
                 <input type="date" id="arbol-fecha-corte" value="<?= htmlspecialchars($fechaCorte) ?>">
             </div>
             <button type="button" class="arbol-boton-toggle" id="arbol-boton-historico" hidden>Últimos 5 años</button>
+            <?php endif; ?>
         </div>
     </div>
     <?php endif; ?>
@@ -439,6 +490,9 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
                     <th class="arbol-celda-etiqueta"><?= htmlspecialchars($etiquetaColumnaArbol ?? 'Línea / Motor / Proyecto') ?></th>
                     <?php foreach ($columnasAnios as $columna): ?>
                     <th class="<?= $columna['grupo'] ?>" data-clave="<?= htmlspecialchars($columna['clave']) ?>"><?= htmlspecialchars($columna['etiqueta']) ?></th>
+                    <?php if ($mostrarVariacion && $columna['clave'] === 'vigente'): ?>
+                    <th class="variacion" title="Variación: (<?= htmlspecialchars($columna['etiqueta']) ?> − año anterior Final) / año anterior Final">Var. %</th>
+                    <?php endif; ?>
                     <?php endforeach; ?>
                 </tr>
                 <tr class="arbol-fila-totales" id="arbol-fila-totales">
@@ -448,15 +502,18 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
                     <th class="arbol-celda-etiqueta">Total</th>
                     <?php foreach ($columnasAnios as $columna): ?>
                     <th class="arbol-celda-valor <?= $columna['grupo'] ?>" data-clave="<?= htmlspecialchars($columna['clave']) ?>" data-valor="<?= number_format($totalesGenerales[$columna['clave']], 2, '.', '') ?>">$<?= number_format($totalesGenerales[$columna['clave']], 2, ',', '.') ?></th>
+                    <?php if ($mostrarVariacion && $columna['clave'] === 'vigente'): ?>
+                    <th class="arbol-celda-variacion variacion"></th>
+                    <?php endif; ?>
                     <?php endforeach; ?>
                 </tr>
             </thead>
             <tbody>
                 <?php if (empty($arbolDatos)): ?>
-                <tr><td colspan="<?= count($columnasAnios) + 1 + count($columnasExtra) ?>" class="texto-atenuado arbol-celda-vacia">No hay datos para mostrar.</td></tr>
+                <tr><td colspan="<?= count($columnasAnios) + 1 + count($columnasExtra) + ($mostrarVariacion ? 1 : 0) ?>" class="texto-atenuado arbol-celda-vacia">No hay datos para mostrar.</td></tr>
                 <?php endif; ?>
                 <?php foreach ($arbolDatos as $nodoLinea): ?>
-                <?php renderFilaArbolAnalisis($nodoLinea, $columnasAnios, null, $columnasExtra); ?>
+                <?php renderFilaArbolAnalisis($nodoLinea, $columnasAnios, null, $columnasExtra, $mostrarVariacion, $arbolExpandidoPorDefecto); ?>
                 <?php endforeach; ?>
             </tbody>
         </table>
@@ -485,6 +542,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var CLAVE_ANTERIOR = 'analisis_arbol_mostrar_anterior_' + sufijoClaveArbol;
     var CLAVE_HISTORICO = 'analisis_arbol_mostrar_historico_' + sufijoClaveArbol;
+    var CLAVE_VARIACION = 'analisis_arbol_mostrar_variacion_' + sufijoClaveArbol;
 
     function leerBool(clave) {
         try {
@@ -534,6 +592,24 @@ document.addEventListener('DOMContentLoaded', function () {
         if (botonHistorico) {
             botonHistorico.classList.toggle('activo', mostrar);
         }
+    }
+
+    var botonVariacion = document.getElementById('arbol-boton-variacion');
+
+    function aplicarMostrarVariacion(mostrar) {
+        tabla.classList.toggle('mostrar-variacion', mostrar);
+        if (botonVariacion) {
+            botonVariacion.classList.toggle('activo', mostrar);
+        }
+    }
+
+    if (botonVariacion) {
+        aplicarMostrarVariacion(leerBool(CLAVE_VARIACION));
+        botonVariacion.addEventListener('click', function () {
+            var nuevoValor = !tabla.classList.contains('mostrar-variacion');
+            aplicarMostrarVariacion(nuevoValor);
+            guardarBool(CLAVE_VARIACION, nuevoValor);
+        });
     }
 
     aplicarMostrarAnterior(leerBool(CLAVE_ANTERIOR));
@@ -598,6 +674,51 @@ document.addEventListener('DOMContentLoaded', function () {
         actualizarVisibilidad();
     }
 
+    // --- Solo SA: estado por defecto (desplegado/recogido) de las listas de esta pestaña, para
+    // todos. Se guarda en BD y además se aplica de una vez a la vista actual. ---
+    function aplicarExpansionATodas(expandido) {
+        filas.forEach(function (fila) {
+            if (!fila.classList.contains('arbol-fila-expandible')) {
+                return;
+            }
+            fila.dataset.expandido = expandido ? '1' : '0';
+            fila.classList.toggle('arbol-contraido', !expandido);
+            var boton = fila.querySelector('.arbol-boton-expandir');
+            if (boton) {
+                boton.setAttribute('aria-expanded', expandido ? 'true' : 'false');
+            }
+        });
+        actualizarVisibilidad();
+    }
+
+    var botonExpansionDefecto = document.getElementById('arbol-boton-expansion-defecto');
+    if (botonExpansionDefecto) {
+        botonExpansionDefecto.addEventListener('click', function () {
+            var nuevoValor = !botonExpansionDefecto.classList.contains('activo');
+            var datos = new FormData();
+            datos.append('accion', 'configurar_expansion_arbol');
+            datos.append('expandido', nuevoValor ? '1' : '0');
+
+            botonExpansionDefecto.disabled = true;
+            fetch(window.location.href, { method: 'POST', body: datos, credentials: 'same-origin' })
+                .then(function (respuesta) { return respuesta.json(); })
+                .then(function (resultado) {
+                    if (!resultado.ok) {
+                        throw new Error(resultado.error || 'No se pudo guardar.');
+                    }
+                    botonExpansionDefecto.classList.toggle('activo', nuevoValor);
+                    botonExpansionDefecto.setAttribute('aria-pressed', nuevoValor ? 'true' : 'false');
+                    aplicarExpansionATodas(nuevoValor);
+                })
+                .catch(function (error) {
+                    alert('No se pudo guardar la configuración: ' + error.message);
+                })
+                .then(function () {
+                    botonExpansionDefecto.disabled = false;
+                });
+        });
+    }
+
     // Un solo listener por celda de descripción: cubre el clic en el botón y en el texto
     // (pensado para táctil, donde el botón solo es un blanco pequeño). Se ignora mientras se
     // está renombrando (hay un <input> dentro).
@@ -657,6 +778,33 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // --- Variación % = (vigente − anterior Final) / anterior Final; N.A. si no se puede calcular. ---
+    function actualizarVariacionesArbol() {
+        Array.prototype.forEach.call(tabla.querySelectorAll('.arbol-celda-variacion'), function (celda) {
+            var fila = celda.parentNode;
+            var celdaVigente = fila.querySelector('[data-clave="vigente"]');
+            var celdaAnterior = fila.querySelector('[data-clave="anterior_total"]');
+            var vigente = celdaVigente ? parseFloat(celdaVigente.dataset.valor) : NaN;
+            var anterior = celdaAnterior ? parseFloat(celdaAnterior.dataset.valor) : NaN;
+            var variacion = (vigente - anterior) / anterior * 100;
+
+            celda.classList.remove('variacion-positiva', 'variacion-negativa', 'variacion-na');
+            if (!isFinite(variacion)) {
+                celda.textContent = 'N.A.';
+                celda.classList.add('variacion-na');
+                return;
+            }
+            celda.textContent = (variacion > 0 ? '+' : '') + variacion.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+            if (variacion > 0) {
+                celda.classList.add('variacion-positiva');
+            } else if (variacion < 0) {
+                celda.classList.add('variacion-negativa');
+            }
+        });
+    }
+
+    actualizarVariacionesArbol();
+
     Array.prototype.forEach.call(tabla.querySelectorAll('.arbol-fila.nivel-2 td.arbol-celda-valor'), function (celda) {
         celda.addEventListener('dblclick', function () {
             if (rolVistaArbol !== 'admin' || celda.querySelector('input')) {
@@ -691,6 +839,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 recalcularTotalesGeneralesArbol();
                 actualizarTodasCeldasCorteArbol();
+                actualizarVariacionesArbol();
             }
 
             input.addEventListener('blur', confirmar);

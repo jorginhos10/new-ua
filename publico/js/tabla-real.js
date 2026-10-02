@@ -354,7 +354,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 return texto.indexOf(filtro.valor) !== -1;
             });
             var cumpleBusqueda = busqueda === '' || fila.textContent.toLowerCase().indexOf(busqueda) !== -1;
-            fila.classList.toggle('fila-oculta-filtro', !(cumpleColumnas && cumpleBusqueda));
+            var cumpleGrafica = !filtroGrafica || filtroGrafica.cumple(fila);
+            fila.classList.toggle('fila-oculta-filtro', !(cumpleColumnas && cumpleBusqueda && cumpleGrafica));
         });
 
         actualizarGrafica();
@@ -396,11 +397,84 @@ document.addEventListener('DOMContentLoaded', function () {
     // cualquier columna cuyo contenido no sea numérico (detectado por el propio dato, no por el
     // nombre de la columna), así sirve igual para ARL, Monitores, OPS, Otros o Necesidad. ---
     var vistaGraficaActiva = false;
+    // Filtro por clic en una barra (ver aplicarFiltroGrafica()): null o
+    // { etiqueta, cumple(fila) -> bool, vistaAnterior: { grafica, panel, pagina } }.
+    var filtroGrafica = null;
     var PALETA_SERIES_TDT = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
     // Pareto 80/20 solo en estos paneles (pedido explícito) — Dependencia/Sede/Categoría/Riesgo y
     // cualquier otra dimensión auto-detectada quedan igual que hoy, sin este tratamiento.
     var DIMENSIONES_CON_PARETO = ['Rubro', 'Actividad', 'Proyecto PDI'];
     var claveTipoGrafico = 'peticiones_tabla_grafica_tipo_' + namespace;
+
+    // --- Ancho de las descripciones en las gráficas de barras: flexible como las columnas de la
+    // tabla, independiente por gráfica (dimensión). Se guarda como {dimensión: px} por namespace y
+    // se aplica como variable CSS en el envoltorio de filas de esa gráfica (normal y ampliada). ---
+    var claveAnchoEtiquetaGrafica = 'peticiones_tabla_grafica_etiquetas_' + namespace;
+    var contenedorGraficaEtiquetas = document.getElementById('tdt-grafica');
+
+    function leerAnchosEtiquetaGrafica() {
+        try { return JSON.parse(localStorage.getItem(claveAnchoEtiquetaGrafica) || '{}'); } catch (e) { return {}; }
+    }
+
+    function guardarAnchoEtiquetaGrafica(nombreDimension, ancho) {
+        var anchos = leerAnchosEtiquetaGrafica();
+        if (ancho) {
+            anchos[nombreDimension] = ancho;
+        } else {
+            delete anchos[nombreDimension];
+        }
+        try { localStorage.setItem(claveAnchoEtiquetaGrafica, JSON.stringify(anchos)); } catch (e) { /* sin localStorage */ }
+    }
+
+    function fijarAnchoEtiquetaGrafica(envoltorio, ancho) {
+        if (ancho) {
+            envoltorio.style.setProperty('--grafica-ancho-etiqueta', ancho + 'px');
+        } else {
+            envoltorio.style.removeProperty('--grafica-ancho-etiqueta');
+        }
+    }
+
+    if (contenedorGraficaEtiquetas) {
+        contenedorGraficaEtiquetas.addEventListener('mousedown', function (evento) {
+            var manija = evento.target.closest('.grafica-redimensionador-etiqueta');
+            if (!manija) { return; }
+            var envoltorio = manija.parentNode;
+            var etiquetaReferencia = envoltorio.querySelector('.grafica-barra-etiqueta');
+            if (!etiquetaReferencia) { return; }
+            evento.preventDefault();
+            evento.stopPropagation();
+            var xInicial = evento.clientX;
+            var anchoInicial = etiquetaReferencia.getBoundingClientRect().width;
+            // Tope: que siempre quede espacio para la barra y la cifra.
+            var anchoMaximo = Math.max(60, envoltorio.clientWidth - 220);
+            var anchoFinal = anchoInicial;
+            manija.classList.add('redimensionando');
+            document.body.classList.add('tabla-redimensionando-cursor');
+
+            function mover(eventoMover) {
+                anchoFinal = Math.max(60, Math.min(anchoMaximo, Math.round(anchoInicial + (eventoMover.clientX - xInicial))));
+                fijarAnchoEtiquetaGrafica(envoltorio, anchoFinal);
+            }
+            function soltar() {
+                manija.classList.remove('redimensionando');
+                document.body.classList.remove('tabla-redimensionando-cursor');
+                document.removeEventListener('mousemove', mover);
+                document.removeEventListener('mouseup', soltar);
+                guardarAnchoEtiquetaGrafica(envoltorio.dataset.dimension, anchoFinal);
+            }
+            document.addEventListener('mousemove', mover);
+            document.addEventListener('mouseup', soltar);
+        });
+
+        // Doble clic en la manija: restablece el ancho de esa gráfica (y no amplía el panel).
+        contenedorGraficaEtiquetas.addEventListener('dblclick', function (evento) {
+            var manija = evento.target.closest('.grafica-redimensionador-etiqueta');
+            if (!manija) { return; }
+            evento.stopPropagation();
+            fijarAnchoEtiquetaGrafica(manija.parentNode, 0);
+            guardarAnchoEtiquetaGrafica(manija.parentNode.dataset.dimension, 0);
+        }, true);
+    }
 
     function colorSerieTdt(indice) {
         return PALETA_SERIES_TDT[indice % PALETA_SERIES_TDT.length];
@@ -556,7 +630,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var elementoTooltipGrafica = document.getElementById('tdt-grafica-tooltip');
 
-    function mostrarTooltipGrafica(elementoReferencia, categoria, valor, porcentaje) {
+    function mostrarTooltipGrafica(elementoReferencia, categoria, valor, porcentaje, pista) {
         if (!elementoTooltipGrafica) { return; }
         elementoTooltipGrafica.innerHTML = '';
         elementoTooltipGrafica.appendChild(document.createTextNode(categoria + ': '));
@@ -566,6 +640,12 @@ document.addEventListener('DOMContentLoaded', function () {
         var linea2 = document.createElement('div');
         linea2.textContent = porcentaje.toFixed(1) + '% del total de este panel';
         elementoTooltipGrafica.appendChild(linea2);
+        if (pista) {
+            var linea3 = document.createElement('div');
+            linea3.style.opacity = '0.75';
+            linea3.textContent = pista;
+            elementoTooltipGrafica.appendChild(linea3);
+        }
 
         var rect = elementoReferencia.getBoundingClientRect();
         elementoTooltipGrafica.style.display = 'block';
@@ -583,11 +663,24 @@ document.addEventListener('DOMContentLoaded', function () {
     // "vitales" — el color de la barra/porción no cambia (ni engorda el texto), solo baja de
     // opacidad la cola larga, y el texto usa un tono distinto en cada grupo para que ambos sigan
     // siendo legibles (nunca color solo-atenuado, que era difícil de leer). ---
-    function construirCuerpoBarras(agregados, totalGeneral, aplicarPareto) {
+    function construirCuerpoBarras(agregados, totalGeneral, aplicarPareto, dimension) {
+        var nombreDimension = dimension.nombre;
         var contenedor = document.createElement('div');
         contenedor.className = 'grafica-panel-cuerpo';
         var maxValor = agregados.reduce(function (acc, a) { return Math.max(acc, a.valor); }, 0) || 1;
         var acumuladoPct = 0;
+
+        // Las filas van en un envoltorio propio: el cuerpo hace scroll, y así la manija (una sola,
+        // como el borde de una columna) cubre el alto de TODAS las filas, no solo lo visible.
+        var envoltorioFilas = document.createElement('div');
+        envoltorioFilas.className = 'grafica-barras-filas';
+        envoltorioFilas.dataset.dimension = nombreDimension;
+        fijarAnchoEtiquetaGrafica(envoltorioFilas, leerAnchosEtiquetaGrafica()[nombreDimension] || 0);
+        var manijaEtiqueta = document.createElement('span');
+        manijaEtiqueta.className = 'redimensionador-columna grafica-redimensionador-etiqueta';
+        manijaEtiqueta.title = 'Arrastra para cambiar el ancho de las descripciones (doble clic: restablecer)';
+        envoltorioFilas.appendChild(manijaEtiqueta);
+        contenedor.appendChild(envoltorioFilas);
 
         agregados.forEach(function (item, indice) {
             var fila = document.createElement('div');
@@ -624,12 +717,20 @@ document.addEventListener('DOMContentLoaded', function () {
             if (aplicarPareto) { valorSpan.style.color = esVital ? 'var(--color-pareto-destacado)' : 'var(--color-texto)'; }
             fila.appendChild(valorSpan);
 
-            fila.addEventListener('mouseenter', function () { mostrarTooltipGrafica(fila, item.categoria, item.valor, porcentaje); });
+            fila.addEventListener('mouseenter', function () { mostrarTooltipGrafica(fila, item.categoria, item.valor, porcentaje, 'Clic para ver estas filas en la tabla'); });
             fila.addEventListener('mouseleave', ocultarTooltipGrafica);
-            fila.addEventListener('focus', function () { mostrarTooltipGrafica(fila, item.categoria, item.valor, porcentaje); });
+            fila.addEventListener('focus', function () { mostrarTooltipGrafica(fila, item.categoria, item.valor, porcentaje, 'Enter para ver estas filas en la tabla'); });
             fila.addEventListener('blur', ocultarTooltipGrafica);
 
-            contenedor.appendChild(fila);
+            fila.addEventListener('click', function () { aplicarFiltroGrafica(dimension, item.categoria); });
+            fila.addEventListener('keydown', function (evento) {
+                if (evento.key === 'Enter' || evento.key === ' ') {
+                    evento.preventDefault();
+                    aplicarFiltroGrafica(dimension, item.categoria);
+                }
+            });
+
+            envoltorioFilas.appendChild(fila);
         });
 
         return contenedor;
@@ -647,7 +748,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return ['M', cx, cy, 'L', p1.x, p1.y, 'A', r, r, 0, grande, 1, p2.x, p2.y, 'Z'].join(' ');
     }
 
-    function construirCuerpoTorta(agregados, totalGeneral, tamanoGrande, aplicarPareto) {
+    function construirCuerpoTorta(agregados, totalGeneral, tamanoGrande, aplicarPareto, dimension) {
         var contenedor = document.createElement('div');
         contenedor.className = 'grafica-panel-cuerpo grafica-torta-cuerpo';
 
@@ -737,7 +838,7 @@ document.addEventListener('DOMContentLoaded', function () {
             function resaltar() {
                 filaLeyenda.classList.add('resaltada');
                 if (porcionSvg) { porcionSvg.classList.add('resaltada'); }
-                mostrarTooltipGrafica(filaLeyenda, item.categoria, item.valor, porcentaje);
+                mostrarTooltipGrafica(filaLeyenda, item.categoria, item.valor, porcentaje, 'Clic para ver estas filas en la tabla');
             }
             function quitarResaltado() {
                 filaLeyenda.classList.remove('resaltada');
@@ -752,6 +853,21 @@ document.addEventListener('DOMContentLoaded', function () {
             if (porcionSvg) {
                 porcionSvg.addEventListener('mouseenter', resaltar);
                 porcionSvg.addEventListener('mouseleave', quitarResaltado);
+            }
+
+            // Igual que las barras: la porción y su fila de leyenda filtran la tabla.
+            function filtrarPorEsta() { aplicarFiltroGrafica(dimension, item.categoria); }
+            filaLeyenda.addEventListener('click', filtrarPorEsta);
+            filaLeyenda.addEventListener('keydown', function (evento) {
+                if (evento.key === 'Enter' || evento.key === ' ') {
+                    evento.preventDefault();
+                    filtrarPorEsta();
+                }
+            });
+            // Torta de una sola porción (o total en 0): el único círculo pertenece a la primera
+            // categoría, no a todas.
+            if (porcionSvg && (agregados.length === 1 || totalGeneral > 0)) {
+                porcionSvg.addEventListener('click', filtrarPorEsta);
             }
 
             leyenda.appendChild(filaLeyenda);
@@ -981,8 +1097,8 @@ document.addEventListener('DOMContentLoaded', function () {
             var tipo = leerTipoGrafico(dimension.nombre);
             var aplicarPareto = DIMENSIONES_CON_PARETO.indexOf(dimension.nombre) !== -1;
             var cuerpo2 = tipo === 'torta'
-                ? construirCuerpoTorta(agregados, totalGeneral, esExpandido, aplicarPareto)
-                : construirCuerpoBarras(agregados, totalGeneral, aplicarPareto);
+                ? construirCuerpoTorta(agregados, totalGeneral, esExpandido, aplicarPareto, dimension)
+                : construirCuerpoBarras(agregados, totalGeneral, aplicarPareto, dimension);
             panel.appendChild(cuerpo2);
         }
 
@@ -1234,8 +1350,107 @@ document.addEventListener('DOMContentLoaded', function () {
         actualizarGrafica();
     }
 
-    if (botonVistaTabla) { botonVistaTabla.addEventListener('click', activarVistaTabla); }
-    if (botonVistaGrafica) { botonVistaGrafica.addEventListener('click', activarVistaGrafica); }
+    // --- Barras como filtro: clic en una barra → tabla con solo esas filas, y junto al nombre de
+    // la tabla un botón para volver a la vista de donde se vino (gráfica, o gráfica ampliada en
+    // el mismo panel y página). Dimensión normal: filas cuya celda de esa columna es exactamente
+    // la categoría ('(Sin dato)' = vacía). Panel "melt" (ej. Riesgos de ARL): la categoría es una
+    // columna, así que se filtran las filas con valor distinto de 0 en ella. ---
+    var nombreTabla = document.querySelector('.tabla-topbar .tabla-nombre');
+    var envoltorioFiltroGrafica = null;
+
+    function aplicarFiltroGrafica(dimension, categoria) {
+        var cumple;
+        if (dimension.esMelt) {
+            var columnaMelt = (dimension.columnasMelt || []).filter(function (c) { return c.etiqueta === categoria; })[0];
+            if (!columnaMelt) { return; }
+            cumple = function (fila) {
+                var celda = fila.children[columnaMelt.indice + 1];
+                return !!celda && parseNumeroCeldaTdt(celda.textContent) !== 0;
+            };
+        } else {
+            var valorBuscado = categoria === '(Sin dato)' ? '' : categoria;
+            cumple = function (fila) {
+                var celda = fila.children[dimension.indice + 1];
+                return !!celda && celda.textContent.trim() === valorBuscado;
+            };
+        }
+
+        ocultarTooltipGrafica();
+        filtroGrafica = {
+            etiqueta: (dimension.titulo || dimension.nombre) + ': ' + categoria,
+            cumple: cumple,
+            vistaAnterior: { grafica: vistaGraficaActiva, panel: panelExpandidoNombre, pagina: indiceTarjetaGrafica },
+        };
+
+        activarVistaTabla();
+        aplicarFiltros();
+        mostrarBotonVolverFiltro();
+    }
+
+    function limpiarFiltroGrafica() {
+        filtroGrafica = null;
+        if (envoltorioFiltroGrafica) {
+            envoltorioFiltroGrafica.remove();
+            envoltorioFiltroGrafica = null;
+        }
+    }
+
+    function volverDesdeFiltroGrafica() {
+        if (!filtroGrafica) { return; }
+        var anterior = filtroGrafica.vistaAnterior;
+        limpiarFiltroGrafica();
+        aplicarFiltros();
+        if (anterior.grafica) {
+            panelExpandidoNombre = anterior.panel;
+            indiceTarjetaGrafica = anterior.pagina;
+            activarVistaGrafica();
+        } else {
+            activarVistaTabla();
+        }
+    }
+
+    function mostrarBotonVolverFiltro() {
+        if (!nombreTabla) { return; }
+        if (envoltorioFiltroGrafica) { envoltorioFiltroGrafica.remove(); }
+
+        var anterior = filtroGrafica.vistaAnterior;
+        var destino = !anterior.grafica ? 'la tabla' : (anterior.panel ? 'la gráfica ampliada' : 'las gráficas');
+
+        envoltorioFiltroGrafica = document.createElement('span');
+        envoltorioFiltroGrafica.className = 'tabla-filtro-grafica';
+
+        var boton = document.createElement('button');
+        boton.type = 'button';
+        boton.className = 'tabla-boton-volver';
+        boton.title = 'Volver a ' + destino;
+        boton.setAttribute('aria-label', 'Volver a ' + destino);
+        boton.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>';
+        boton.addEventListener('click', volverDesdeFiltroGrafica);
+
+        var chip = document.createElement('span');
+        chip.className = 'tabla-filtro-grafica-chip';
+        chip.textContent = filtroGrafica.etiqueta;
+        chip.title = filtroGrafica.etiqueta;
+
+        envoltorioFiltroGrafica.appendChild(boton);
+        envoltorioFiltroGrafica.appendChild(chip);
+        nombreTabla.insertAdjacentElement('afterend', envoltorioFiltroGrafica);
+    }
+
+    // Cambiar de vista a mano descarta el filtro de la barra (si no, la gráfica saldría recortada
+    // a una sola categoría sin aviso).
+    if (botonVistaTabla) {
+        botonVistaTabla.addEventListener('click', function () {
+            if (filtroGrafica) { limpiarFiltroGrafica(); aplicarFiltros(); }
+            activarVistaTabla();
+        });
+    }
+    if (botonVistaGrafica) {
+        botonVistaGrafica.addEventListener('click', function () {
+            if (filtroGrafica) { limpiarFiltroGrafica(); aplicarFiltros(); }
+            activarVistaGrafica();
+        });
+    }
 
     // --- Selección de fila + Editar (navega al formulario real) / Eliminar (real) ---
     var casillaSeleccionarTodo = document.getElementById('tdt-seleccionar-todo');

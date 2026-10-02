@@ -537,6 +537,22 @@ de datos antes de correrlo.
 
 ---
 
+## 2026-10-02 — Listas desplegadas/recogidas por defecto en las pestañas árbol de Análisis (solo SA)
+
+- **Archivo:** `sql/analisis_arbol_configuracion.sql`
+- **Cambio:** nueva tabla `analisis_arbol_configuracion` (`pestana` PK: 'pdi' / 'programacion' /
+  'proyectos', `expandido` 0/1, `actualizado_por`, `actualizado_en`).
+- **Motivo:** el SA (`usuarios.es_super_admin`) define con el botón "Listas desplegadas" de cada
+  pestaña árbol de `?ruta=analisis` si las listas salen desplegadas o recogidas para todos. Sin
+  fila guardada = desplegado (el comportamiento de siempre), así que la tabla vacía no cambia nada.
+- **Aplicado en local:** Sí (2026-10-02).
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Acompañar con `modelo/AnalisisArbolConfiguracion.php`,
+  `controlador/AnalisisControlador.php` (acción POST `configurar_expansion_arbol`, responde JSON)
+  y `vista/analisis/parciales/arbol.php` (botón y estado inicial de las filas).
+
+---
+
 <!--
 Plantilla para la próxima entrada:
 

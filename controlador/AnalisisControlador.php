@@ -18,6 +18,9 @@ require_once __DIR__ . '/../modelo/Snapshot.php';
 require_once __DIR__ . '/../modelo/VersionArbol.php';
 require_once __DIR__ . '/../modelo/FuenteDatosAnalisis.php';
 require_once __DIR__ . '/../modelo/PresupuestoInstitucional.php';
+require_once __DIR__ . '/../modelo/AnalisisArbolConfiguracion.php';
+require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
+require_once __DIR__ . '/../modelo/IngresoUnisalud.php';
 require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
 require_once __DIR__ . '/PeticionesControlador.php';
@@ -54,6 +57,9 @@ class AnalisisControlador
         'gasto_postgrado' => 'gastos_postgrado',
         'ingreso_postgrado' => 'ingresos_postgrado',
         'gasto_unisalud' => 'gastos_unisalud',
+        // Solo para el % de asignación de la tarjeta Unisalud del selector; no es un origen
+        // seleccionable (no está en ORIGENES_ANALISIS).
+        'ingreso_unisalud' => 'ingresos_unisalud',
         'monitores' => 'solicitudes_monitores',
         'arl' => 'solicitudes_arl',
     ];
@@ -76,10 +82,16 @@ class AnalisisControlador
     {
         $this->verificarAcceso();
 
-        $tab = in_array($_GET['tab'] ?? '', self::TABS_VALIDAS, true) ? $_GET['tab'] : 'pdi';
+        $tab = in_array($_GET['tab'] ?? '', self::TABS_VALIDAS, true) ? $_GET['tab'] : 'programacion';
         $vista = in_array($_GET['vista'] ?? '', self::VISTAS_VALIDAS, true) ? $_GET['vista'] : 'tiempo_real';
         $pestanaArbol = $tab === 'programacion' ? 'programacion_presupuestal' : 'articulacion_pdi';
-        $lado = ($_GET['lado'] ?? '') === 'ingresos' ? 'ingresos' : 'egresos';
+        $lado = ($_GET['lado'] ?? '') === 'egresos' ? 'egresos' : 'ingresos';
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'configurar_expansion_arbol') {
+            $this->guardarExpansionArbol($tab);
+
+            return;
+        }
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $this->procesarPost($tab, $vista);
@@ -145,6 +157,42 @@ class AnalisisControlador
             header('Location: index.php?ruta=dashboard');
             exit;
         }
+    }
+
+    /** `usuarios.es_super_admin` (el SA), no la dependencia raíz que ya exige verificarAcceso(). */
+    private function esSuperAdmin(): bool
+    {
+        $usuarioActual = (new Usuario())->obtenerPorId((int) $_SESSION['usuario_id']);
+
+        return $usuarioActual !== null && (int) ($usuarioActual['es_super_admin'] ?? 0) === 1;
+    }
+
+    /**
+     * POST por fetch desde el botón "Listas desplegadas" del árbol (solo SA): guarda si las listas
+     * de esta pestaña salen desplegadas o recogidas para todos. Responde JSON, sin redirigir.
+     */
+    private function guardarExpansionArbol(string $tab): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        if (!$this->esSuperAdmin()) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Solo el SA puede cambiar esta configuración.']);
+
+            return;
+        }
+
+        if (!in_array($tab, ['pdi', 'programacion', 'proyectos'], true)) {
+            http_response_code(400);
+            echo json_encode(['ok' => false, 'error' => 'Pestaña no válida.']);
+
+            return;
+        }
+
+        $expandido = ($_POST['expandido'] ?? '') === '1';
+        $guardado = (new AnalisisArbolConfiguracion())->guardarExpandido($tab, $expandido, (int) $_SESSION['usuario_id']);
+
+        echo json_encode(['ok' => $guardado, 'expandido' => $expandido]);
     }
 
     private function procesarPost(string $tab, string $vista): void
@@ -351,6 +399,9 @@ class AnalisisControlador
             'proyectos' => 'Análisis · Proyectos',
         ];
         $tituloPagina = $tituloPaginaPorTab[$tab] ?? 'Análisis · Articulación PDI';
+
+        $esSuperAdmin = $this->esSuperAdmin();
+        $arbolExpandidoPorDefecto = (new AnalisisArbolConfiguracion())->obtenerExpandido($tab);
 
         // Exportar (GET, las 3 pestañas de árbol, en los 3 modos): se resuelve aquí, después de
         // armar el árbol, para que el archivo salga exactamente con lo que la página mostraría
@@ -701,6 +752,10 @@ class AnalisisControlador
                 : 0.0;
         }
 
+        [$techosPorModulo, $asignacionPorModulo, $distribucionPorModulo] = $this->obtenerIndicadoresSelector(
+            $anioActivo, $vista, $snapshotIdActual, $dependenciaFiltroActual, $dependenciasTodas, $totalesPorModulo
+        );
+
         $resultado = $anioPresupuestalId > 0
             ? $this->obtenerFilasAnalisis($origenActivo, $anioPresupuestalId, $vista, $snapshotIdActual, $dependenciaFiltroActual)
             : ['columnas' => [], 'claves' => [], 'filas' => []];
@@ -747,6 +802,94 @@ class AnalisisControlador
         $tab = 'analisis';
 
         require __DIR__ . '/../vista/analisis/index.php';
+    }
+
+    /** Autogestión: módulo de egresos de la tarjeta => su origen de ingresos. */
+    private const INGRESOS_AUTOGESTION_SELECTOR = [
+        'gasto_extension' => 'ingreso_extension',
+        'gasto_postgrado' => 'ingreso_postgrado',
+        'gasto_unisalud' => 'ingreso_unisalud',
+    ];
+
+    /**
+     * Indicadores de las tarjetas del selector de módulos (ver selector-modulos.php):
+     * - techos: barra de Gasto = egresos contra el presupuesto del año activo (el mismo
+     *   denominador de "Resumen de gastos" del Dashboard); en modo Usuario, contra el techo de esa
+     *   dependencia — salvo la raíz superadmin, que abarca todas y usa el presupuesto del año.
+     *   Sin techo configurado = sin barra (la vista lo indica con "Sin techo").
+     * - asignación (% de la esquina): Gasto = egresos / techo; Autogestión (Extensión, Postgrado,
+     *   Unisalud) = egresos / ingresos del módulo. Sin denominador = sin %.
+     * - distribución: barra de Autogestión = egresos repartidos por categoría (Gastos /
+     *   Inversiones / Excedentes, y "Otros" para cualquier otra, ej. "Contribución a posgrado").
+     *
+     * @return array{0: array<string, array{avance: float, techo: float, etiqueta: string}>, 1: array<string, array{porcentaje: float, titulo: string}>, 2: array<string, array<string, float>>}
+     */
+    private function obtenerIndicadoresSelector(?array $anioActivo, string $vista, ?int $snapshotId, ?string $dependenciaFiltro, array $dependenciasTodas, array $totalesPorModulo): array
+    {
+        if ($anioActivo === null) {
+            return [[], [], []];
+        }
+
+        $anioId = (int) $anioActivo['id'];
+        $monedaCorta = static fn (float $valor): string => '$' . number_format($valor, 0, ',', '.');
+        $techos = [];
+        $asignacion = [];
+        $distribucion = [];
+
+        $techoGasto = (float) ($anioActivo['presupuesto'] ?? 0);
+        $etiquetaGasto = 'presupuesto ' . $anioActivo['anio'];
+        if ($vista === 'usuario') {
+            $techoGasto = 0.0;
+            foreach ($dependenciasTodas as $dependencia) {
+                if ($dependencia['nombre'] === $dependenciaFiltro) {
+                    if (!empty($dependencia['es_raiz_superadmin'])) {
+                        $techoGasto = (float) ($anioActivo['presupuesto'] ?? 0);
+                    } else {
+                        $techoGasto = (float) ((new PresupuestoDependencia())->obtenerPorAnio($anioId)[(int) $dependencia['id']]['techo'] ?? 0);
+                        $etiquetaGasto = 'techo de ' . $dependencia['nombre'];
+                    }
+                    break;
+                }
+            }
+        }
+        if ($techoGasto > 0) {
+            $egresosGasto = (float) ($totalesPorModulo['gasto_principal'] ?? 0);
+            $techos['gasto_principal'] = ['avance' => $egresosGasto, 'techo' => $techoGasto, 'etiqueta' => $etiquetaGasto];
+            $asignacion['gasto_principal'] = [
+                'porcentaje' => $egresosGasto / $techoGasto * 100,
+                'titulo' => 'Egresos asignados del ' . $etiquetaGasto . ': ' . $monedaCorta($egresosGasto) . ' de ' . $monedaCorta($techoGasto),
+            ];
+        }
+
+        foreach (self::INGRESOS_AUTOGESTION_SELECTOR as $origenEgresos => $origenIngresos) {
+            $egresos = (float) ($totalesPorModulo[$origenEgresos] ?? 0);
+            $ingresos = $totalesPorModulo[$origenIngresos]
+                ?? $this->obtenerTotalModulo($origenIngresos, $anioId, $vista, $snapshotId, $dependenciaFiltro);
+            if ($ingresos > 0) {
+                $asignacion[$origenEgresos] = [
+                    'porcentaje' => $egresos / $ingresos * 100,
+                    'titulo' => 'Egresos asignados de los ingresos: ' . $monedaCorta($egresos) . ' de ' . $monedaCorta($ingresos),
+                ];
+            }
+
+            $porCategoria = ['Gastos' => 0.0, 'Inversiones' => 0.0, 'Excedentes' => 0.0, 'Otros' => 0.0];
+            foreach ($this->obtenerFilasCrudasModulo($origenEgresos, $anioId, $vista, $snapshotId, $dependenciaFiltro) as $fila) {
+                $categoria = (string) ($fila['categoria'] ?? '');
+                $grupo = 'Otros';
+                foreach (['Gastos', 'Inversiones', 'Excedentes'] as $prefijo) {
+                    if (stripos($categoria, $prefijo) === 0) {
+                        $grupo = $prefijo;
+                        break;
+                    }
+                }
+                $porCategoria[$grupo] += $this->obtenerValorFilaModulo($origenEgresos, $fila);
+            }
+            if (array_sum($porCategoria) > 0) {
+                $distribucion[$origenEgresos] = $porCategoria;
+            }
+        }
+
+        return [$techos, $asignacion, $distribucion];
     }
 
     /**
@@ -1042,6 +1185,7 @@ class AnalisisControlador
             'gasto_postgrado' => new GastoPostgrado(),
             'ingreso_postgrado' => new IngresoPostgrado(),
             'gasto_unisalud' => new GastoUnisalud(),
+            'ingreso_unisalud' => new IngresoUnisalud(),
             'monitores' => new SolicitudMonitor(),
             'arl' => new SolicitudArl(),
         };

@@ -14,11 +14,11 @@
 
 require_once __DIR__ . '/../../modelo/AnioPresupuestal.php';
 
-$tab = $tab ?? 'pdi';
+$tab = $tab ?? 'programacion';
 $vista = $vista ?? 'tiempo_real';
 $rolVista = $rolVista ?? 'consulta';
 $pestanaArbol = $pestanaArbol ?? 'articulacion_pdi';
-$lado = $lado ?? 'egresos';
+$lado = $lado ?? 'ingresos';
 $versiones = $versiones ?? [];
 $versionIdActual = $versionIdActual ?? null;
 $snapshots = $snapshots ?? [];
@@ -218,8 +218,8 @@ require __DIR__ . '/../parciales/encabezado.php';
 
 <div class="analisis-barra">
     <nav class="analisis-tabs">
-        <a href="<?= htmlspecialchars(analisisUrl('pdi', $vista)) ?>" class="<?= $tab === 'pdi' ? 'activa' : '' ?>">Articulación PDI</a>
         <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => $lado])) ?>" class="<?= $tab === 'programacion' ? 'activa' : '' ?>">Programación presupuestal <?= htmlspecialchars((string) $anioLabelActivo) ?></a>
+        <a href="<?= htmlspecialchars(analisisUrl('pdi', $vista)) ?>" class="<?= $tab === 'pdi' ? 'activa' : '' ?>">Articulación PDI</a>
         <a href="<?= htmlspecialchars(analisisUrl('analisis', $vista)) ?>" class="<?= $tab === 'analisis' ? 'activa' : '' ?>">Análisis de distribución</a>
         <a href="<?= htmlspecialchars(analisisUrl('proyectos', $vista)) ?>" class="<?= $tab === 'proyectos' ? 'activa' : '' ?>">Proyectos</a>
     </nav>

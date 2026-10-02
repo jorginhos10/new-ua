@@ -4505,6 +4505,27 @@ a.barra-progreso:hover {
     border-color: var(--color-borde-hover);
 }
 
+/* Filtro aplicado desde una barra de la gráfica (tabla-real.js): botón volver + etiqueta. */
+.tabla-filtro-grafica {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+}
+
+.tabla-filtro-grafica-chip {
+    max-width: 420px;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    background: var(--color-primario-suave);
+    color: var(--color-primario-oscuro);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
 .tabla-nombre {
     margin: 0;
     font-size: 1.05rem;
@@ -5183,20 +5204,41 @@ body.tabla-redimensionando-cursor * {
 }
 
 .grafica-fila-barra {
+    cursor: pointer;
     display: grid;
-    grid-template-columns: minmax(70px, 120px) 1fr auto;
+    /* --grafica-ancho-etiqueta: lo fija el usuario arrastrando el borde de las descripciones
+       (ver tabla-real.js); sin él, el ancho de siempre. */
+    grid-template-columns: var(--grafica-ancho-etiqueta, var(--grafica-ancho-etiqueta-defecto)) minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.6rem;
-    padding: 0.25rem 0.1rem;
+    padding: 0.25rem var(--grafica-padding-fila);
     border-radius: 4px;
 }
 
+/* Una sola manija por gráfica de barras, a todo el alto de sus filas, centrada en el espacio
+   entre la descripción y la barra (padding de la fila + ancho de la descripción + medio gap). */
+.grafica-barras-filas {
+    --grafica-ancho-etiqueta-defecto: 120px;
+    --grafica-padding-fila: 0.1rem;
+    position: relative;
+}
+
+.grafica-redimensionador-etiqueta {
+    right: auto;
+    left: calc(var(--grafica-padding-fila) + var(--grafica-ancho-etiqueta, var(--grafica-ancho-etiqueta-defecto)) + 0.3rem - 3px);
+}
+
+/* Descripciones largas: hasta 2 líneas (y "…" si aún no caben); la barra conserva su alto. */
 .grafica-barra-etiqueta {
     font-size: 0.8rem;
+    line-height: 1.25;
     color: var(--color-texto-secundario);
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow-wrap: anywhere;
 }
 
 .grafica-barra-pista {
@@ -5262,6 +5304,7 @@ body.tabla-redimensionando-cursor * {
 }
 
 .grafica-torta-leyenda-fila {
+    cursor: pointer;
     display: grid;
     grid-template-columns: 10px 1fr auto;
     align-items: center;
@@ -5364,9 +5407,16 @@ body.tabla-redimensionando-cursor * {
     height: 260px;
 }
 
+/* Ampliado: solo cambian los valores por defecto; el ancho que el usuario arrastró
+   (--grafica-ancho-etiqueta) sigue mandando, y la manija se ubica con estas mismas variables. */
+.grafica-panel.expandido .grafica-barras-filas {
+    --grafica-ancho-etiqueta-defecto: 220px;
+    --grafica-padding-fila: 0.2rem;
+}
+
 .grafica-panel.expandido .grafica-fila-barra {
-    grid-template-columns: minmax(120px, 220px) 1fr auto;
-    padding: 0.4rem 0.2rem;
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
 }
 
 .grafica-panel.expandido .grafica-barra-pista {
