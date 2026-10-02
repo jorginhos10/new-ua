@@ -2,9 +2,9 @@
 /**
  * Cáscara de ?ruta=analisis (solo SA raíz — ver AnalisisControlador::verificarAcceso()): sin la
  * barra de módulo habitual, en su lugar una franja de máx. 2rem con las 4 pestañas a la
- * izquierda y el toggle de 3 vías (Tiempo real/Repositorio/Usuario) a la derecha. El sidebar se
- * colapsa automáticamente al entrar (ver script al final), reutilizando tal cual el mecanismo de
- * app.js — no se toca su localStorage, solo se fuerza la clase en esta página.
+ * izquierda y el toggle de 3 vías (Tiempo real/Repositorio/Usuario) a la derecha. El sidebar ya
+ * viene colapsado desde el HTML en esta página (ver vista/parciales/sidebar.php) — sin JS, para
+ * que no se vea abrirse y cerrarse al cargar.
  *
  * Variables esperadas del controlador (con valores por defecto cuando no aplican a la pestaña
  * activa): $tab, $vista, $tituloPagina, $rolVista, $pestanaArbol, $versiones, $versionIdActual,
@@ -225,6 +225,12 @@ require __DIR__ . '/../parciales/encabezado.php';
     </nav>
 
     <div class="analisis-acciones">
+        <?php
+        // Exportar de las pestañas de árbol: la misma URL que se está viendo (lado, versión,
+        // dependencia, fecha de corte) + accion — el controlador arma el árbol igual que para la
+        // página y lo descarga (ver AnalisisControlador::exportarArbol()).
+        $urlExportarArbol = 'index.php?' . http_build_query(array_merge($_GET, ['ruta' => 'analisis', 'tab' => $tab, 'vista' => $vista, 'accion' => 'exportar_arbol']));
+        ?>
         <?php if ($tab === 'programacion' && $vista === 'tiempo_real'): ?>
         <div class="analisis-grupo-datos" title="Plantilla / Importar / Exportar">
             <a class="analisis-icono-boton" href="<?= htmlspecialchars(analisisUrl('programacion', 'tiempo_real', ['lado' => $lado, 'accion' => 'exportar_plantilla_presupuesto'])) ?>" title="Plantilla">
@@ -233,9 +239,9 @@ require __DIR__ . '/../parciales/encabezado.php';
             <button type="button" class="analisis-icono-boton" id="analisis-boton-importar-presupuesto" title="Importar">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </button>
-            <button type="button" class="analisis-icono-boton analisis-icono-exportar" onclick="alert('Prueba de interfaz: esta página todavía no exporta datos reales.')" title="Exportar">
+            <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </button>
+            </a>
         </div>
 
         <form method="POST" action="<?= htmlspecialchars(analisisUrl('programacion', 'tiempo_real', ['lado' => $lado])) ?>" enctype="multipart/form-data" id="analisis-form-importar-presupuesto" style="display:none;">
@@ -250,15 +256,30 @@ require __DIR__ . '/../parciales/encabezado.php';
             <button type="button" class="analisis-icono-boton" id="analisis-boton-importar-presupuesto" title="Importar">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </button>
-            <button type="button" class="analisis-icono-boton analisis-icono-exportar" onclick="alert('Prueba de interfaz: esta página todavía no exporta datos reales.')" title="Exportar">
+            <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </button>
+            </a>
         </div>
 
         <form method="POST" action="<?= htmlspecialchars(analisisUrl('proyectos', 'tiempo_real')) ?>" enctype="multipart/form-data" id="analisis-form-importar-presupuesto" style="display:none;">
             <input type="hidden" name="accion" value="importar_proyectos">
             <input type="file" name="archivo" id="analisis-archivo-importar-presupuesto" accept=".xlsx" hidden>
         </form>
+        <?php elseif ($tab === 'analisis'): ?>
+        <?php
+        // Exporta lo que se está viendo: mismo snapshot (Repositorio) o dependencia (Usuario).
+        $extraExportarAnalisis = ['accion' => 'exportar_analisis'];
+        if ($vista === 'repositorio' && !empty($snapshotIdActual)) {
+            $extraExportarAnalisis['snapshot_id'] = $snapshotIdActual;
+        } elseif ($vista === 'usuario' && !empty($dependenciaFiltroActual)) {
+            $extraExportarAnalisis['dependencia'] = $dependenciaFiltroActual;
+        }
+        ?>
+        <div class="analisis-grupo-datos" title="Exportar">
+            <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars(analisisUrl('analisis', $vista, $extraExportarAnalisis)) ?>" title="Exportar a Excel (resumen + una hoja por módulo)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </a>
+        </div>
         <?php elseif (in_array($tab, ['pdi', 'programacion'], true) && $vista === 'tiempo_real'): ?>
         <div class="analisis-grupo-datos" title="Plantilla / Importar / Exportar (todavía sin conectar a un backend real)">
             <button type="button" class="analisis-icono-boton" onclick="alert('Prueba de interfaz: esta página todavía no genera una plantilla real de este árbol.')" title="Plantilla">
@@ -267,9 +288,15 @@ require __DIR__ . '/../parciales/encabezado.php';
             <button type="button" class="analisis-icono-boton" onclick="alert('Prueba de interfaz: esta página todavía no importa datos reales.')" title="Importar">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </button>
-            <button type="button" class="analisis-icono-boton analisis-icono-exportar" onclick="alert('Prueba de interfaz: esta página todavía no exporta datos reales.')" title="Exportar">
+            <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-            </button>
+            </a>
+        </div>
+        <?php elseif (in_array($tab, ['pdi', 'programacion', 'proyectos'], true)): ?>
+        <div class="analisis-grupo-datos" title="Exportar">
+            <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+            </a>
         </div>
         <?php endif; ?>
 
@@ -339,11 +366,6 @@ require __DIR__ . '/../parciales/encabezado.php';
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    var barraLateral = document.querySelector('.barra-lateral');
-    if (barraLateral) {
-        barraLateral.classList.add('colapsada');
-    }
-
     var botonImportarPresupuesto = document.getElementById('analisis-boton-importar-presupuesto');
     var archivoImportarPresupuesto = document.getElementById('analisis-archivo-importar-presupuesto');
     var formImportarPresupuesto = document.getElementById('analisis-form-importar-presupuesto');

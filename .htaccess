@@ -1,0 +1,53 @@
+# new-ua — front controller + URLs amigables + endurecimiento básico.
+#
+# URLs amigables de UN solo segmento: /analisis?tab=proyectos equivale a
+# index.php?ruta=analisis&tab=proyectos. Se evita a propósito /analisis/proyectos (varios
+# segmentos): todas las vistas usan rutas relativas (publico/css/..., index.php?ruta=...), que
+# con un segmento extra resolverían contra la carpeta equivocada.
+#
+# No depende de dónde esté instalado (raíz del dominio o subcarpeta como /new-ua/): la base se
+# calcula sola (ENV BASE), sin RewriteBase fijo.
+
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Base de la instalación (ej. "/new-ua/" en local, "/" si queda en la raíz del dominio).
+    RewriteCond %{REQUEST_URI}::$1 ^(.*?/)(.*)::\2$
+    RewriteRule ^(.*)$ - [E=BASE:%1]
+
+    # --- 1. Nada interno se sirve directo por HTTP (404, sin revelar que existe). ---
+    # Carpetas de código/datos: solo se usan vía require desde index.php.
+    RewriteRule ^(config|controlador|modelo|vista|sql|almacenamiento)(/|$) - [R=404,L,NC]
+    # Archivos/carpetas ocultos en cualquier nivel (.git, .claude, .gitignore, .htaccess...).
+    RewriteRule (^|/)\. - [R=404,L]
+    # Respaldos, volcados y scripts de depuración en la raíz (.claude.zip, *.sql, _debug_*.php...).
+    RewriteRule ^[^/]*\.(sql|zip|md|log|bak)$ - [R=404,L,NC]
+    RewriteRule ^_debug[^/]*$ - [R=404,L,NC]
+
+    # --- 2. Forma vieja → amigable: GET index.php?ruta=X&resto → X?resto. ---
+    # Solo GET: un POST redirigido llegaría como GET y perdería el formulario. Mira THE_REQUEST
+    # (la petición original del navegador), así que no entra en bucle con la regla 4.
+    # 302 (no 301) mientras se valida: un 301 queda cacheado en el navegador aunque se quite
+    # este archivo.
+    RewriteCond %{REQUEST_METHOD} =GET
+    RewriteCond %{THE_REQUEST} \s[^?\s]*?index\.php\?ruta=([a-z0-9-]+)(?:&(\S*))?\s [NC]
+    RewriteRule ^index\.php$ %{ENV:BASE}%1?%2 [R=302,L,NE]
+
+    # --- 3. Sin barra final: /analisis/ → /analisis (con la barra, las rutas relativas se rompen).
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^([a-z0-9-]+)/$ %{ENV:BASE}$1 [R=302,L,NC]
+
+    # --- 4. Amigable → front controller. ---
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^([a-z0-9-]+)$ index.php?ruta=$1 [QSA,L,NC]
+</IfModule>
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

@@ -64,7 +64,12 @@ if (!empty($_SESSION['usuario_id']) && in_array($tipoCuentaActual, ['administrad
 $puedeVerMenu = static fn (string $clave): bool => $menuPermitido === null || isset($menuPermitido[$clave]);
 $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
 ?>
-<aside class="barra-lateral">
+<?php
+// ?ruta=analisis arranca con el sidebar cerrado desde el HTML — si se cerrara por JS al cargar,
+// se vería abrirse y cerrarse (la barra tiene transición de ancho). El botón hamburguesa lo sigue
+// abriendo igual que en el resto de páginas (app.js).
+?>
+<aside class="barra-lateral<?= $rutaActual === 'analisis' ? ' colapsada' : '' ?>">
     <a href="index.php?ruta=dashboard" class="marca">S P P I</a>
         <nav class="menu-lateral">
     <?php if ($tipoCuentaActual === 'administrador'): ?>
