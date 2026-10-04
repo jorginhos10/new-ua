@@ -19,6 +19,7 @@ require_once __DIR__ . '/../modelo/VersionArbol.php';
 require_once __DIR__ . '/../modelo/FuenteDatosAnalisis.php';
 require_once __DIR__ . '/../modelo/PresupuestoInstitucional.php';
 require_once __DIR__ . '/../modelo/AnalisisArbolConfiguracion.php';
+require_once __DIR__ . '/../modelo/TechosMetas.php';
 require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
 require_once __DIR__ . '/../modelo/IngresoUnisalud.php';
 require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
@@ -34,7 +35,7 @@ require_once __DIR__ . '/PeticionesControlador.php';
  */
 class AnalisisControlador
 {
-    private const TABS_VALIDAS = ['pdi', 'programacion', 'analisis', 'proyectos'];
+    private const TABS_VALIDAS = ['pdi', 'programacion', 'analisis', 'proyectos', 'techos'];
 
     private const VISTAS_VALIDAS = ['tiempo_real', 'repositorio', 'usuario'];
 
@@ -124,6 +125,12 @@ class AnalisisControlador
 
         // Compartidas por las 4 pestañas — ver vista/analisis/index.php.
         $rolVista = $vista === 'tiempo_real' ? 'admin' : 'consulta';
+
+        if ($tab === 'techos') {
+            $this->renderizarTechosMetas($vista, $dependenciasTodas);
+
+            return;
+        }
 
         if ($tab === 'pdi' || $tab === 'programacion' || $tab === 'proyectos') {
             $this->renderizarArbol($tab, $vista, $pestanaArbol, $rolVista, $dependenciasTodas, $lado);
@@ -387,7 +394,7 @@ class AnalisisControlador
             }
         } else {
             $fuenteDatos = new FuenteDatosAnalisis($versionIdActual, $dependenciaFiltroActual);
-            [$arbolDatos, $totalesGenerales] = $this->construirArbolPdi($fuenteDatos, $columnasAnios, $clavesColumnas, $sinDatosRepositorio);
+            [$arbolDatos, $totalesGenerales] = $this->construirArbolPdi($fuenteDatos, $columnasAnios, $clavesColumnas, $sinDatosRepositorio, $vista === 'usuario');
         }
 
         $error = $_SESSION['analisis_flash_error'] ?? '';
@@ -512,7 +519,7 @@ class AnalisisControlador
     }
 
     /** Árbol Línea > Motor > Proyecto de siempre — portado de vista/dev/pruebas/arbol.php. */
-    private function construirArbolPdi(FuenteDatosAnalisis $fuenteDatos, array $columnasAnios, array $clavesColumnas, bool $sinDatosRepositorio): array
+    private function construirArbolPdi(FuenteDatosAnalisis $fuenteDatos, array $columnasAnios, array $clavesColumnas, bool $sinDatosRepositorio, bool $modoUsuario): array
     {
         $totalesPorColumna = [];
         foreach ($columnasAnios as $columna) {
@@ -520,9 +527,10 @@ class AnalisisControlador
         }
 
         // El presupuesto institucional (líneas de Egresos con Proyecto(s) PDI) solo aporta al año
-        // VIGENTE — Articulación PDI no muestra otras columnas de todas formas.
+        // VIGENTE — y solo en tiempo real/repositorio: no tiene dependencia, así que en modo
+        // "usuario" no se le puede atribuir a una dependencia puntual.
         $columnaVigente = $columnasAnios[0];
-        if ($columnaVigente['registro'] !== null) {
+        if (!$modoUsuario && $columnaVigente['registro'] !== null) {
             // obtenerAportePorProyecto() espera el AÑO CALENDARIO real (2027), no el id de
             // anios_presupuestales — presupuesto_institucional_valores.anio guarda ese mismo
             // año calendario, nunca el id (ver PresupuestoInstitucional::obtenerArbolConValores()).
@@ -571,6 +579,10 @@ class AnalisisControlador
                         $nodoMotor['valores'][$clave] += $valor;
                     }
 
+                    if ($modoUsuario && !$this->tieneDinero($valoresProyecto)) {
+                        continue;
+                    }
+
                     $nodoMotor['hijos'][] = [
                         'id' => 'proyecto-' . $proyecto['id'],
                         'etiqueta' => $proyecto['codigo'] . ' - ' . $proyecto['nombre'],
@@ -580,10 +592,18 @@ class AnalisisControlador
                     ];
                 }
 
+                if ($modoUsuario && !$this->tieneDinero($nodoMotor['valores'])) {
+                    continue;
+                }
+
                 foreach ($clavesColumnas as $clave) {
                     $nodoLinea['valores'][$clave] += $nodoMotor['valores'][$clave];
                 }
                 $nodoLinea['hijos'][] = $nodoMotor;
+            }
+
+            if ($modoUsuario && !$this->tieneDinero($nodoLinea['valores'])) {
+                continue;
             }
 
             $arbolDatos[] = $nodoLinea;
@@ -597,6 +617,61 @@ class AnalisisControlador
         }
 
         return [$arbolDatos, $totalesGenerales];
+    }
+
+    /**
+     * Pestaña "Techos y Metas": Tiempo real o Usuario (Repositorio no aplica — no hay versiones de
+     * techos). Un bloque a la vez: gasto principal (techo vs asignación) o un módulo de
+     * autogestión (tope vs ingresos).
+     */
+    private function renderizarTechosMetas(string $vista, array $dependenciasTodas): void
+    {
+        $vista = $vista === 'usuario' ? 'usuario' : 'tiempo_real';
+        $bloque = in_array($_GET['bloque'] ?? '', TechosMetas::BLOQUES, true) ? (string) $_GET['bloque'] : 'gastos';
+
+        $dependenciaFiltroActual = null;
+        if ($vista === 'usuario') {
+            $dependenciaFiltroActual = trim((string) ($_GET['dependencia'] ?? ''));
+            if ($dependenciaFiltroActual === '' && !empty($dependenciasTodas)) {
+                $dependenciaFiltroActual = $dependenciasTodas[0]['nombre'];
+            }
+        }
+
+        $modeloAnio = new AnioPresupuestal();
+        $aniosTodos = $modeloAnio->obtenerTodos();
+        $aniosActivos = $modeloAnio->obtenerActivos();
+        $anioVigenteRegistro = $aniosActivos[0] ?? ($aniosTodos[0] ?? null);
+        $anioVigenteNumero = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['anio'] : (int) date('Y');
+        $anioVigenteId = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['id'] : 0;
+
+        $idPorAnio = [];
+        foreach ($aniosTodos as $filaAnio) {
+            $idPorAnio[(int) $filaAnio['anio']] = (int) $filaAnio['id'];
+        }
+        $aniosVentana = [];
+        for ($anio = $anioVigenteNumero - 4; $anio <= $anioVigenteNumero; $anio++) {
+            $aniosVentana[$anio] = $idPorAnio[$anio] ?? null;
+        }
+
+        $datos = (new TechosMetas())->construirDatos($bloque, $dependenciaFiltroActual, $anioVigenteId, $aniosVentana);
+
+        $tab = 'techos';
+        $error = '';
+        $exito = '';
+        $tituloPagina = 'Análisis · Techos y Metas';
+
+        require __DIR__ . '/../vista/analisis/index.php';
+    }
+
+    private function tieneDinero(array $valores): bool
+    {
+        foreach ($valores as $valor) {
+            if (abs((float) $valor) > 0.005) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

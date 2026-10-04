@@ -164,6 +164,28 @@ class IngresoPostgrado
         return (float) $consulta->fetchColumn();
     }
 
+    /** Ingresos sin archivados (igual que el Dashboard) agrupados por dependencia: [nombre => total]. */
+    public function obtenerTotalesPorDependencia(int $anioPresupuestalId): array
+    {
+        $consulta = $this->db->prepare(
+            "SELECT i.dependencia, COALESCE(SUM(i.valor_total), 0) AS total FROM ingresos_postgrado i
+             WHERE i.anio_presupuestal_id = :anio_presupuestal_id
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'ingreso_postgrado' AND pa.origen_id = i.id AND pa.accion IN ('archivada', 'expediente')
+                )
+             GROUP BY i.dependencia"
+        );
+        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
+
+        $totales = [];
+        foreach ($consulta->fetchAll() as $fila) {
+            $totales[$fila['dependencia']] = (float) $fila['total'];
+        }
+
+        return $totales;
+    }
+
     /**
      * Igual que obtenerTotalPorAnio(), pero acotado a un conjunto de dependencias — evita sumar
      * ingresos de dependencias que la persona que consulta no debería ver.
