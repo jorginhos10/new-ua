@@ -276,6 +276,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 aplicarVisibilidadColumna(casilla.dataset.indice, casilla.checked);
                 guardarOcultas(indicesOcultosActuales());
                 ajustarAnchoTabla();
+                actualizarGrafica();
             });
         });
 
@@ -505,6 +506,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function indiceColumnaTdt(nombre) {
         return tdtColumnas.findIndex(function (c) { return c.toLowerCase() === nombre.toLowerCase(); });
+    }
+
+    // Una columna oculta con el visor de columnas tiene su <col> en visibility: collapse; sus
+    // gráficas también se ocultan (y no cuentan para la paginación).
+    function columnaVisibleTdt(indice) {
+        var col = document.getElementById('tdt-col-' + indice);
+        return !col || col.style.visibility !== 'collapse';
     }
 
     function obtenerIndiceValorTdt() {
@@ -1118,8 +1126,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // engancha los `[data-mini-slider]` que ya existen al cargar la página, no los que se crean
     // después dinámicamente). ---
     function construirBarraPaginacionGrafica(totalPaneles) {
-        var contenedorGrafica = document.getElementById('tdt-grafica');
-        var contenedorPaneles = document.getElementById('tdt-grafica-paneles');
+        var contenedorKpis = document.getElementById('tdt-grafica-kpis');
         var barra = document.getElementById('tdt-grafica-paginador');
         var totalPaginas = Math.max(1, Math.ceil(totalPaneles / TAMANO_TARJETA_GRAFICA));
 
@@ -1131,11 +1138,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (indiceTarjetaGrafica >= totalPaginas) { indiceTarjetaGrafica = totalPaginas - 1; }
         if (indiceTarjetaGrafica < 0) { indiceTarjetaGrafica = 0; }
 
+        // Es una celda más de la fila de indicadores (ver tabla-real.js: tarjetasKpi), junto a las
+        // cifras, para que botones y número de página ocupen la misma fila.
         if (!barra) {
             barra = document.createElement('div');
             barra.id = 'tdt-grafica-paginador';
-            barra.className = 'mini-slider-cabecera grafica-paginador';
-            contenedorGrafica.insertBefore(barra, contenedorPaneles);
+            barra.className = 'grafica-stat grafica-paginador';
+            contenedorKpis.appendChild(barra);
         }
 
         barra.innerHTML = '';
@@ -1206,7 +1215,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // (ej. "Dependencia"), nunca se revisaban las demás columnas reales de la tabla (ej. "Tipo"
         // en Monitores, "Perfil" en OPS), aunque existieran.
         var ORIGENES_ESTRUCTURA_FIJA = ['gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes'];
-        var DIMENSIONES_PREFERIDAS = ['Dependencia', 'Actividad', 'Rubro', 'Proyecto PDI', 'Sede'];
+        var DIMENSIONES_PREFERIDAS = ['Dependencia', 'Categoría de gasto', 'Rubro', 'Proyecto PDI', 'Sede', 'Actividad'];
         if (indiceColumnaTdt('Categoría') !== -1) { DIMENSIONES_PREFERIDAS = DIMENSIONES_PREFERIDAS.concat('Categoría'); }
 
         var dimensiones = DIMENSIONES_PREFERIDAS
@@ -1222,6 +1231,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 .filter(function (d) { return d.indice !== indiceValor && indicesYaIncluidos.indexOf(d.indice) === -1 && esDimensionCandidata(d.indice, filasDatos); });
             dimensiones = dimensiones.concat(extras);
         }
+
+        dimensiones = dimensiones.filter(function (d) { return columnaVisibleTdt(d.indice); });
 
         contenedorKpis.innerHTML = '';
 
@@ -1263,14 +1274,20 @@ document.addEventListener('DOMContentLoaded', function () {
             contenedorPaneles.appendChild(avisoSinValor);
             construirBarraPaginacionGrafica(0);
         } else {
-            var paneles = dimensiones.slice();
+            // Actividad va después del PAC: así queda en la segunda página de la gráfica.
+            var DIMENSIONES_AL_FINAL = ['Actividad'];
+            var paneles = dimensiones.filter(function (d) { return DIMENSIONES_AL_FINAL.indexOf(d.nombre) === -1; });
+            var dimensionesAlFinal = dimensiones.filter(function (d) { return DIMENSIONES_AL_FINAL.indexOf(d.nombre) !== -1; });
 
             detectarColumnasMelt().forEach(function (grupo) {
-                paneles.push({ nombre: grupo.prefijo, esMelt: true, columnasMelt: grupo.columnas });
+                var columnasVisibles = grupo.columnas.filter(function (c) { return columnaVisibleTdt(c.indice); });
+                if (columnasVisibles.length >= 2) {
+                    paneles.push({ nombre: grupo.prefijo, esMelt: true, columnasMelt: columnasVisibles });
+                }
             });
 
             var indiceMeses = indiceColumnaTdt('Meses');
-            if (indiceMeses !== -1) {
+            if (indiceMeses !== -1 && columnaVisibleTdt(indiceMeses)) {
                 var valoresPorMes = calcularPacPorMes(filasDatos, indiceMeses, indiceValor);
                 var filasConMeses = filasDatos.filter(function (fila) { return (fila[indiceMeses] || '').trim() !== ''; }).length;
                 paneles.push({
@@ -1282,6 +1299,8 @@ document.addEventListener('DOMContentLoaded', function () {
                     subtitulo: filasConMeses + ' ítem' + (filasConMeses === 1 ? '' : 's') + ' con meses de ejecución asignados'
                 });
             }
+
+            dimensionesAlFinal.forEach(function (dimension) { paneles.push(dimension); });
 
             var panelesAMostrar;
 

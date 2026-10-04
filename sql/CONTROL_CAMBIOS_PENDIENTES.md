@@ -553,6 +553,39 @@ de datos antes de correrlo.
 
 ---
 
+## 2026-10-04 — Categoría de gasto (36 subcategorías de actividad) en gastos
+
+- **Archivo:** `sql/gastos_categoria.sql`
+- **Cambio:** tablas nuevas `categorias_gasto` (36 subcategorías con tokens de texto; sin categoría de activos, porque todos los rubros de gasto son de funcionamiento y el equipo se clasifica por el área misional donde se usa) y
+  `rubro_categoria_gasto` (mapeo por prefijo CPC del rubro a candidatas; `no_aplica` para nómina).
+  Columnas nuevas en `gastos`: `categoria_gasto_id` (FK), `categoria_origen` ('manual',
+  'automatico', 'no_aplica') y `categoria_confianza`.
+- **Motivo:** analizar gráficamente las actividades de gasto. El rubro es la señal más fuerte
+  (1.600 gastos manuales, 62 rubros usados); el texto solo desempata entre candidatas. Los 26
+  gastos automáticos de asignación de techo y la nómina quedan como `no_aplica`.
+- **Aplicado en local:** Sí (2026-10-04) — verificado: catálogo y mapeo cargados; el motor JS
+  deja 0 gastos sin categoría en los 1.594 gastos clasificables (71 % con confianza alta, 29 %
+  media por falta de evidencia de texto); lote y validaciones probados; formulario de alta y
+  edición guardan la categoría con su origen. El lote sobre los datos reales no se ha corrido
+  todavía: se hace desde Configuraciones > Categoría de gasto.
+- **Aplicado en producción:** Pendiente.
+- **Nota:** Acompañar con `publico/js/categorizador-gastos.js` (motor),
+  `publico/js/gastos-categoria.js` (sugerencia en el formulario),
+  `controlador/CategoriasGastoControlador.php` y `modelo/CategoriaGasto.php` (página y lote),
+  `vista/categorias-gasto/index.php`, `vista/gastos/parciales/selector-categoria-gasto.php`
+  y las validaciones en `GastoControlador::validarDatos()` y `Gasto::crear()/actualizar()`.
+
+## 2026-10-04 — Se elimina el catálogo de facultades (`facultades`)
+
+- **Archivo:** `sql/eliminar_facultades.sql`
+- **Cambio:** `DROP TABLE facultades` (1 fila: "monda", inactiva). Se retiran la ruta `facultades`, `controlador/FacultadControlador.php`, `modelo/Facultad.php` y `vista/facultades/`; la tarjeta ya no aparece en Configuraciones.
+- **Motivo:** ninguna otra tabla ni pantalla lee ese catálogo. Las facultades de los filtros, del registro y de la gestión de invitados son las dependencias con `tipo = 'Facultad'`, que no cambian.
+- **Aplicado en local:** Sí (2026-10-04). Respaldo previo de la tabla hecho antes de borrar.
+- **Aplicado en producción:** Pendiente. Antes de ejecutar el `DROP`, revisar si la tabla `facultades` de producción tiene filas que se quieran conservar.
+- **Nota:** el nodo "facultades" (tipo Facultad) de la tabla `jerarquias` no se toca: es un dato del árbol y no depende de esta tabla.
+
+---
+
 <!--
 Plantilla para la próxima entrada:
 

@@ -417,7 +417,7 @@ require __DIR__ . '/../parciales/encabezado.php';
             <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
             <?php endif; ?>
 
-            <form method="POST" action="index.php?ruta=gastos" class="form-necesidad">
+            <form method="POST" action="index.php?ruta=gastos" class="form-necesidad form-gasto">
                 <div class="campo">
                     <label for="anio_presupuestal_id">Año presupuestal *</label>
                     <select id="anio_presupuestal_id" name="anio_presupuestal_id" required>
@@ -481,19 +481,29 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </div>
                 </div>
 
-                <div class="campo">
-                    <label for="insumo">Insumo *</label>
-                    <input type="text" id="insumo" name="insumo" placeholder="Diligenciar" required>
+                <div class="par-campos">
+                    <div class="campo">
+                        <label for="insumo">Insumo *</label>
+                        <input type="text" id="insumo" name="insumo" placeholder="Diligenciar" required>
+                    </div>
+
+                    <?php
+                    $prefijoCategoria = '';
+                    $categoriaSeleccionada = '';
+                    require __DIR__ . '/parciales/selector-categoria-gasto.php';
+                    ?>
                 </div>
 
-                <div class="campo">
-                    <label for="cantidad">Cantidad *</label>
-                    <input type="number" id="cantidad" name="cantidad" min="1" step="1" required>
-                </div>
+                <div class="par-campos">
+                    <div class="campo">
+                        <label for="cantidad">Cantidad *</label>
+                        <input type="number" id="cantidad" name="cantidad" min="1" step="1" required>
+                    </div>
 
-                <div class="campo">
-                    <label for="costo_unitario">Costo unitario *</label>
-                    <input type="number" id="costo_unitario" name="costo_unitario" min="0" step="0.01" required>
+                    <div class="campo">
+                        <label for="costo_unitario">Costo unitario *</label>
+                        <input type="number" id="costo_unitario" name="costo_unitario" min="0" step="0.01" required>
+                    </div>
                 </div>
 
                 <div class="campo campo-ancho">
@@ -573,6 +583,9 @@ require __DIR__ . '/../parciales/encabezado.php';
         </div>
     </div>
 
+    <script type="application/json" id="datos-categorias-gasto"><?= json_encode(['catalogo' => $catalogoCategoriasGasto, 'mapeo' => $mapeoCategoriasGasto], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+    <script src="publico/js/categorizador-gastos.js?v=<?= @filemtime(__DIR__ . '/../../publico/js/categorizador-gastos.js') ?: 1 ?>"></script>
+    <script src="publico/js/gastos-categoria.js?v=<?= @filemtime(__DIR__ . '/../../publico/js/gastos-categoria.js') ?: 1 ?>"></script>
     <script type="application/json" id="datos-roles-por-tipo"><?= json_encode($rolesPorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
     <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
 

@@ -5,6 +5,7 @@ require_once __DIR__ . '/../modelo/SolicitudMonitor.php';
 require_once __DIR__ . '/../modelo/SolicitudOps.php';
 require_once __DIR__ . '/../modelo/SolicitudPeticion.php';
 require_once __DIR__ . '/../modelo/Gasto.php';
+require_once __DIR__ . '/../modelo/CategoriaGasto.php';
 require_once __DIR__ . '/../modelo/GastoExtension.php';
 require_once __DIR__ . '/../modelo/GastoPostgrado.php';
 require_once __DIR__ . '/../modelo/GastoUnisalud.php';
@@ -724,10 +725,13 @@ class PeticionesControlador
             $columnas = ['Dependencia', 'Sede', 'Línea estratégica', 'Motor de desarrollo', 'Proyecto PDI', 'Objeto/Proyecto (PAA)', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Meses', 'Techo presupuestal'];
             $claves = ['dependencia', 'sede', 'linea', 'motor', 'proyecto', 'objeto_proyecto_paa', 'actividad', 'rubro', 'insumo', 'cantidad', 'costo_unitario', 'valor_total', 'meses', 'techo'];
 
-            // Gasto principal no tiene concepto de categoría (Costos/Inversión/Excedentes) — se
-            // deja su tabla intacta. Los 4 orígenes de Autogestión sí, y agregarla aquí es lo que
-            // permite la gráfica de participación por categoría (ver tabla-real.js).
-            if ($origen !== 'gasto_principal') {
+            // Gasto principal: la categoría de gasto (36 subcategorías de actividad) es su propia
+            // columna, con nombre distinto a la "Categoría" de Autogestión (Costos/Inversión/
+            // Excedentes). tabla-real.js la usa como dimensión de la gráfica.
+            if ($origen === 'gasto_principal') {
+                $columnas[] = 'Categoría de gasto';
+                $claves[] = 'categoria_gasto';
+            } else {
                 $columnas[] = 'Categoría';
                 $claves[] = 'categoria';
             }
@@ -1193,6 +1197,8 @@ class PeticionesControlador
             $sedesPorId[(int) $sede['id']] = $sede['codigo'] . ' - ' . $sede['nombre'];
         }
 
+        $nombresCategoriaGasto = (new CategoriaGasto())->obtenerNombresPorId();
+
         $lineasPorId = [];
         foreach ($this->modeloLinea->obtenerTodas() as $linea) {
             $lineasPorId[(int) $linea['id']] = $linea['codigo'] . ' - ' . $linea['nombre'];
@@ -1277,6 +1283,9 @@ class PeticionesControlador
                 $fila['actividad'] = $gastoOriginal['actividad'] ?? '—';
                 $fila['insumo'] = $gastoOriginal['insumo'] ?? '—';
                 $fila['categoria'] = $gastoOriginal['categoria'] ?? '—';
+                if ($item['origen'] === 'gasto_principal') {
+                    $fila['categoria_gasto'] = $this->rotularCategoriaGasto($gastoOriginal, $nombresCategoriaGasto);
+                }
                 $fila['cantidad'] = isset($gastoOriginal['cantidad']) ? (float) $gastoOriginal['cantidad'] : $fila['cantidad'];
                 $fila['costo_unitario'] = isset($gastoOriginal['costo_unitario']) ? (float) $gastoOriginal['costo_unitario'] : null;
                 $fila['meses'] = $gastoOriginal['meses'] !== ''
@@ -1621,6 +1630,16 @@ class PeticionesControlador
     public function establecerRegistrosPrecargados(array $registrosPorClave): void
     {
         $this->registrosPrecargadosPorClave = $registrosPorClave;
+    }
+
+    /** Rótulo de la categoría de gasto de un gasto principal (columna y dimensión de la gráfica). */
+    private function rotularCategoriaGasto(array $gasto, array $nombresPorId): string
+    {
+        if (($gasto['categoria_origen'] ?? null) === 'no_aplica') {
+            return 'No aplica';
+        }
+
+        return $nombresPorId[$gasto['categoria_gasto_id'] ?? ''] ?? 'Sin asignar';
     }
 
     private function obtenerRegistroPorOrigenCacheado(string $origen, int $origenId): ?array

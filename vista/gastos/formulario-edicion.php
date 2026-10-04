@@ -20,7 +20,7 @@
     method="POST"
     action="index.php?ruta=gastos&anio_id=<?= (int) $anioSeleccionadoId ?>&editar_id=<?= (int) $gastoParaEditar['id'] ?>"
     id="form-editar-gasto"
-    class="form-necesidad"
+    class="form-necesidad form-gasto"
 >
     <input type="hidden" name="accion" value="actualizar">
     <input type="hidden" name="id" id="editar-gasto-id" value="">
@@ -88,19 +88,31 @@
         </div>
     </div>
 
-    <div class="campo">
-        <label for="editar-insumo">Insumo *</label>
-        <input type="text" id="editar-insumo" name="insumo" placeholder="Diligenciar" required>
+    <div class="par-campos">
+        <div class="campo">
+            <label for="editar-insumo">Insumo *</label>
+            <input type="text" id="editar-insumo" name="insumo" placeholder="Diligenciar" required>
+        </div>
+
+        <?php
+        $prefijoCategoria = 'editar-';
+        $categoriaSeleccionada = (string) ($gastoParaEditar['categoria_gasto_id'] ?? '');
+        $origenCategoria = (string) ($gastoParaEditar['categoria_origen'] ?? '');
+        $confianzaCategoria = (string) ($gastoParaEditar['categoria_confianza'] ?? '');
+        require __DIR__ . '/parciales/selector-categoria-gasto.php';
+        ?>
     </div>
 
-    <div class="campo">
-        <label for="editar-cantidad">Cantidad *</label>
-        <input type="number" id="editar-cantidad" name="cantidad" min="1" step="1" required>
-    </div>
+    <div class="par-campos">
+        <div class="campo">
+            <label for="editar-cantidad">Cantidad *</label>
+            <input type="number" id="editar-cantidad" name="cantidad" min="1" step="1" required>
+        </div>
 
-    <div class="campo">
-        <label for="editar-costo_unitario">Costo unitario *</label>
-        <input type="number" id="editar-costo_unitario" name="costo_unitario" min="0" step="0.01" required>
+        <div class="campo">
+            <label for="editar-costo_unitario">Costo unitario *</label>
+            <input type="number" id="editar-costo_unitario" name="costo_unitario" min="0" step="0.01" required>
+        </div>
     </div>
 
     <div class="campo campo-ancho">

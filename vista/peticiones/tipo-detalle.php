@@ -209,6 +209,6 @@ var tdtColumnas = <?php echo json_encode($columnas, JSON_UNESCAPED_UNICODE); ?>;
 var tdtClavesFila = <?php echo json_encode($clavesFila, JSON_UNESCAPED_UNICODE); ?>;
 var tdtNamespace = <?php echo json_encode($origen . '_' . $estado); ?>;
 </script>
-<script src="publico/js/tabla-real.js"></script>
+<script src="publico/js/tabla-real.js?v=<?= filemtime(__DIR__ . '/../../publico/js/tabla-real.js') ?>"></script>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

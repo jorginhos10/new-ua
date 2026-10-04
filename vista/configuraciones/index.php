@@ -1,8 +1,17 @@
 <?php
-$tituloPagina = 'Configuraciones';
+/**
+ * Configuraciones: pantalla principal, y el submenú "Listas" (index.php?ruta=configuraciones&grupo=listas)
+ * que agrupa los catálogos PDI y de listas. Lo que no va en el submenú queda junto al botón "Listas".
+ */
+$grupo = $_GET['grupo'] ?? '';
+$tituloPagina = $grupo === 'listas' ? 'Listas' : 'Configuraciones';
 $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>';
 require __DIR__ . '/../parciales/encabezado.php';
 ?>
+
+<?php if ($grupo === 'listas'): ?>
+
+    <a href="index.php?ruta=configuraciones" class="enlace-volver-configuraciones">← Configuraciones</a>
 
     <div class="grid-modulos">
 
@@ -57,13 +66,6 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </div>
                     <p class="texto-atenuado">Gestiona las sedes de la universidad.</p>
                 </a>
-                <a href="index.php?ruta=facultades" class="tarjeta-modulo">
-                    <div class="tarjeta-modulo-cabecera">
-                        <h2>Facultades</h2>
-                        <?= $flechaModulo ?>
-                    </div>
-                    <p class="texto-atenuado">Gestiona el catálogo de facultades para el registro de usuarios.</p>
-                </a>
                 <a href="index.php?ruta=contratos-comunes" class="tarjeta-modulo">
                     <div class="tarjeta-modulo-cabecera">
                         <h2>Contratos comunes</h2>
@@ -84,6 +86,32 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <?= $flechaModulo ?>
                     </div>
                     <p class="texto-atenuado">Gestiona el catálogo de sublíneas de inversión, condicionadas a una línea, para Perfil de proyectos.</p>
+                </a>
+            </div>
+        </section>
+
+    </div>
+
+<?php else: ?>
+
+    <div class="grid-modulos">
+
+        <section class="grupo-configuraciones">
+            <h2 class="grupo-configuraciones-titulo grupo-listas">Catálogos</h2>
+            <div class="box-items-config">
+                <a href="index.php?ruta=configuraciones&grupo=listas" class="tarjeta-modulo">
+                    <div class="tarjeta-modulo-cabecera">
+                        <h2>Listas</h2>
+                        <?= $flechaModulo ?>
+                    </div>
+                    <p class="texto-atenuado">Línea, motor y proyecto del PDI, y los catálogos de estamentos, rubros, sedes, contratos comunes y líneas de inversión.</p>
+                </a>
+                <a href="index.php?ruta=categorias-gasto" class="tarjeta-modulo">
+                    <div class="tarjeta-modulo-cabecera">
+                        <h2>Categoría de gasto</h2>
+                        <?= $flechaModulo ?>
+                    </div>
+                    <p class="texto-atenuado">Clasifica los gastos en las 36 categorías de actividad: calcular vacíos o recalcular todo.</p>
                 </a>
                 <a href="index.php?ruta=rubro-categorias" class="tarjeta-modulo">
                     <div class="tarjeta-modulo-cabecera">
@@ -182,5 +210,7 @@ require __DIR__ . '/../parciales/encabezado.php';
         </section>
 
     </div>
+
+<?php endif; ?>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

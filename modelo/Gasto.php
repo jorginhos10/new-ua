@@ -376,12 +376,15 @@ class Gasto
     {
         $consulta = $this->db->prepare(
             'INSERT INTO gastos
-                (sede_id, anio_presupuestal_id, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, insumo, cantidad, costo_unitario, valor_total, meses, usuario_id)
+                (sede_id, anio_presupuestal_id, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, insumo, cantidad, costo_unitario, valor_total, meses, usuario_id, categoria_gasto_id, categoria_origen, categoria_confianza)
              VALUES
-                (:sede_id, :anio_presupuestal_id, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses, :usuario_id)'
+                (:sede_id, :anio_presupuestal_id, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses, :usuario_id, :categoria_gasto_id, :categoria_origen, :categoria_confianza)'
         );
 
         return $consulta->execute([
+            'categoria_gasto_id' => $datos['categoria_gasto_id'] ?? null,
+            'categoria_origen' => $datos['categoria_origen'] ?? null,
+            'categoria_confianza' => $datos['categoria_confianza'] ?? null,
             'sede_id' => $datos['sede_id'],
             'anio_presupuestal_id' => $datos['anio_presupuestal_id'],
             'dependencia' => $datos['dependencia'],
@@ -445,12 +448,16 @@ class Gasto
                 linea_id = :linea_id, motor_id = :motor_id, proyecto_id = :proyecto_id,
                 objeto_proyecto_paa = :objeto_proyecto_paa, actividad = :actividad, rubro_id = :rubro_id,
                 insumo = :insumo, cantidad = :cantidad, costo_unitario = :costo_unitario,
-                valor_total = :valor_total, meses = :meses
+                valor_total = :valor_total, meses = :meses,
+                categoria_gasto_id = :categoria_gasto_id, categoria_origen = :categoria_origen, categoria_confianza = :categoria_confianza
              WHERE id = :id'
         );
 
         return $consulta->execute([
             'id' => $id,
+            'categoria_gasto_id' => $datos['categoria_gasto_id'] ?? null,
+            'categoria_origen' => $datos['categoria_origen'] ?? null,
+            'categoria_confianza' => $datos['categoria_confianza'] ?? null,
             'sede_id' => $datos['sede_id'],
             'anio_presupuestal_id' => $datos['anio_presupuestal_id'],
             'dependencia' => $datos['dependencia'],

@@ -1447,6 +1447,26 @@ input[type="file"]::-webkit-file-upload-button:hover {
     grid-column: span 3;
 }
 
+.par-campos {
+    grid-column: span 3;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.1rem;
+}
+
+@media (max-width: 900px) {
+    .par-campos {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 600px) {
+    .par-campos {
+        grid-column: span 1;
+        grid-template-columns: 1fr;
+    }
+}
+
 .campo label {
     margin-bottom: 0.35rem;
     font-size: 0.82rem;
@@ -1643,6 +1663,14 @@ input[type="file"]::-webkit-file-upload-button:hover {
 
 .campo select:invalid {
     color: var(--color-texto-tenue);
+}
+
+@media (pointer: coarse) {
+    .form-gasto .campo input,
+    .form-gasto .campo select {
+        min-height: 2.75rem;
+        font-size: 1rem;
+    }
 }
 
 .campo input:hover,
@@ -4118,6 +4146,18 @@ a.barra-progreso:hover {
 .grupo-variables { --color-grupo-accento: var(--color-inversion); }
 .grupo-usuarios { --color-grupo-accento: #8b5cf6; }
 
+.enlace-volver-configuraciones {
+    display: inline-block;
+    margin-bottom: 1rem;
+    color: var(--color-texto-secundario);
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.enlace-volver-configuraciones:hover {
+    color: var(--color-texto);
+}
+
 .box-items-config {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -5090,27 +5130,29 @@ body.tabla-redimensionando-cursor * {
 
 .tabla-grafica-kpis {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 0.5rem;
-    margin-bottom: 0.6rem;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(110px, 1fr);
+    gap: 0.4rem;
+    margin-bottom: 0.4rem;
     flex-shrink: 0;
+    overflow-x: auto;
 }
 
 .grafica-stat {
     background: var(--color-fondo);
     border-radius: var(--radio-chico);
-    padding: 0.45rem 0.65rem;
+    padding: 0.25rem 0.5rem;
 }
 
 .grafica-stat-etiqueta {
-    margin: 0 0 0.15rem;
-    font-size: 0.7rem;
+    margin: 0;
+    font-size: 0.65rem;
     color: var(--color-texto-tenue);
 }
 
 .grafica-stat-valor {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: 0.9rem;
     font-weight: 600;
     color: var(--color-texto);
 }
@@ -5124,13 +5166,23 @@ body.tabla-redimensionando-cursor * {
     gap: 0.75rem;
 }
 
+/* Paginación como una tarjeta más de la fila de indicadores (.tabla-grafica-kpis). */
 .grafica-paginador {
-    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
 }
 
 .grafica-paginador .mini-slider-titulo {
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     color: var(--color-texto-secundario);
+    white-space: nowrap;
+}
+
+.grafica-paginador .mini-slider-flecha {
+    width: 22px;
+    height: 22px;
 }
 
 .grafica-panel {

@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../modelo/Gasto.php';
+require_once __DIR__ . '/../modelo/CategoriaGasto.php';
 require_once __DIR__ . '/../modelo/DuplicadorFilas.php';
 require_once __DIR__ . '/../modelo/Linea.php';
 require_once __DIR__ . '/../modelo/Motor.php';
@@ -125,6 +126,9 @@ class GastoControlador
         $motores = $this->modeloMotor->obtenerTodos();
         $proyectos = $this->modeloProyecto->obtenerTodos();
         $rubros = $this->modeloRubro->obtenerActivosPorCategoria('egresos');
+        $categoriaGasto = new CategoriaGasto();
+        $catalogoCategoriasGasto = $categoriaGasto->obtenerCatalogo();
+        $mapeoCategoriasGasto = $categoriaGasto->obtenerMapeo();
         $contratosComunes = $this->modeloContratoComun->obtenerActivos();
         $aniosActivos = $this->modeloAnio->obtenerActivos();
         $sedes = $this->modeloSede->obtenerTodas();
@@ -1387,6 +1391,26 @@ class GastoControlador
         $datos['cantidad'] = (int) $datos['cantidad'];
         $datos['costo_unitario'] = (float) $datos['costo_unitario'];
         $datos['usuario_id'] = (int) ($_SESSION['usuario_id'] ?? 0);
+
+        $categoriaId = trim((string) ($datos['categoria_gasto_id'] ?? ''));
+        if ($categoriaId === '') {
+            $datos['categoria_gasto_id'] = null;
+            $datos['categoria_origen'] = null;
+            $datos['categoria_confianza'] = null;
+        } else {
+            if (!(new CategoriaGasto())->existeCategoria($categoriaId)) {
+                return [[], 'La categoría de gasto seleccionada no existe.'];
+            }
+
+            $origen = ($datos['categoria_origen'] ?? '') === 'automatico' ? 'automatico' : 'manual';
+            $confianza = $origen === 'automatico' && is_numeric($datos['categoria_confianza'] ?? null)
+                ? round(min(1.0, max(0.0, (float) $datos['categoria_confianza'])), 3)
+                : null;
+
+            $datos['categoria_gasto_id'] = $categoriaId;
+            $datos['categoria_origen'] = $origen;
+            $datos['categoria_confianza'] = $confianza;
+        }
 
         return [$datos, ''];
     }

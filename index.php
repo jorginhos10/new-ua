@@ -22,7 +22,6 @@ require_once __DIR__ . '/controlador/RubroCategoriaControlador.php';
 require_once __DIR__ . '/controlador/AnioPresupuestalControlador.php';
 require_once __DIR__ . '/controlador/SedeControlador.php';
 require_once __DIR__ . '/controlador/DependenciaControlador.php';
-require_once __DIR__ . '/controlador/FacultadControlador.php';
 require_once __DIR__ . '/controlador/RelojArenaControlador.php';
 require_once __DIR__ . '/controlador/MensajeGlobalControlador.php';
 require_once __DIR__ . '/controlador/RepositorioControlador.php';
@@ -78,6 +77,7 @@ $rutaAMenuKey = [
     'actas' => 'actas',
     'configurar-presupuestos' => 'configuraciones',
     'configuraciones' => 'configuraciones',
+    'categorias-gasto' => 'configuraciones',
     'usuarios' => 'configuraciones',
     'roles' => 'configuraciones',
     'estamentos' => 'configuraciones',
@@ -92,7 +92,6 @@ $rutaAMenuKey = [
     'anios-presupuestales' => 'configuraciones',
     'sedes' => 'configuraciones',
     'dependencias' => 'configuraciones',
-    'facultades' => 'configuraciones',
     'jerarquias' => 'configuraciones',
     'variables-macroeconomicas' => 'configuraciones',
     'reloj-arena' => 'configuraciones',
@@ -135,6 +134,11 @@ switch ($ruta) {
         (new ConfiguracionesControlador())->index();
         break;
 
+    case 'categorias-gasto':
+        require_once __DIR__ . '/controlador/CategoriasGastoControlador.php';
+        (new CategoriasGastoControlador())->index();
+        break;
+
     case 'usuarios':
         (new UsuarioControlador())->index();
         break;
@@ -157,10 +161,6 @@ switch ($ruta) {
 
     case 'dependencias':
         (new DependenciaControlador())->index();
-        break;
-
-    case 'facultades':
-        (new FacultadControlador())->index();
         break;
 
     case 'reloj-arena':
