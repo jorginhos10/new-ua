@@ -584,6 +584,18 @@ de datos antes de correrlo.
 - **Aplicado en producción:** Pendiente. Antes de ejecutar el `DROP`, revisar si la tabla `facultades` de producción tiene filas que se quieran conservar.
 - **Nota:** el nodo "facultades" (tipo Facultad) de la tabla `jerarquias` no se toca: es un dato del árbol y no depende de esta tabla.
 
+## 2026-10-04 — Rendimiento de Peticiones y Análisis (consultas repetidas y compresión)
+
+- **Archivo:** sin SQL. Código: `controlador/PeticionesControlador.php` (`visibilidadSolicitud()` usa el usuario y la dependencia cacheados en vez de consultarlos por cada fila), `modelo/Necesidad.php` (`adjuntarBeneficiarios()` en una sola consulta), `modelo/VariableMacroeconomica.php` (caché por petición de `obtenerPorNombreYAnio()`, que se vacía al escribir), `modelo/FilasTabla.php` (nuevo: filas como datos JSON), `vista/analisis/parciales/tabla-modulo.php` y `vista/peticiones/tipo-detalle.php` (el servidor ya no escribe cada `<tr>`; entrega un JSON `tdt-filas`), `publico/js/tabla-real.js` (dibuja solo las filas visibles con filas espaciadoras; orden, filtros, selección y totales siguen sobre el conjunto completo) e `index.php` (compresión gzip de dashboard, Análisis, Peticiones y su detalle; no aplica a descargas).
+- **Motivo:** la pantalla de Peticiones hacía 1.379 consultas por carga, casi todas repetidas (el mismo usuario y la misma dependencia una vez por fila). Análisis llegaba a 3,1 MB sin comprimir, y el navegador tardaba en crear 1.600 filas en el DOM.
+- **Medido en local:** Peticiones pasa de 1.379 a 137 consultas y de ~0,95 s a ~0,37 s. Por la red, Peticiones baja de 104 KB a 11 KB y Análisis de 3,1 MB a 137 KB. Contenido idéntico al descomprimir.
+- **Prueba en Chrome headless (Análisis 1.600 filas, Peticiones detalle 122):** sin errores de JavaScript; filtro, orden ascendente y descendente, selección, desplazamiento, botón Editar presente (su acción no se probó), y vista de gráfica con los indicadores sobre el total de filas, todo correcto. Al cargar hay 37 filas en el DOM en lugar de 1.600.
+- **Aplicado en local:** Sí (2026-10-04).
+- **Aplicado en producción:** Pendiente. Desplegar el código. Si el servidor ya comprime (mod_deflate), la compresión de `index.php` simplemente no se activa.
+- **Nota:** no hay SQL, así que no hay nada que correr en la base de datos al desplegar.
+
+---
+
 ## 2026-10-04 — Relojes de arena por día completo (00:00 a 23:59) y en horas al final
 
 - **Archivo:** sin SQL. Código: `controlador/DashboardControlador.php` (`obtenerRelojArena()`), `vista/dashboard/administrador.php` y `vista/dashboard/consejo.php`.

@@ -154,11 +154,34 @@ class Necesidad
         return $consulta->fetchAll();
     }
 
+    /** Estamentos beneficiarios de todas las filas con una sola consulta (antes, una por fila). */
     private function adjuntarBeneficiarios(array $filas): array
     {
-        foreach ($filas as &$fila) {
-            $fila['beneficiarios_estamentos'] = $this->obtenerBeneficiariosEstamentos((int) $fila['id']);
+        if ($filas === []) {
+            return $filas;
         }
+
+        $ids = array_map(static fn (array $fila): int => (int) $fila['id'], $filas);
+        $marcadores = implode(',', array_fill(0, count($ids), '?'));
+
+        $consulta = $this->db->prepare(
+            "SELECT nbe.necesidad_id, e.id, e.nombre
+             FROM necesidad_beneficiarios_estamentos nbe
+             JOIN estamentos e ON e.id = nbe.estamento_id
+             WHERE nbe.necesidad_id IN ($marcadores)
+             ORDER BY e.nombre"
+        );
+        $consulta->execute($ids);
+
+        $porNecesidad = [];
+        foreach ($consulta->fetchAll() as $fila) {
+            $porNecesidad[(int) $fila['necesidad_id']][] = ['id' => $fila['id'], 'nombre' => $fila['nombre']];
+        }
+
+        foreach ($filas as &$fila) {
+            $fila['beneficiarios_estamentos'] = $porNecesidad[(int) $fila['id']] ?? [];
+        }
+        unset($fila);
 
         return $filas;
     }

@@ -123,6 +123,8 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
     <?php if (empty($filasCompletas)): ?>
     <p class="texto-atenuado">No hay elementos para mostrar.</p>
     <?php else: ?>
+    <?php require_once __DIR__ . '/../../modelo/FilasTabla.php'; ?>
+    <script type="application/json" id="tdt-filas"><?= json_encode(FilasTabla::paraJson($filasCompletas, $clavesFila, (int) $resaltarId), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?></script>
     <div class="tabla-scroll">
         <table class="tabla-dev-datos" id="<?= htmlspecialchars($idTabla) ?>" data-origen="<?= htmlspecialchars($origen) ?>" data-estado="<?= htmlspecialchars($estado) ?>">
             <colgroup>
@@ -158,27 +160,7 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
                     <?php endforeach; ?>
                 </tr>
             </thead>
-            <tbody>
-                <?php foreach ($filasCompletas as $filaCompleta): ?>
-                <tr
-                    data-origen-id="<?= (int) $filaCompleta['origen_id'] ?>"
-                    data-ruta-editar="<?= htmlspecialchars($filaCompleta['ruta_editar'] ?? '') ?>"
-                    data-puede-editar="<?= !empty($filaCompleta['puede_editar']) ? '1' : '0' ?>"
-                    class="<?= (int) $filaCompleta['origen_id'] === (int) $resaltarId ? 'fila-resaltada' : '' ?>"
-                >
-                    <td class="col-seleccion"><input type="checkbox" class="tabla-seleccion-fila"></td>
-                    <?php foreach ($clavesFila as $indice => $clave): ?>
-                    <?php
-                    $valorCelda = $filaCompleta[$clave] ?? '—';
-                    if (is_float($valorCelda)) {
-                        $valorCelda = number_format($valorCelda, 2, ',', '.');
-                    }
-                    ?>
-                    <td><?= htmlspecialchars((string) $valorCelda) ?></td>
-                    <?php endforeach; ?>
-                </tr>
-                <?php endforeach; ?>
-            </tbody>
+            <tbody></tbody>
             <tfoot>
                 <tr class="fila-totales-tdt">
                     <td class="col-seleccion">Total</td>

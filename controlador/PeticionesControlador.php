@@ -3537,7 +3537,8 @@ class PeticionesControlador
             return false;
         }
 
-        $usuarioActual = $this->modeloUsuario->obtenerPorId($usuarioActualId);
+        // Usuario y dependencia cacheados: esta función se llama por cada fila pendiente.
+        $usuarioActual = $this->obtenerUsuarioActualCacheado();
         $rolUsuarioId = !empty($usuarioActual['rol_id']) ? (int) $usuarioActual['rol_id'] : null;
 
         if ($rolUsuarioId !== $rolDestinatarioId) {
@@ -3554,7 +3555,7 @@ class PeticionesControlador
             return false;
         }
 
-        $dependenciaUsuario = $this->modeloDependencia->obtenerPorId($dependenciaUsuarioId);
+        $dependenciaUsuario = $this->obtenerDependenciaUsuarioActualCacheada($dependenciaUsuarioId);
 
         return $dependenciaUsuario !== null && $dependenciaUsuario['nombre'] === $dependenciaNombre;
     }

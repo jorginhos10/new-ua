@@ -2,6 +2,19 @@
 
 session_start();
 
+// Comprime el HTML de las pantallas más pesadas (Análisis, Peticiones y su detalle, Dashboard): la
+// tabla de Análisis pesa varios MB sin comprimir. No se toca ninguna descarga (accion / accion_csv).
+if (
+    extension_loaded('zlib')
+    && !ini_get('zlib.output_compression')
+    && str_contains($_SERVER['HTTP_ACCEPT_ENCODING'] ?? '', 'gzip')
+    && !isset($_GET['accion'])
+    && !isset($_GET['accion_csv'])
+    && in_array($_GET['ruta'] ?? 'login', ['dashboard', 'analisis', 'peticiones', 'peticiones-tipo-detalle'], true)
+) {
+    ob_start('ob_gzhandler');
+}
+
 require_once __DIR__ . '/controlador/LoginControlador.php';
 require_once __DIR__ . '/controlador/RegistroControlador.php';
 require_once __DIR__ . '/controlador/DashboardControlador.php';

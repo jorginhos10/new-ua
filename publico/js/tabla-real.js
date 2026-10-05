@@ -14,12 +14,105 @@ document.addEventListener('DOMContentLoaded', function () {
     var claveOcultas = 'peticiones_tabla_ocultas_' + namespace;
 
     var cuerpo = tabla.querySelector('tbody');
-    var filasOriginales = Array.prototype.slice.call(cuerpo.querySelectorAll('tr'));
+    var contenedorScroll = tabla.closest('.tabla-scroll');
+    var numeroColumnas = tabla.querySelectorAll('thead tr.fila-encabezados th').length || 1;
 
-    // --- Desplazarse hasta la fila resaltada (el ítem sobre el que se pulsó "Ver") ---
-    var filaResaltada = cuerpo.querySelector('tr.fila-resaltada');
-    if (filaResaltada) {
-        filaResaltada.scrollIntoView({ block: 'center' });
+    // --- Filas: llegan como JSON (#tdt-filas) y cada <tr> se crea fuera del DOM. Solo se adjuntan al
+    // <tbody> las filas de la ventana visible (renderizarVentana()). Filtros, orden, selección y totales
+    // trabajan con el arreglo completo, así que siguen viendo todas las filas. ---
+    var filasOriginales = construirFilasDesdeDatos();
+    var filasEnOrden = filasOriginales.slice();
+    var ALTURA_FILA = 36;
+    var ALTURA_MEDIDA = false;
+    var MARGEN_FILAS = 15;
+    var pendienteRender = false;
+
+    function construirFilasDesdeDatos() {
+        var islaDatos = document.getElementById('tdt-filas');
+        var datos = [];
+        if (islaDatos) {
+            try { datos = JSON.parse(islaDatos.textContent || '[]'); } catch (e) { datos = []; }
+        }
+
+        return datos.map(function (dato) {
+            var fila = document.createElement('tr');
+            fila.dataset.origenId = dato.id;
+            fila.dataset.rutaEditar = dato.editar;
+            fila.dataset.puedeEditar = dato.puede ? '1' : '0';
+            if (dato.resaltada) { fila.classList.add('fila-resaltada'); }
+
+            var celdaSeleccion = document.createElement('td');
+            celdaSeleccion.className = 'col-seleccion';
+            var casilla = document.createElement('input');
+            casilla.type = 'checkbox';
+            casilla.className = 'tabla-seleccion-fila';
+            celdaSeleccion.appendChild(casilla);
+            fila.appendChild(celdaSeleccion);
+
+            dato.celdas.forEach(function (texto) {
+                var celda = document.createElement('td');
+                celda.textContent = texto;
+                fila.appendChild(celda);
+            });
+
+            return fila;
+        });
+    }
+
+    function filasVisibles() {
+        return filasEnOrden.filter(function (fila) { return !fila.classList.contains('fila-oculta-filtro'); });
+    }
+
+    function crearEspaciador(alto) {
+        var espaciador = document.createElement('tr');
+        espaciador.className = 'fila-espaciadora';
+        espaciador.setAttribute('aria-hidden', 'true');
+        var celda = document.createElement('td');
+        celda.colSpan = numeroColumnas;
+        celda.style.height = alto + 'px';
+        celda.style.padding = '0';
+        celda.style.border = '0';
+        espaciador.appendChild(celda);
+        return espaciador;
+    }
+
+    // Adjunta al <tbody> solo las filas que caen en la ventana (con margen), y espaciadores para que
+    // la barra de desplazamiento tenga el alto de todas las filas visibles.
+    function renderizarVentana() {
+        var visibles = filasVisibles();
+        var total = visibles.length;
+        var posicionScroll = contenedorScroll ? contenedorScroll.scrollTop : 0;
+        var altoVentana = contenedorScroll ? contenedorScroll.clientHeight : 600;
+        var inicio = Math.max(0, Math.floor(posicionScroll / ALTURA_FILA) - MARGEN_FILAS);
+        var fin = Math.min(total, inicio + Math.ceil(altoVentana / ALTURA_FILA) + 2 * MARGEN_FILAS);
+
+        var nodos = [];
+        if (inicio > 0) { nodos.push(crearEspaciador(inicio * ALTURA_FILA)); }
+        for (var i = inicio; i < fin; i++) { nodos.push(visibles[i]); }
+        if (fin < total) { nodos.push(crearEspaciador((total - fin) * ALTURA_FILA)); }
+
+        cuerpo.replaceChildren.apply(cuerpo, nodos);
+
+        if (!ALTURA_MEDIDA && fin > inicio) {
+            var alturaReal = visibles[inicio].getBoundingClientRect().height;
+            if (alturaReal > 0) {
+                ALTURA_FILA = alturaReal;
+                ALTURA_MEDIDA = true;
+            }
+        }
+    }
+
+    function programarRender() {
+        if (pendienteRender) { return; }
+        pendienteRender = true;
+        requestAnimationFrame(function () {
+            pendienteRender = false;
+            renderizarVentana();
+        });
+    }
+
+    if (contenedorScroll) {
+        contenedorScroll.addEventListener('scroll', programarRender);
     }
 
     // --- Combobox propio (buscar/filtrar) ---
@@ -92,7 +185,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         input.addEventListener('input', function () {
             actualizarFantasma();
-            if (desplegable) {
+            if (desplegable && tarjeta) {
                 tarjeta.classList.add('abierta');
                 renderTarjeta();
             }
@@ -110,7 +203,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
 
-        if (desplegable) {
+        if (desplegable && tarjeta) {
             input.addEventListener('click', function () { renderTarjeta(); tarjeta.classList.add('abierta'); });
             input.addEventListener('focus', function () { renderTarjeta(); tarjeta.classList.add('abierta'); });
             document.addEventListener('click', function (evento) {
@@ -164,7 +257,7 @@ document.addEventListener('DOMContentLoaded', function () {
         var filtro = tabla.querySelector('.combo-filtro-columna[data-indice="' + indice + '"]');
         if (encabezado) { celdas.push(encabezado.closest('th')); }
         if (filtro) { celdas.push(filtro.closest('th')); }
-        cuerpo.querySelectorAll('tr td:nth-child(' + (parseInt(indice, 10) + 2) + ')').forEach(function (c) { celdas.push(c); });
+        filasOriginales.forEach(function (fila) { celdas.push(fila.children[parseInt(indice, 10) + 1]); });
         return celdas;
     }
 
@@ -194,7 +287,6 @@ document.addEventListener('DOMContentLoaded', function () {
         var indice = col.id.replace('tdt-col-', '');
         anchosBase[indice] = parseInt(anchosGuardados[indice], 10) || parseInt(col.style.width, 10) || 90;
     });
-    var contenedorScroll = tabla.closest('.tabla-scroll');
     var anchoColSeleccion = 34;
 
     function ajustarAnchoTabla() {
@@ -359,6 +451,7 @@ document.addEventListener('DOMContentLoaded', function () {
             fila.classList.toggle('fila-oculta-filtro', !(cumpleColumnas && cumpleBusqueda && cumpleGrafica));
         });
 
+        renderizarVentana();
         actualizarGrafica();
         construirFilaTotales();
     }
@@ -374,7 +467,7 @@ document.addEventListener('DOMContentLoaded', function () {
             tabla.querySelectorAll('.encabezado-columna').forEach(function (otro) { otro.classList.remove('orden-asc', 'orden-desc'); });
             encabezado.classList.add(ascendente ? 'orden-asc' : 'orden-desc');
 
-            var filas = Array.prototype.slice.call(cuerpo.querySelectorAll('tr'));
+            var filas = filasEnOrden.slice();
             filas.sort(function (filaA, filaB) {
                 var textoA = filaA.children[indice + 1].textContent.trim();
                 var textoB = filaB.children[indice + 1].textContent.trim();
@@ -388,7 +481,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 return ascendente ? comparacion : -comparacion;
             });
-            filas.forEach(function (fila) { cuerpo.appendChild(fila); });
+            filasEnOrden = filas;
+            renderizarVentana();
         });
     });
 
@@ -1480,8 +1574,10 @@ document.addEventListener('DOMContentLoaded', function () {
     var formOrigenId = document.getElementById('tdt-form-origen-id');
 
     function filaSeleccionadaUnica() {
-        var seleccionadas = cuerpo.querySelectorAll('.tabla-seleccion-fila:checked');
-        return seleccionadas.length === 1 ? seleccionadas[0].closest('tr') : null;
+        var seleccionadas = filasOriginales.filter(function (fila) {
+            return fila.querySelector('.tabla-seleccion-fila:checked') !== null;
+        });
+        return seleccionadas.length === 1 ? seleccionadas[0] : null;
     }
 
     function actualizarBotonesSeleccion() {
@@ -1489,15 +1585,17 @@ document.addEventListener('DOMContentLoaded', function () {
         var puedeEditar = fila && fila.dataset.puedeEditar === '1' && fila.dataset.rutaEditar;
         if (botonEditar) { botonEditar.disabled = !puedeEditar; }
         if (botonEliminar) { botonEliminar.disabled = !fila; }
-        cuerpo.querySelectorAll('tr').forEach(function (tr) {
+        filasOriginales.forEach(function (tr) {
             tr.classList.toggle('fila-seleccionada', tr.querySelector('.tabla-seleccion-fila:checked') !== null);
         });
     }
 
-    cuerpo.querySelectorAll('.tabla-seleccion-fila').forEach(function (casilla) {
+    filasOriginales.forEach(function (fila) {
+        var casilla = fila.querySelector('.tabla-seleccion-fila');
         casilla.addEventListener('change', function () {
             if (casilla.checked) {
-                cuerpo.querySelectorAll('.tabla-seleccion-fila').forEach(function (otra) {
+                filasOriginales.forEach(function (otraFila) {
+                    var otra = otraFila.querySelector('.tabla-seleccion-fila');
                     if (otra !== casilla) { otra.checked = false; }
                 });
             }
@@ -1535,6 +1633,17 @@ document.addEventListener('DOMContentLoaded', function () {
             formOrigenId.value = fila.dataset.origenId;
             formAccion.submit();
         });
+    }
+
+    // Primer render: mide la altura real de la fila. Luego, "Ver" centra la fila resaltada.
+    renderizarVentana();
+    var filaResaltada = filasOriginales.filter(function (fila) { return fila.classList.contains('fila-resaltada'); })[0];
+    if (filaResaltada && contenedorScroll) {
+        var posicionResaltada = filasVisibles().indexOf(filaResaltada);
+        if (posicionResaltada >= 0) {
+            contenedorScroll.scrollTop = Math.max(0, posicionResaltada * ALTURA_FILA - contenedorScroll.clientHeight / 2);
+            renderizarVentana();
+        }
     }
 
     actualizarBotonesSeleccion();

@@ -6,6 +6,9 @@ class VariableMacroeconomica
 {
     private PDO $db;
 
+    /** @var array<string, ?array> */
+    private static array $cachePorNombreYAnio = [];
+
     public function __construct()
     {
         $this->db = Conexion::obtener();
@@ -44,6 +47,7 @@ class VariableMacroeconomica
 
     public function crear(string $nombre, int $anioPresupuestalId, float $valor): bool
     {
+        self::$cachePorNombreYAnio = [];
         $consulta = $this->db->prepare(
             'INSERT INTO variables_macroeconomicas (nombre, anio_presupuestal_id, valor) VALUES (:nombre, :anio_presupuestal_id, :valor)'
         );
@@ -55,8 +59,18 @@ class VariableMacroeconomica
         ]);
     }
 
+    /**
+     * Cacheada durante la petición: los monitores la piden una vez por fila (el valor es el mismo para
+     * todo el año). Se vacía cuando cambia una variable.
+     */
     public function obtenerPorNombreYAnio(string $nombre, int $anioPresupuestalId): ?array
     {
+        $clave = $nombre . '|' . $anioPresupuestalId;
+
+        if (array_key_exists($clave, self::$cachePorNombreYAnio)) {
+            return self::$cachePorNombreYAnio[$clave];
+        }
+
         $consulta = $this->db->prepare(
             "SELECT * FROM variables_macroeconomicas
              WHERE nombre = :nombre AND anio_presupuestal_id = :anio_presupuestal_id AND estado = 'activo'
@@ -68,7 +82,7 @@ class VariableMacroeconomica
         ]);
         $fila = $consulta->fetch();
 
-        return $fila !== false ? $fila : null;
+        return self::$cachePorNombreYAnio[$clave] = $fila !== false ? $fila : null;
     }
 
     public function obtenerValoresPorNombre(string $nombre): array
@@ -89,6 +103,7 @@ class VariableMacroeconomica
 
     public function cambiarEstado(int $id): bool
     {
+        self::$cachePorNombreYAnio = [];
         $consulta = $this->db->prepare(
             "UPDATE variables_macroeconomicas SET estado = IF(estado = 'activo', 'inactivo', 'activo') WHERE id = :id"
         );
@@ -107,6 +122,7 @@ class VariableMacroeconomica
 
     public function actualizar(int $id, string $nombre, int $anioPresupuestalId, float $valor): bool
     {
+        self::$cachePorNombreYAnio = [];
         $consulta = $this->db->prepare(
             'UPDATE variables_macroeconomicas SET nombre = :nombre, anio_presupuestal_id = :anio_presupuestal_id, valor = :valor WHERE id = :id'
         );
@@ -121,6 +137,7 @@ class VariableMacroeconomica
 
     public function eliminar(int $id): bool
     {
+        self::$cachePorNombreYAnio = [];
         $consulta = $this->db->prepare('DELETE FROM variables_macroeconomicas WHERE id = :id');
 
         return $consulta->execute(['id' => $id]);
