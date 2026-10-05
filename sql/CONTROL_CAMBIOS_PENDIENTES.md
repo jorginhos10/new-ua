@@ -681,6 +681,14 @@ de datos antes de correrlo.
 - **Aplicado en producción:** No aplica SQL. Desplegar el código.
 - **Nota:** en local, el script de migración que creaba rubros 4.x se eliminó y sus cambios se revirtieron; el catálogo quedó con 268 rubros. La validación al guardar (que una inversión de autogestión lleve la marca) sigue pendiente.
 
+## 2026-10-05 — Tope por proyecto en las convocatorias
+
+- **Archivo:** `sql/convocatorias_tope.sql` (agrega `convocatorias.tope_por_proyecto DECIMAL(15,2) NULL`). Código: `modelo/Convocatoria.php`, `controlador/ConvocatoriaControlador.php`, `controlador/PerfilProyectosControlador.php`, `vista/convocatorias/index.php` (formulario rediseñado) y `vista/perfil-proyectos/` (aviso del tope en el valor y validación al guardar).
+- **Cambio:** cada convocatoria define si el valor de sus proyectos es libre (sin tope, valor NULL) o tiene un tope por proyecto que ningún proyecto puede superar. El formulario de Perfil de proyectos muestra el tope y no deja guardar por encima de él.
+- **Motivo:** la convocatoria debe poder fijar un límite por proyecto, o dejar el valor libre.
+- **Aplicado en local:** Sí (2026-10-05). Probado: tope aceptado, tope inválido rechazado, invitado bloqueado por encima del tope, aceptado exactamente en el tope, y restaurado a libre.
+- **Aplicado en producción:** Pendiente. Correr `sql/convocatorias_tope.sql` después de `sql/convocatorias_proyectos.sql` y antes de desplegar el código. Sin el paso, el formulario de convocatorias falla al guardar.
+
 ---
 
 <!--

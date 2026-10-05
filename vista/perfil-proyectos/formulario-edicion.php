@@ -148,8 +148,8 @@
     </div>
 
     <div class="campo">
-        <label for="editar-proyecto-valor">Valor *</label>
-        <input type="number" id="editar-proyecto-valor" name="valor" min="0" step="0.01" placeholder="0.00" required>
+        <label for="editar-proyecto-valor">Valor * <?php if (($convocatoriaActual['tope_por_proyecto'] ?? null) !== null): ?><span class="texto-atenuado">(tope $ <?= number_format((float) $convocatoriaActual['tope_por_proyecto'], 2, ',', '.') ?>)</span><?php endif; ?></label>
+        <input type="number" id="editar-proyecto-valor" name="valor" min="0" step="0.01" placeholder="0.00"<?= ($convocatoriaActual['tope_por_proyecto'] ?? null) !== null ? ' max="' . (float) $convocatoriaActual['tope_por_proyecto'] . '"' : '' ?> required>
     </div>
 
     <div class="campo">

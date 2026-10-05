@@ -83,27 +83,58 @@ require __DIR__ . '/../parciales/encabezado.php';
             <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
         <?php endif; ?>
 
-        <?php if (!$modoEdicion && !empty($convocatoriasVisibles)): ?>
-        <div class="pestanas" style="margin: 0 0 0.75rem;">
-            <?php foreach ($convocatoriasVisibles as $convocatoriaPestana): ?>
-            <a href="index.php?ruta=perfil-proyectos&convocatoria_id=<?= (int) $convocatoriaPestana['id'] ?>" class="pestana<?= $convocatoriaActual !== null && (int) $convocatoriaActual['id'] === (int) $convocatoriaPestana['id'] ? ' activa' : '' ?>"><?= htmlspecialchars($convocatoriaPestana['nombre']) ?></a>
-            <?php endforeach; ?>
-        </div>
-        <?php endif; ?>
-
         <?php if ($convocatoriaActual === null): ?>
             <p class="mensaje-error">No tienes convocatorias disponibles para formular proyectos.</p>
-        <?php elseif (!$modoEdicion && $relojConvocatoria !== null): ?>
-            <p class="texto-atenuado">
-                <strong><?= htmlspecialchars($convocatoriaActual['nombre']) ?></strong> ·
-                <?php if ($relojConvocatoria['estado'] === 'pendiente'): ?>
-                abre el <?= htmlspecialchars($relojConvocatoria['fecha_inicio']) ?>
-                <?php elseif ($relojConvocatoria['estado'] === 'abierto'): ?>
-                faltan <?= (int) $relojConvocatoria['faltante'] ?> <?= htmlspecialchars($relojConvocatoria['unidad']) ?> para cerrar (<?= htmlspecialchars($relojConvocatoria['fecha_cierre']) ?>)
-                <?php else: ?>
-                cerrada el <?= htmlspecialchars($relojConvocatoria['fecha_cierre']) ?>
-                <?php endif; ?>
-            </p>
+        <?php endif; ?>
+
+        <?php if (!$modoEdicion && ($convocatoriaActual !== null || !empty($convocatoriasVisibles))): ?>
+        <?php
+        // Una sola línea: pestañas de convocatoria, cuánto falta para cerrar y el botón Borrador/Enviado.
+        $cantidadEnviadasNecesidad = count(array_filter($necesidades, static fn (array $n): bool => $n['estado'] === 'enviado'));
+        $textoToggleBorrador = 'Borrador · ' . count(array_filter($necesidades, static fn (array $n): bool => $n['estado'] === 'borrador'));
+        $textoToggleEnviado = 'Enviado · ' . $cantidadEnviadasNecesidad . ' proyecto' . ($cantidadEnviadasNecesidad === 1 ? '' : 's');
+        ?>
+        <div class="perfil-barra-convocatoria">
+            <?php if (!empty($convocatoriasVisibles)): ?>
+            <div class="pestanas perfil-barra-pestanas">
+                <?php foreach ($convocatoriasVisibles as $convocatoriaPestana):
+                    $esActivaPestana = $convocatoriaActual !== null && (int) $convocatoriaActual['id'] === (int) $convocatoriaPestana['id'];
+                    $reloj = CuentaRegresiva::calcular($convocatoriaPestana['fecha_inicio'], $convocatoriaPestana['fecha_cierre']);
+                    // Días entre paréntesis junto al nombre; el detalle va en el popover.
+                    if ($reloj['estado'] === 'abierto') {
+                        $resumenReloj = '(' . $reloj['faltante'] . ' ' . $reloj['unidad'] . ')';
+                    } elseif ($reloj['estado'] === 'pendiente') {
+                        $resumenReloj = '(abre en ' . $reloj['faltante_para_abrir'] . ' ' . $reloj['unidad_para_abrir'] . ')';
+                    } else {
+                        $resumenReloj = '(cerrada)';
+                    }
+                ?>
+                <span class="perfil-tab-convocatoria<?= $esActivaPestana ? ' activa' : '' ?>">
+                    <a href="index.php?ruta=perfil-proyectos&convocatoria_id=<?= (int) $convocatoriaPestana['id'] ?>" class="pestana<?= $esActivaPestana ? ' activa' : '' ?>"><?= htmlspecialchars($convocatoriaPestana['nombre']) ?> <span class="perfil-tab-dias"><?= htmlspecialchars($resumenReloj) ?></span></a>
+                    <span class="perfil-popover" role="tooltip">
+                        <strong><?= $reloj['estado'] === 'abierto' ? 'Abierta' : ($reloj['estado'] === 'pendiente' ? 'Abre el ' . htmlspecialchars($reloj['fecha_inicio']) : 'Cerrada el ' . htmlspecialchars($reloj['fecha_cierre'])) ?></strong>
+                        <span>Periodo: <?= htmlspecialchars($reloj['fecha_inicio']) ?> – <?= htmlspecialchars($reloj['fecha_cierre']) ?></span>
+                        <?php if ($reloj['estado'] === 'abierto'): ?>
+                        <span>Faltan <?= $reloj['faltante'] ?> <?= htmlspecialchars($reloj['unidad']) ?> para cerrar</span>
+                        <?php elseif ($reloj['estado'] === 'pendiente'): ?>
+                        <span>Faltan <?= $reloj['faltante_para_abrir'] ?> <?= htmlspecialchars($reloj['unidad_para_abrir']) ?> para abrir</span>
+                        <?php endif; ?>
+                        <span class="perfil-popover-barra"><span style="width: <?= number_format($reloj['porcentaje_transcurrido'], 1, '.', '') ?>%;"></span></span>
+                        <?php if ((int) $convocatoriaPestana['activa'] !== 1): ?>
+                        <span class="texto-atenuado">Convocatoria inactiva</span>
+                        <?php endif; ?>
+                    </span>
+                </span>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+
+            <?php if ($convocatoriaActual !== null): ?>
+            <button type="button" class="toggle-envio-boton es-borrador" data-toggle-envio-boton="perfil-proyectos"
+                data-texto-borrador="<?= htmlspecialchars($textoToggleBorrador) ?>"
+                data-texto-enviado="<?= htmlspecialchars($textoToggleEnviado) ?>"><?= htmlspecialchars($textoToggleBorrador) ?></button>
+            <?php endif; ?>
+        </div>
         <?php endif; ?>
 
         <?php if ($fueraDeVentana && $convocatoriaActual !== null && !$modoEdicion): ?>
@@ -154,17 +185,6 @@ require __DIR__ . '/../parciales/encabezado.php';
         };
         ?>
 
-        <?php
-        // Botón único Borrador/Enviado, en su propia fila (como Gastos cuando no hay chips de techo).
-        $cantidadEnviadasNecesidad = count($necesidadesEnviadas);
-        $textoToggleBorrador = 'Borrador · ' . count($necesidadesBorrador);
-        $textoToggleEnviado = 'Enviado · ' . $cantidadEnviadasNecesidad . ' proyecto' . ($cantidadEnviadasNecesidad === 1 ? '' : 's');
-        ?>
-        <div class="fila-chips-toggle solo-toggle">
-            <button type="button" class="toggle-envio-boton es-borrador" data-toggle-envio-boton="perfil-proyectos"
-                data-texto-borrador="<?= htmlspecialchars($textoToggleBorrador) ?>"
-                data-texto-enviado="<?= htmlspecialchars($textoToggleEnviado) ?>"><?= htmlspecialchars($textoToggleBorrador) ?></button>
-        </div>
         <div data-toggle-envio="perfil-proyectos" data-mostrando="borrador">
         <div class="panel-toggle-envio" data-panel-envio="borrador">
                 <div
@@ -384,8 +404,8 @@ require __DIR__ . '/../parciales/encabezado.php';
                 </div>
 
                 <div class="campo">
-                    <label for="crear-proyecto-valor">Valor *</label>
-                    <input type="number" id="crear-proyecto-valor" name="valor" min="0" step="0.01" placeholder="0.00" required>
+                    <label for="crear-proyecto-valor">Valor * <?php if (($convocatoriaActual['tope_por_proyecto'] ?? null) !== null): ?><span class="texto-atenuado">(tope $ <?= number_format((float) $convocatoriaActual['tope_por_proyecto'], 2, ',', '.') ?>)</span><?php endif; ?></label>
+                    <input type="number" id="crear-proyecto-valor" name="valor" min="0" step="0.01" placeholder="0.00"<?= ($convocatoriaActual['tope_por_proyecto'] ?? null) !== null ? ' max="' . (float) $convocatoriaActual['tope_por_proyecto'] . '"' : '' ?> required>
                 </div>
 
                 <div class="campo">

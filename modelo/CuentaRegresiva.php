@@ -21,23 +21,21 @@ class CuentaRegresiva
             $estado = 'pendiente';
             $segundosTranscurridos = 0;
             $segundosFaltantes = $segundosTotales;
+            $segundosParaAbrir = $inicio->getTimestamp() - $ahora->getTimestamp();
         } elseif ($ahora >= $fin) {
             $estado = 'cerrado';
             $segundosTranscurridos = $segundosTotales;
             $segundosFaltantes = 0;
+            $segundosParaAbrir = 0;
         } else {
             $estado = 'abierto';
             $segundosTranscurridos = $ahora->getTimestamp() - $inicio->getTimestamp();
             $segundosFaltantes = $fin->getTimestamp() - $ahora->getTimestamp();
+            $segundosParaAbrir = 0;
         }
 
-        if ($segundosFaltantes < 2 * 86400) {
-            $faltante = intdiv($segundosFaltantes, 3600);
-            $unidad = $faltante === 1 ? 'hora' : 'horas';
-        } else {
-            $faltante = intdiv($segundosFaltantes, 86400);
-            $unidad = $faltante === 1 ? 'día' : 'días';
-        }
+        [$faltante, $unidad] = self::formatear($segundosFaltantes);
+        [$faltanteParaAbrir, $unidadParaAbrir] = self::formatear($segundosParaAbrir);
 
         return [
             'configurado' => true,
@@ -45,8 +43,24 @@ class CuentaRegresiva
             'fecha_cierre' => (new DateTimeImmutable($fechaCierre))->format('d/m/Y'),
             'faltante' => $faltante,
             'unidad' => $unidad,
+            'faltante_para_abrir' => $faltanteParaAbrir,
+            'unidad_para_abrir' => $unidadParaAbrir,
             'porcentaje_transcurrido' => min(100, ($segundosTranscurridos / $segundosTotales) * 100),
             'estado' => $estado,
         ];
+    }
+
+    /** @return array{0: int, 1: string} Cantidad y unidad (horas si faltan menos de dos días, si no días). */
+    private static function formatear(int $segundos): array
+    {
+        if ($segundos < 2 * 86400) {
+            $cantidad = intdiv($segundos, 3600);
+
+            return [$cantidad, $cantidad === 1 ? 'hora' : 'horas'];
+        }
+
+        $cantidad = intdiv($segundos, 86400);
+
+        return [$cantidad, $cantidad === 1 ? 'día' : 'días'];
     }
 }

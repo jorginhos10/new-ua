@@ -55,6 +55,7 @@ class ConvocatoriaControlador
         $convocatorias = $this->modeloConvocatoria->obtenerTodas();
         $fuentesActivas = $this->modeloFuente->obtenerActivas();
         $dependencias = $this->modeloDependencia->obtenerActivas();
+        $arbolDependencias = $this->construirArbolDependencias($dependencias);
         $aniosVigencia = $this->obtenerAniosVigencia();
 
         $convocatoriaEditar = null;
@@ -112,12 +113,25 @@ class ConvocatoriaControlador
             return ['La fecha de cierre debe ser posterior a la fecha de inicio.', ''];
         }
 
+        // Valor por proyecto: libre (sin tope) o con un tope que ningún proyecto puede superar.
+        $tope = null;
+        if (($_POST['tope_modo'] ?? 'libre') === 'tope') {
+            $topeTexto = trim($_POST['tope_valor'] ?? '');
+
+            if (!is_numeric($topeTexto) || (float) $topeTexto <= 0) {
+                return ['Indica un tope por proyecto mayor que cero, o elige valor libre.', ''];
+            }
+
+            $tope = round((float) $topeTexto, 2);
+        }
+
         $datos = [
             'nombre' => $nombre,
             'vigencia' => $vigencia,
             'audiencia' => $audiencia,
             'fecha_inicio' => $fechaInicio,
             'fecha_cierre' => $fechaCierre,
+            'tope_por_proyecto' => $tope,
         ];
 
         if ($id > 0 && $this->modeloConvocatoria->obtenerPorId($id) !== null) {
@@ -132,6 +146,61 @@ class ConvocatoriaControlador
         $this->modeloConvocatoria->guardarDependencias($id, $this->leerDependenciasPost());
 
         return ['', $mensaje];
+    }
+
+    /**
+     * Árbol de dependencias para elegir las habilitadas, con la misma forma que el árbol de Techos.
+     * Primer nivel: las hijas de la raíz (Superadmin) y las dependencias sin padre (p. ej. Soporte Técnico).
+     * Solo aparecen las activas y visibles; una dependencia inactiva se quita y sus hijas suben de nivel.
+     */
+    private function construirArbolDependencias(array $activas): array
+    {
+        $activasIds = array_map(static fn (array $d): int => (int) $d['id'], $activas);
+        $todas = $this->modeloDependencia->obtenerTodas();
+
+        $raizId = null;
+        foreach ($todas as $dependencia) {
+            if (!empty($dependencia['es_raiz_superadmin'])) {
+                $raizId = (int) $dependencia['id'];
+                break;
+            }
+        }
+
+        $nodos = [];
+        foreach ($todas as $dependencia) {
+            if (!empty($dependencia['es_raiz_superadmin'])) {
+                continue;
+            }
+
+            $primerNivel = $dependencia['flujo_id'] === null || (int) $dependencia['flujo_id'] === $raizId;
+
+            if ($primerNivel) {
+                $nodos[] = [
+                    'dependencia' => $dependencia,
+                    'hijos' => $this->modeloDependencia->construirArbolDescendientes((int) $dependencia['id'], true),
+                ];
+            }
+        }
+
+        $filtrar = function (array $lista) use (&$filtrar, $activasIds): array {
+            $resultado = [];
+
+            foreach ($lista as $nodo) {
+                $hijos = $filtrar($nodo['hijos']);
+
+                if (in_array((int) $nodo['dependencia']['id'], $activasIds, true)) {
+                    $resultado[] = ['dependencia' => $nodo['dependencia'], 'hijos' => $hijos];
+                } else {
+                    $resultado = array_merge($resultado, $hijos);
+                }
+            }
+
+            usort($resultado, static fn (array $a, array $b): int => strcasecmp($a['dependencia']['nombre'], $b['dependencia']['nombre']));
+
+            return $resultado;
+        };
+
+        return $filtrar($nodos);
     }
 
     /** Dependencias marcadas; "incluir descendientes" aplica solo a las marcadas. */

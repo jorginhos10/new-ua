@@ -394,6 +394,11 @@ class PerfilProyectosControlador
             return ['El valor debe ser un número válido.', []];
         }
 
+        // Con tope por proyecto, ningún proyecto de la convocatoria puede superarlo.
+        if ($convocatoria['tope_por_proyecto'] !== null && (float) $datos['valor'] > (float) $convocatoria['tope_por_proyecto']) {
+            return ['El valor no puede superar el tope por proyecto de esta convocatoria ($ ' . number_format((float) $convocatoria['tope_por_proyecto'], 2, ',', '.') . ').', []];
+        }
+
         if (!is_numeric($datos['vigencia'])) {
             return ['Selecciona una vigencia válida.', []];
         }

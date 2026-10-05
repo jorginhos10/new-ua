@@ -43,8 +43,8 @@ class Convocatoria
     public function crear(array $datos, int $usuarioId): int
     {
         $consulta = $this->db->prepare(
-            'INSERT INTO convocatorias (nombre, vigencia, audiencia, fecha_inicio, fecha_cierre, activa, creado_por)
-             VALUES (:nombre, :vigencia, :audiencia, :fecha_inicio, :fecha_cierre, 1, :creado_por)'
+            'INSERT INTO convocatorias (nombre, vigencia, audiencia, fecha_inicio, fecha_cierre, tope_por_proyecto, activa, creado_por)
+             VALUES (:nombre, :vigencia, :audiencia, :fecha_inicio, :fecha_cierre, :tope_por_proyecto, 1, :creado_por)'
         );
         $consulta->execute([
             'nombre' => $datos['nombre'],
@@ -52,6 +52,7 @@ class Convocatoria
             'audiencia' => $datos['audiencia'],
             'fecha_inicio' => $datos['fecha_inicio'],
             'fecha_cierre' => $datos['fecha_cierre'],
+            'tope_por_proyecto' => $datos['tope_por_proyecto'],
             'creado_por' => $usuarioId,
         ]);
 
@@ -62,7 +63,7 @@ class Convocatoria
     {
         $consulta = $this->db->prepare(
             'UPDATE convocatorias SET nombre = :nombre, vigencia = :vigencia, audiencia = :audiencia,
-                fecha_inicio = :fecha_inicio, fecha_cierre = :fecha_cierre
+                fecha_inicio = :fecha_inicio, fecha_cierre = :fecha_cierre, tope_por_proyecto = :tope_por_proyecto
              WHERE id = :id'
         );
 
@@ -73,6 +74,7 @@ class Convocatoria
             'audiencia' => $datos['audiencia'],
             'fecha_inicio' => $datos['fecha_inicio'],
             'fecha_cierre' => $datos['fecha_cierre'],
+            'tope_por_proyecto' => $datos['tope_por_proyecto'],
         ]);
     }
 
