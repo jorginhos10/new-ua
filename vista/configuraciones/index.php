@@ -113,6 +113,20 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </div>
                     <p class="texto-atenuado">Línea, motor y proyecto del PDI, y los catálogos de estamentos, rubros, sedes, contratos comunes y líneas de inversión y fuentes de financiación.</p>
                 </a>
+                <a href="index.php?ruta=presupuesto-final" class="tarjeta-modulo">
+                    <div class="tarjeta-modulo-cabecera">
+                        <h2>Exportar presupuesto final</h2>
+                        <?= $flechaModulo ?>
+                    </div>
+                    <p class="texto-atenuado">Descarga en Excel el presupuesto final de gastos principales y de autogestión, por rubro, centro de costo y proyecto.</p>
+                </a>
+                <a href="index.php?ruta=convocatorias" class="tarjeta-modulo">
+                    <div class="tarjeta-modulo-cabecera">
+                        <h2>Convocatorias de proyectos</h2>
+                        <?= $flechaModulo ?>
+                    </div>
+                    <p class="texto-atenuado">Crea convocatorias de Perfil de proyectos, con su reloj, fuentes, dependencias y el consolidado de cada una.</p>
+                </a>
                 <a href="index.php?ruta=categorias-gasto" class="tarjeta-modulo">
                     <div class="tarjeta-modulo-cabecera">
                         <h2>Categoría de gasto</h2>

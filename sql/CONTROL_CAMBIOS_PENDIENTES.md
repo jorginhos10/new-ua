@@ -649,10 +649,37 @@ de datos antes de correrlo.
 ## 2026-10-05 — Catálogo de fuentes de financiación (Configuraciones > Listas)
 
 - **Archivo:** `sql/fuentes_financiacion.sql` (crea la tabla `fuentes_financiacion` y la carga con las fuentes ya usadas en los proyectos, con `INSERT IGNORE`). Código: `modelo/FuenteFinanciacion.php`, `controlador/FuenteFinanciacionControlador.php`, `vista/fuentes-financiacion/index.php`, ruta en `index.php` y tarjeta en `vista/configuraciones/index.php`.
-- **Cambio:** catálogo nuevo con alta, activar/desactivar (sin borrado) y estado. Todavía no lo usa Perfil de proyectos; eso llega con las convocatorias.
+- **Cambio:** catálogo nuevo con alta, edición del nombre (actualiza también el texto de los proyectos que la usan), eliminación (solo si ningún proyecto la usa; la quita de las convocatorias) y activar/desactivar. Las fuentes en uso no se borran: se desactivan. Sin SQL adicional después de la carga inicial.
 - **Motivo:** las convocatorias van a habilitar fuentes de un catálogo en vez de texto libre.
 - **Aplicado en local:** Sí (2026-10-05). Carga inicial: 6 fuentes, incluidas "Plan de Fomento a la Calidad" y "Plan de Fomento de la Calidad", que parecen la misma fuente escrita distinto. Se dejaron separadas; conviene unificarlas antes de la migración de convocatorias.
 - **Aplicado en producción:** Pendiente. Correr `sql/fuentes_financiacion.sql` antes de desplegar el código.
+
+## 2026-10-05 — Convocatorias de proyectos (Perfil de proyectos)
+
+- **Archivo:** `sql/convocatorias_proyectos.sql`. Crea `convocatorias`, `convocatoria_dependencias` y `convocatoria_fuentes`; agrega a `necesidades_academicas` las columnas `convocatoria_id`, `fuente_financiacion_id` y `dependencia_id` con sus claves foráneas; y carga datos existentes (una convocatoria por vigencia, fuentes y dependencias por nombre).
+- **Cambio:** cada convocatoria tiene nombre, vigencia, quién formula (invitados, administradores o ambos), fechas de inicio y cierre (reloj), fuentes habilitadas del catálogo, dependencias habilitadas (con opción de incluir descendientes) y estado activa/inactiva. Perfil de proyectos muestra las convocatorias visibles para cada usuario, valida la ventana en el servidor (incluidas enviar, eliminar y duplicar) y no permite editar un proyecto enviado. Administración y consolidado por convocatoria en Configuraciones.
+- **Retirado:** la ventana única `reloj_arena_formulador` ya no la usa ningún código. Su tabla queda para una migración posterior; `modelo/RelojArenaFormulador.php` se eliminó.
+- **Motivo:** una sola ventana para todas las vigencias y fuentes en texto libre no permitían planear convocatorias ni consolidarlas.
+- **Aplicado en local:** Sí (2026-10-05). Backfill: 31 proyectos asignados a "Convocatoria 2027", todos con fuente y dependencia por id. La convocatoria inicial queda abierta de 2026-01-01 a 2027-12-31 porque no había reloj previo; ajustar en Configuraciones > Convocatorias. Las fuentes "Plan de Fomento a la Calidad" y "Plan de Fomento de la Calidad" siguen separadas.
+- **Aplicado en producción:** Pendiente. Orden: (1) `sql/fuentes_financiacion.sql`, (2) `sql/convocatorias_proyectos.sql` una sola vez, (3) desplegar el código. Sin el paso 2, Perfil de proyectos falla al guardar. Revisar antes de correrlo si producción tiene proyectos con fuente o dependencia sin coincidencia por nombre.
+
+## 2026-10-05 — NIT de sede (dos dígitos, 00 a 09) y edición de sedes
+
+- **Archivo:** `sql/sedes_nit.sql` (agrega `sedes.nit`, lo llena, lo hace obligatorio y único, y una restricción CHECK para el formato). Código: `modelo/Sede.php`, `controlador/SedeControlador.php`, `vista/sedes/index.php`.
+- **Cambio:** cada sede tiene NIT de dos dígitos que empiezan por 0 (00 a 09), único. Las sedes se editan en la misma tabla (código, nombre y NIT). El CSV de sedes incluye la columna `nit`; una fila con NIT inválido se omite en la importación.
+- **Motivo:** las sedes necesitan NIT, y debían poder corregirse sin borrar y recrear.
+- **Aplicado en local:** Sí (2026-10-05). Valores iniciales asignados por orden de creación: Norte 01, Bellas Artes 02, Suan 03, Soledad 04, Sabanalarga 05, Centro 06. Confirmar o corregir desde la pantalla de sedes.
+- **Aplicado en producción:** Pendiente. Correr `sql/sedes_nit.sql` antes de desplegar el código. Si producción ya tiene sedes creadas después de la copia local, el UPDATE no les asigna NIT y el ALTER falla; revisarlas antes.
+- **Nota:** importar el CSV de sedes sincroniza: elimina las sedes que no están en el archivo (sin cambio respecto de antes). El CSV antiguo sin columna `nit` ya no crea ni actualiza sedes.
+
+## 2026-10-05 — Exportación del presupuesto final (procedencia, tipo e inversiones con código 4)
+
+- **Archivo:** sin SQL. Código: `modelo/PresupuestoFinal.php`, `controlador/PresupuestoFinalControlador.php`, `vista/presupuesto-final/index.php`, rutas en `index.php` y botón en `vista/configuraciones/index.php`. La marca de inversión ya existía en `sql/gastos_autogestion_capitulo_control.sql` y no cambia.
+- **Cambio:** botón en Configuraciones que descarga en Excel el presupuesto final del año (gastos enviados de gastos principales y de autogestión). Columnas de la estructura del sistema de destino, con duplicados de lectura de rubro, centro de costo y programa, más Procedencia y Tipo. En autogestión, las inversiones (categoría Inversiones) salen con código de rubro que empieza por 4; el rubro del catálogo es el mismo, solo cambia el código en el archivo. Ninguna tabla ni el catálogo de rubros se modifican.
+- **Motivo:** el sistema de destino distingue las inversiones de autogestión con el 4 al inicio del código de rubro.
+- **Aplicado en local:** Sí (2026-10-05). Para 2027: 400 filas, suma 53.848.155.198 (total de la base menos 134.679.000 de 2 filas sin rubro, sede, dependencia o proyecto válidos; la página las muestra).
+- **Aplicado en producción:** No aplica SQL. Desplegar el código.
+- **Nota:** en local, el script de migración que creaba rubros 4.x se eliminó y sus cambios se revirtieron; el catálogo quedó con 268 rubros. La validación al guardar (que una inversión de autogestión lleve la marca) sigue pendiente.
 
 ---
 

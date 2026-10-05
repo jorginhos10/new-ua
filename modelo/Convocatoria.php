@@ -220,6 +220,26 @@ class Convocatoria
         ));
     }
 
+    /** Consolidado de la convocatoria: cantidad y valor por dependencia y fuente. */
+    public function consolidadoPorDependenciaYFuente(int $id): array
+    {
+        $consulta = $this->db->prepare(
+            "SELECT COALESCE(d.nombre, n.dependencia) AS dependencia,
+                    COALESCE(f.nombre, n.fuente_financiacion) AS fuente,
+                    COUNT(*) AS cantidad,
+                    SUM(n.valor) AS valor
+             FROM necesidades_academicas n
+             LEFT JOIN dependencias d ON d.id = n.dependencia_id
+             LEFT JOIN fuentes_financiacion f ON f.id = n.fuente_financiacion_id
+             WHERE n.convocatoria_id = :id
+             GROUP BY dependencia, fuente
+             ORDER BY dependencia, fuente"
+        );
+        $consulta->execute(['id' => $id]);
+
+        return $consulta->fetchAll();
+    }
+
     /** Dentro del periodo, con la fecha de hoy en Colombia (no la del servidor). */
     public static function dentroDeVentana(array $convocatoria): bool
     {

@@ -31,6 +31,8 @@ require_once __DIR__ . '/controlador/RubroControlador.php';
 require_once __DIR__ . '/controlador/ContratoComunControlador.php';
 require_once __DIR__ . '/controlador/LineaInversionControlador.php';
 require_once __DIR__ . '/controlador/FuenteFinanciacionControlador.php';
+require_once __DIR__ . '/controlador/ConvocatoriaControlador.php';
+require_once __DIR__ . '/controlador/PresupuestoFinalControlador.php';
 require_once __DIR__ . '/controlador/SublineaInversionControlador.php';
 require_once __DIR__ . '/controlador/RubroCategoriaControlador.php';
 require_once __DIR__ . '/controlador/AnioPresupuestalControlador.php';
@@ -101,6 +103,8 @@ $rutaAMenuKey = [
     'contratos-comunes' => 'configuraciones',
     'lineas-inversion' => 'configuraciones',
     'fuentes-financiacion' => 'configuraciones',
+    'convocatorias' => 'configuraciones',
+    'presupuesto-final' => 'configuraciones',
     'sublineas-inversion' => 'configuraciones',
     'rubro-categorias' => 'configuraciones',
     'anios-presupuestales' => 'configuraciones',
@@ -215,6 +219,18 @@ switch ($ruta) {
 
     case 'fuentes-financiacion':
         (new FuenteFinanciacionControlador())->index();
+        break;
+
+    case 'convocatorias':
+        (new ConvocatoriaControlador())->index();
+        break;
+
+    case 'presupuesto-final':
+        (new PresupuestoFinalControlador())->index();
+        break;
+
+    case 'presupuesto-final-exportar':
+        (new PresupuestoFinalControlador())->exportar();
         break;
 
     case 'sublineas-inversion':
