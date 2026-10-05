@@ -242,6 +242,50 @@ class Gasto
     }
 
     /**
+     * Gasto propio del año (sin las asignaciones automáticas de techo ni los expedientes archivados),
+     * con su categoría y sus meses de ejecución. Lo usa el resumen del Dashboard.
+     */
+    public function obtenerPropiosParaResumen(int $anioPresupuestalId): array
+    {
+        $consulta = $this->db->prepare(
+            "SELECT categoria_gasto_id, meses, valor_total FROM gastos
+             WHERE anio_presupuestal_id = :anio_presupuestal_id
+                AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')
+                AND NOT EXISTS (
+                    SELECT 1 FROM peticiones_archivadas pa
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = gastos.id AND pa.accion = 'expediente'
+                )"
+        );
+        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
+
+        return $consulta->fetchAll();
+    }
+
+    /**
+     * Cuántos proyectos del PDI tienen gasto asignado en el año (suma mayor a 0). Excluye las
+     * asignaciones automáticas de techo y los expedientes archivados, igual que el resto del resumen.
+     */
+    public function contarProyectosConPresupuesto(int $anioPresupuestalId): int
+    {
+        $consulta = $this->db->prepare(
+            "SELECT COUNT(*) FROM (
+                SELECT proyecto_id FROM gastos
+                WHERE anio_presupuestal_id = :anio_presupuestal_id
+                    AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')
+                    AND NOT EXISTS (
+                        SELECT 1 FROM peticiones_archivadas pa
+                        WHERE pa.origen = 'gasto_principal' AND pa.origen_id = gastos.id AND pa.accion = 'expediente'
+                    )
+                GROUP BY proyecto_id
+                HAVING SUM(valor_total) > 0
+             ) con_presupuesto"
+        );
+        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
+
+        return (int) $consulta->fetchColumn();
+    }
+
+    /**
      * Igual que obtenerTotalesPorDependencia(), pero el monto de un techo asignado a una hija
      * (gasto automático tipo_automatico = 'techo_hijo') solo se cuenta como "ejecutado" mientras
      * esa hija ya tenga al menos un gasto real registrado. Un techo asignado que la hija todavía

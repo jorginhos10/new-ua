@@ -584,6 +584,56 @@ de datos antes de correrlo.
 - **Aplicado en producción:** Pendiente. Antes de ejecutar el `DROP`, revisar si la tabla `facultades` de producción tiene filas que se quieran conservar.
 - **Nota:** el nodo "facultades" (tipo Facultad) de la tabla `jerarquias` no se toca: es un dato del árbol y no depende de esta tabla.
 
+## 2026-10-04 — Relojes de arena por día completo (00:00 a 23:59) y en horas al final
+
+- **Archivo:** sin SQL. Código: `controlador/DashboardControlador.php` (`obtenerRelojArena()`), `vista/dashboard/administrador.php` y `vista/dashboard/consejo.php`.
+- **Cambio:** el reloj cuenta desde las 00:00 del día de inicio hasta las 23:59:59 del día de cierre, en hora de Colombia (`America/Bogota`), sin depender de la zona horaria del servidor. Con menos de dos días faltantes, muestra horas en lugar de días.
+- **Motivo:** la cuenta en días no incluía el día de cierre ni el tiempo que queda en el día.
+- **Aplicado en local:** Sí (2026-10-04). Verificado: por defecto 67 días; con cierre hoy, muestra las horas que faltan.
+- **Aplicado en producción:** Pendiente, solo desplegar el código.
+
+---
+
+## 2026-10-04 — Inicio de Consejo Superior: bienvenida, variables, reloj y mensajes propios
+
+- **Archivo:** `sql/consejo_superior_inicio.sql` (tabla `reloj_arena_consejo` y columna `audiencia` en `mensajes_globales`, con `administrador` por defecto).
+- **Cambio:** el inicio de Consejo Superior tiene bienvenida, variables, su propio reloj (se configura en Configuraciones > Reloj de arena, en su tarjeta) y su carrusel de mensajes globales. En Mensaje global hay pestañas "Administradores" y "Consejo Superior", y cada mensaje pertenece a una de las dos. Código: `controlador/DashboardControlador.php`, `vista/dashboard/consejo.php` (nuevo), `modelo/RelojArenaConsejo.php` (nuevo), `modelo/MensajeGlobal.php`, `controlador/MensajeGlobalControlador.php`, `controlador/RelojArenaControlador.php`, `vista/mensaje-global/index.php`, `vista/reloj-arena/index.php`.
+- **Motivo:** Consejo Superior necesita su propio inicio con sus mensajes, sin ver lo de los administradores.
+- **Aplicado en local:** Sí (2026-10-04). Verificado: el inicio del consejo muestra solo sus mensajes y su reloj; el de los administradores no muestra los del consejo.
+- **Aplicado en producción:** Pendiente. Desplegar el código y correr `sql/consejo_superior_inicio.sql`. Los mensajes existentes quedan como de administradores. Mientras no se configure, el reloj del consejo usa del 15 de octubre al 20 de diciembre del año en curso (código, sin datos nuevos).
+
+---
+
+## 2026-10-04 — Se retira la página "Consulta" y Consejo Superior ya no elige la versión
+
+- **Archivo:** `sql/eliminar_consulta.sql` (borra solo las claves de menú `consulta` de plantillas y personalizaciones).
+- **Cambio:** se quitan la ruta, el controlador (`ConsultaControlador.php`), la vista (`vista/consulta/`), la entrada "Consulta" del menú y la tarjeta de desarrollo "Tabla v1". En Repositorio, solo el superadmin elige la versión (o el snapshot); el resto ve la que él dejó activa, y el servidor ignora `version_id` y `snapshot_id` de esas cuentas.
+- **Motivo:** la página ya no hace falta, la cubren las pestañas de Análisis; y Consejo Superior no debe poder cambiar la versión que ven todos.
+- **Aplicado en local:** Sí (2026-10-04). Verificado: Consejo Superior no ve el selector ni el botón de tipo de vista, y su `version_id` no cambia la versión activa.
+- **Aplicado en producción:** Pendiente. Desplegar el código y correr `sql/eliminar_consulta.sql`.
+
+---
+
+## 2026-10-04 — Varios mensajes globales (agregar, editar y eliminar)
+
+- **Archivo:** `sql/mensajes_globales.sql`
+- **Cambio:** tabla nueva `mensajes_globales` (un registro por mensaje, con orden). El primer mensaje toma el contenido de `mensaje_global` si lo hay. La tabla `mensaje_global` queda como respaldo, sin uso. Código: `modelo/MensajeGlobal.php`, `controlador/MensajeGlobalControlador.php`, `vista/mensaje-global/index.php` y `controlador/DashboardControlador.php` (resumen y mensajes).
+- **Motivo:** poder tener varias diapositivas de mensajes en el inicio, cada una con su texto, y editarlas o eliminarlas.
+- **Aplicado en local:** Sí (2026-10-04). Probado agregar, editar y eliminar; un usuario que no es superadmin no puede hacerlo.
+- **Aplicado en producción:** Pendiente. Desplegar el código y correr el SQL. La migración copia el mensaje actual de `mensaje_global`, así que hay que revisar qué texto queda como primer mensaje.
+- **Nota:** el resumen de gastos usa la misma cuenta que Techos (`TechosControlador::calcularAsignadoArbol`): techo total = techos de las unidades directas de la raíz (67.000 M en 2027), asignado = lo que calcula Techos, con el total ejecutado de `Gasto::obtenerTotalesEjecutadosPorDependencia`. El resumen de Autogestión/Postgrado cuenta los ingresos de las dependencias con techo mayor a 0. Son cambios de código, sin esquema nuevo.
+
+---
+
+## 2026-10-04 — Análisis por tipo de usuario y pestañas en los permisos
+
+- **Archivos:** `sql/analisis_permisos_menu.sql` (datos), `modelo/AccesoAnalisis.php` y `config/menu_items_analisis.php` (nuevos), `controlador/AnalisisControlador.php`, `vista/analisis/index.php`, `vista/parciales/sidebar.php`, `controlador/JerarquiaControlador.php`, `controlador/UsuarioControlador.php`.
+- **Cambio:** tres clases de acceso a Análisis. Superadmin (dependencia raíz): todo, como antes. Administrador de cualquier otra dependencia: solo la vista Usuario, de solo lectura, en su dependencia y descendientes, sin selector de tipo de vista. Consejo superior (`rol = consejo_superior`): solo Repositorio, sin selector. Las pestañas se asignan con las claves `analisis_*` en Jerarquías y en Usuarios > Permisos. Se agregan `analisis_pdi` y `analisis_techos` a todas las plantillas y personalizaciones existentes (17 plantillas y 12 usuarios personalizados).
+- **Motivo:** que administradores y consejo superior vean análisis sin darles la escritura ni la vista de tiempo real.
+- **Aplicado en local:** Sí (2026-10-04). Verificado con sesiones de cada clase: pestañas, selector, redirecciones de URL, escrituras y exportaciones bloqueadas para quien no es superadmin.
+- **Aplicado en producción:** Pendiente. Desplegar el código y correr `sql/analisis_permisos_menu.sql` juntos. Sin el SQL, un administrador con plantilla propia no vería ninguna pestaña.
+- **Nota:** Techos y Metas no tiene vista Repositorio; por eso a consejo superior no se le muestra (decidido así; si después se construye ese Repositorio, quitar la exclusión en `AccesoAnalisis::PESTANAS_SIN_REPOSITORIO`). El Repositorio de PDI no tiene versiones guardadas en local.
+
 ---
 
 <!--

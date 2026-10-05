@@ -224,12 +224,23 @@ require __DIR__ . '/../parciales/encabezado.php';
 </style>
 
 <div class="analisis-barra">
+    <?php $pestanasPermitidas = AccesoAnalisis::actual()['pestanas']; ?>
     <nav class="analisis-tabs">
+        <?php if (in_array('programacion', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => $lado])) ?>" class="<?= $tab === 'programacion' ? 'activa' : '' ?>">Programación presupuestal <?= htmlspecialchars((string) $anioLabelActivo) ?></a>
+        <?php endif; ?>
+        <?php if (in_array('pdi', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('pdi', $vista)) ?>" class="<?= $tab === 'pdi' ? 'activa' : '' ?>">Articulación PDI</a>
+        <?php endif; ?>
+        <?php if (in_array('analisis', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('analisis', $vista)) ?>" class="<?= $tab === 'analisis' ? 'activa' : '' ?>">Análisis de distribución</a>
+        <?php endif; ?>
+        <?php if (in_array('proyectos', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('proyectos', $vista)) ?>" class="<?= $tab === 'proyectos' ? 'activa' : '' ?>">Proyectos</a>
+        <?php endif; ?>
+        <?php if (in_array('techos', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('techos', $vista === 'usuario' ? 'usuario' : 'tiempo_real')) ?>" class="<?= $tab === 'techos' ? 'activa' : '' ?>">Techos y Metas</a>
+        <?php endif; ?>
     </nav>
 
     <div class="analisis-acciones">
@@ -308,6 +319,7 @@ require __DIR__ . '/../parciales/encabezado.php';
         </div>
         <?php endif; ?>
 
+        <?php if (AccesoAnalisis::actual()['clase'] === 'superadmin'): ?>
         <div class="analisis-toggle">
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'tiempo_real', $paramsTab)) ?>" class="<?= $vista === 'tiempo_real' ? 'activo' : '' ?>">Tiempo real</a>
             <?php if ($tab !== 'techos'): ?>
@@ -315,8 +327,10 @@ require __DIR__ . '/../parciales/encabezado.php';
             <?php endif; ?>
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'usuario', $paramsTab)) ?>" class="<?= $vista === 'usuario' ? 'activo' : '' ?>">Usuario</a>
         </div>
+        <?php endif; ?>
 
-        <?php if ($vista === 'repositorio' && in_array($tab, ['pdi', 'programacion', 'proyectos'], true)): ?>
+        <?php $esSuperadminAnalisis = AccesoAnalisis::actual()['clase'] === 'superadmin'; ?>
+        <?php if ($esSuperadminAnalisis && $vista === 'repositorio' && in_array($tab, ['pdi', 'programacion', 'proyectos'], true)): ?>
         <select class="analisis-selector-modo" onchange="if(this.value){window.location.href=this.value;}">
             <?php if (empty($versiones)): ?>
             <option value="">Sin versiones guardadas</option>
@@ -327,7 +341,7 @@ require __DIR__ . '/../parciales/encabezado.php';
             </option>
             <?php endforeach; ?>
         </select>
-        <?php elseif ($tab === 'analisis' && $vista === 'repositorio'): ?>
+        <?php elseif ($esSuperadminAnalisis && $tab === 'analisis' && $vista === 'repositorio'): ?>
         <select class="analisis-selector-modo" onchange="if(this.value){window.location.href=this.value;}">
             <?php if (empty($snapshots)): ?>
             <option value="">Sin snapshots guardados</option>
@@ -340,7 +354,7 @@ require __DIR__ . '/../parciales/encabezado.php';
         </select>
         <?php elseif ($vista === 'usuario'): ?>
         <select class="analisis-selector-modo" onchange="if(this.value){window.location.href=this.value;}">
-            <?php foreach ($dependenciasTodas as $dependenciaOpcion): ?>
+            <?php foreach (AccesoAnalisis::dependenciasSelector($dependenciasTodas) as $dependenciaOpcion): ?>
             <option value="<?= htmlspecialchars(analisisUrl($tab, 'usuario', ['dependencia' => $dependenciaOpcion['nombre']] + $paramsTab + (isset($origenActivo) ? ['origen' => $origenActivo] : []))) ?>" <?= $dependenciaOpcion['nombre'] === $dependenciaFiltroActual ? 'selected' : '' ?>>
                 <?= htmlspecialchars(Dependencia::nombreVisible($dependenciaOpcion['nombre'])) ?>
             </option>

@@ -69,7 +69,7 @@ class UsuarioControlador
         $estamentos = $this->modeloEstamento->obtenerTodos();
         $rolesPorTipo = $this->modeloRolesPorTipo->obtenerMapaCompleto();
         $tiposDependencia = $this->modeloRolesPorTipo->obtenerTiposDisponibles();
-        $itemsMenu = require __DIR__ . '/../config/menu_items.php';
+        $itemsMenu = array_merge(require __DIR__ . '/../config/menu_items.php', require __DIR__ . '/../config/menu_items_analisis.php');
         $menuPorTipo = $this->modeloMenuPermiso->obtenerPlantillasCompletas();
 
         // Para Invitados (Formulador), la Dependencia es siempre una Facultad real (para poder

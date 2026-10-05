@@ -16,23 +16,66 @@ class MensajeGlobalControlador
     {
         $this->requerirSuperAdmin();
 
-        $error = '';
-        $exito = '';
-
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $contenido = trim($_POST['contenido'] ?? '');
-
-            if (mb_strlen($contenido) > 2000) {
-                $error = 'El mensaje no puede superar los 2000 caracteres.';
-            } else {
-                $this->modeloMensaje->guardar($contenido, (int) $_SESSION['usuario_id']);
-                $exito = 'Mensaje actualizado correctamente.';
-            }
+            $this->procesarAccion();
         }
 
-        $mensaje = $this->modeloMensaje->obtener();
+        // Después de guardar se redirige (patrón PRG): el aviso viaja en la sesión.
+        $aviso = $_SESSION['mensaje_global_aviso'] ?? null;
+        unset($_SESSION['mensaje_global_aviso']);
+
+        $audiencia = $this->audienciaSolicitada($_GET['audiencia'] ?? null);
+        $mensajes = $this->modeloMensaje->listar($audiencia);
 
         require __DIR__ . '/../vista/mensaje-global/index.php';
+    }
+
+    private function procesarAccion(): void
+    {
+        $usuarioId = (int) $_SESSION['usuario_id'];
+        $accion = $_POST['accion'] ?? '';
+        $id = (int) ($_POST['id'] ?? 0);
+        $contenido = trim((string) ($_POST['contenido'] ?? ''));
+        $audiencia = $this->audienciaSolicitada($_POST['audiencia'] ?? null);
+
+        if ($accion === 'eliminar') {
+            if ($id > 0 && $this->modeloMensaje->obtenerPorId($id) !== null) {
+                $this->modeloMensaje->eliminar($id);
+                $this->avisar('exito', 'Mensaje eliminado.');
+            } else {
+                $this->avisar('error', 'No se encontró el mensaje.');
+            }
+        } elseif (in_array($accion, ['crear', 'editar'], true)) {
+            if ($contenido === '') {
+                $this->avisar('error', 'El mensaje no puede estar vacío.');
+            } elseif (mb_strlen($contenido) > MensajeGlobal::LIMITE_CONTENIDO) {
+                $this->avisar('error', 'El mensaje no puede superar los ' . MensajeGlobal::LIMITE_CONTENIDO . ' caracteres.');
+            } elseif ($accion === 'crear') {
+                $this->modeloMensaje->crear($contenido, $usuarioId, $audiencia);
+                $this->avisar('exito', 'Mensaje agregado.');
+            } elseif ($id > 0 && $this->modeloMensaje->obtenerPorId($id) !== null) {
+                $this->modeloMensaje->actualizar($id, $contenido, $usuarioId);
+                $this->avisar('exito', 'Mensaje actualizado.');
+            } else {
+                $this->avisar('error', 'No se encontró el mensaje.');
+            }
+        } else {
+            $this->avisar('error', 'Acción no válida.');
+        }
+
+        header('Location: index.php?ruta=mensaje-global&audiencia=' . urlencode($audiencia));
+        exit;
+    }
+
+    /** Solo se aceptan las audiencias conocidas; cualquier otra cae en administradores. */
+    private function audienciaSolicitada(?string $valor): string
+    {
+        return in_array($valor, MensajeGlobal::AUDIENCIAS, true) ? $valor : 'administrador';
+    }
+
+    private function avisar(string $tipo, string $texto): void
+    {
+        $_SESSION['mensaje_global_aviso'] = ['tipo' => $tipo, 'texto' => $texto];
     }
 
     private function requerirSuperAdmin(): void

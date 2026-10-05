@@ -5,6 +5,7 @@ require_once __DIR__ . '/../modelo/Necesidad.php';
 require_once __DIR__ . '/../modelo/SolicitudArl.php';
 require_once __DIR__ . '/../modelo/VariableMacroeconomica.php';
 require_once __DIR__ . '/../modelo/Gasto.php';
+require_once __DIR__ . '/../modelo/Proyecto.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/IngresoExtension.php';
 require_once __DIR__ . '/../modelo/IngresoPostgrado.php';
@@ -13,6 +14,7 @@ require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/MensajeGlobal.php';
 require_once __DIR__ . '/../modelo/AutogestionPorcentaje.php';
 require_once __DIR__ . '/../modelo/RelojArenaFormulador.php';
+require_once __DIR__ . '/../modelo/RelojArenaConsejo.php';
 
 class DashboardControlador
 {
@@ -29,6 +31,7 @@ class DashboardControlador
         if ($rolUsuario === 'administrador') {
             $modeloUsuario = new Usuario();
             $usuarioActual = $modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+            $correoUsuario = $usuarioActual['correo'] ?? '';
             [$dependenciaIdsPermitidos, $dependenciaNombresPermitidos] = $this->obtenerAlcanceDependencia($usuarioActual);
 
             $usuariosAsociados = $modeloUsuario->obtenerRecientesPorDependencias($dependenciaIdsPermitidos, 5);
@@ -46,11 +49,26 @@ class DashboardControlador
             $resumenAutogestion = $this->obtenerResumenIngresos(new IngresoExtension(), $topeExtension);
             $topePostgrado = $modeloPorcentajeAutogestion->obtenerTopePorModulo('postgrado');
             $resumenPostgrado = $this->obtenerResumenIngresos(new IngresoPostgrado(), $topePostgrado);
-            $mensajeGlobal = (new MensajeGlobal())->obtener()['contenido'] ?? '';
+            $mensajesGlobales = (new MensajeGlobal())->listar('administrador');
 
-            $relojArena = $this->obtenerRelojArena();
+            $relojArena = $this->obtenerRelojArena((new RelojArenaConfiguracion())->obtener());
 
             require __DIR__ . '/../vista/dashboard/administrador.php';
+            return;
+        }
+
+        // Consejo Superior: bienvenida, variables, su propio reloj y sus propios mensajes globales.
+        if ($rolUsuario === 'consejo_superior') {
+            $usuarioActual = (new Usuario())->obtenerPorId((int) $_SESSION['usuario_id']);
+            $correoUsuario = $usuarioActual['correo'] ?? '';
+            $variablesMacro = array_values(array_filter(
+                (new VariableMacroeconomica())->obtenerTodas(),
+                static fn (array $variable): bool => $variable['estado'] === 'activo'
+            ));
+            $relojArena = $this->obtenerRelojArena((new RelojArenaConsejo())->obtenerConDefecto());
+            $mensajesGlobales = (new MensajeGlobal())->listar('consejo_superior');
+
+            require __DIR__ . '/../vista/dashboard/consejo.php';
             return;
         }
 
@@ -99,32 +117,156 @@ class DashboardControlador
         return [$ids, $nombres];
     }
 
+    /**
+     * Resumen de gastos con la misma cuenta que Techos (TechosControlador): el techo total son los
+     * techos de las unidades directas de la raíz (los techos anidados ya salen de los de su padre,
+     * no se suman otra vez), y lo asignado es lo que calcula calcularAsignadoArbol() sobre
+     * presupuesto_dependencia y el total ejecutado de Gasto.
+     */
     private function obtenerResumenCostos(): array
     {
         $modeloGasto = new Gasto();
+        $modeloDependencia = new Dependencia();
         $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
-        $totalDependencias = (new Dependencia())->contarMonetizablesActivas();
+
+        $raiz = null;
+        foreach ($modeloDependencia->obtenerTodas() as $dependencia) {
+            if (!empty($dependencia['es_raiz_superadmin'])) {
+                $raiz = $dependencia;
+                break;
+            }
+        }
 
         $resumen = [];
 
         foreach ($aniosActivos as $anioFila) {
             $anioId = (int) $anioFila['id'];
-            $totalGastado = $modeloGasto->obtenerTotalPorAnio($anioId);
-            $presupuestoAnio = (float) $anioFila['presupuesto'];
-            $porcentaje = $presupuestoAnio > 0 ? min(100, ($totalGastado / $presupuestoAnio) * 100) : 0.0;
-            $dependenciasConDato = count($modeloGasto->obtenerDependenciasPorAnio($anioId));
+            $techos = (new PresupuestoDependencia())->obtenerPorAnio($anioId);
+            $ejecutado = $modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioId);
+
+            $techoTotal = 0.0;
+            $asignado = 0.0;
+            $conTecho = 0;
+            $conAsignacion = 0;
+            $sobreTecho = 0;
+
+            if ($raiz !== null) {
+                $mapa = [];
+                foreach ($modeloDependencia->construirArbolDescendientes((int) $raiz['id']) as $nodo) {
+                    $asignado += $this->calcularAsignadoArbol($nodo, $techos, $ejecutado, $mapa);
+
+                    // Techo total: solo las unidades directas, porque los techos anidados salen del de su padre.
+                    $techoTotal += (float) ($techos[(int) $nodo['dependencia']['id']]['techo'] ?? 0);
+                }
+
+                // Conteo: todas las dependencias con techo, también las anidadas.
+                foreach ($techos as $dependenciaId => $fila) {
+                    $techo = (float) ($fila['techo'] ?? 0);
+                    if ($techo <= 0 || !isset($mapa[(int) $dependenciaId])) {
+                        continue;
+                    }
+
+                    $conTecho++;
+                    if ($mapa[(int) $dependenciaId] > 0) {
+                        $conAsignacion++;
+                    }
+                    if ($mapa[(int) $dependenciaId] > $techo) {
+                        $sobreTecho++;
+                    }
+                }
+            }
+
+            $trimestres = $this->pacPorTrimestre($anioId);
+            $proyectosTotal = count((new Proyecto())->obtenerTodos());
+            $proyectosConPresupuesto = (new Gasto())->contarProyectosConPresupuesto($anioId);
 
             $resumen[] = [
                 'anio' => $anioFila['anio'],
-                'total_gastado' => $totalGastado,
-                'presupuesto' => $presupuestoAnio,
-                'porcentaje' => $porcentaje,
-                'dependencias_con_dato' => $dependenciasConDato,
-                'dependencias_total' => $totalDependencias,
+                'proyectos_total' => $proyectosTotal,
+                'proyectos_con_presupuesto' => $proyectosConPresupuesto,
+                'trimestres' => $trimestres,
+                'techo_total' => $techoTotal,
+                'gastado' => $asignado,
+                'disponible' => $techoTotal - $asignado,
+                'porcentaje' => $techoTotal > 0 ? min(100, ($asignado / $techoTotal) * 100) : 0.0,
+                'dependencias_con_techo' => $conTecho,
+                'dependencias_con_gasto' => $conAsignacion,
+                'dependencias_sobre_techo' => $sobreTecho,
             ];
         }
 
         return $resumen;
+    }
+
+    /**
+     * PAC por trimestre (% del total programado). El gasto de cada ítem se reparte en partes iguales
+     * entre sus meses, igual que el gráfico de PAC del análisis.
+     */
+    private function pacPorTrimestre(int $anioId): array
+    {
+        $filas = (new Gasto())->obtenerPropiosParaResumen($anioId);
+
+        $porTrimestre = [1 => 0.0, 2 => 0.0, 3 => 0.0, 4 => 0.0];
+
+        foreach ($filas as $fila) {
+            $valor = (float) $fila['valor_total'];
+
+            $meses = array_values(array_filter(
+                array_map('intval', explode(',', (string) $fila['meses'])),
+                static fn (int $mes): bool => $mes >= 1 && $mes <= 12
+            ));
+            if ($meses !== []) {
+                $parte = $valor / count($meses);
+                foreach ($meses as $mes) {
+                    $porTrimestre[intdiv($mes - 1, 3) + 1] += $parte;
+                }
+            }
+        }
+
+        $totalPac = array_sum($porTrimestre);
+        $trimestres = [];
+        foreach ($porTrimestre as $numero => $monto) {
+            $trimestres[] = [
+                'etiqueta' => 'T' . $numero,
+                'porcentaje' => $totalPac > 0 ? ($monto / $totalPac) * 100 : 0.0,
+            ];
+        }
+
+        return $trimestres;
+    }
+
+    /**
+     * Misma regla que TechosControlador::calcularAsignadoArbol(): lo ejecutado del nodo más lo de
+     * los hijos que no tienen techo propio. Un hijo con techo queda fuera de la suma del padre.
+     */
+    private function calcularAsignadoArbol(array $nodo, array $techos, array $ejecutado, array &$mapa): float
+    {
+        $dependencia = $nodo['dependencia'];
+        $asignado = $ejecutado[$dependencia['nombre']] ?? 0.0;
+
+        foreach ($nodo['hijos'] as $nodoHijo) {
+            $techoHijo = $techos[(int) $nodoHijo['dependencia']['id']]['techo'] ?? null;
+            $asignadoHijo = $this->calcularAsignadoArbol($nodoHijo, $techos, $ejecutado, $mapa);
+
+            if ($techoHijo === null || (float) $techoHijo <= 0) {
+                $asignado += $asignadoHijo;
+            }
+        }
+
+        $mapa[(int) $dependencia['id']] = $asignado;
+
+        return $asignado;
+    }
+
+    /** @return array<int, string> nombre de cada dependencia por id. */
+    private function nombresPorId(Dependencia $modeloDependencia): array
+    {
+        $nombres = [];
+        foreach ($modeloDependencia->obtenerTodas() as $dependencia) {
+            $nombres[(int) $dependencia['id']] = $dependencia['nombre'];
+        }
+
+        return $nombres;
     }
 
     /**
@@ -135,70 +277,95 @@ class DashboardControlador
      * nadie ha configurado ningún tope todavía, $tope llega en 0 y la tarjeta lo indica en vez de
      * mostrar un porcentaje.
      *
-     * El numerador es el total de ingresos del año (todos los ítems, todas las dependencias) que
-     * no hayan sido archivados (rechazados/descartados) en Peticiones — ver
-     * obtenerTotalPorAnioSinArchivados() en cada modelo de ingreso.
+     * El numerador son los ingresos del año (sin archivados) de las dependencias con techo mayor a 0,
+     * igual que el resumen de gastos: no todas las dependencias tienen techo.
      */
     private function obtenerResumenIngresos(object $modeloIngreso, float $tope): array
     {
         $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
-        $totalDependencias = (new Dependencia())->contarMonetizablesActivas();
+        $nombrePorId = $this->nombresPorId(new Dependencia());
 
         $resumen = [];
 
         foreach ($aniosActivos as $anioFila) {
             $anioId = (int) $anioFila['id'];
-            $totalIngresos = $modeloIngreso->obtenerTotalPorAnioSinArchivados($anioId);
-            $dependenciasConDato = $modeloIngreso->obtenerDependenciasPorAnio($anioId);
-            $porcentaje = $tope > 0 ? min(100, ($totalIngresos / $tope) * 100) : 0.0;
+            $techos = (new PresupuestoDependencia())->obtenerPorAnio($anioId);
+            $ingresoPorDependencia = $modeloIngreso->obtenerTotalesPorDependencia($anioId);
+
+            $ingresos = 0.0;
+            $conTecho = 0;
+            $conIngreso = 0;
+
+            foreach ($techos as $dependenciaId => $fila) {
+                if ((float) ($fila['techo'] ?? 0) <= 0 || !isset($nombrePorId[(int) $dependenciaId])) {
+                    continue;
+                }
+
+                $ingresoDependencia = (float) ($ingresoPorDependencia[$nombrePorId[(int) $dependenciaId]] ?? 0.0);
+                $ingresos += $ingresoDependencia;
+                $conTecho++;
+                if ($ingresoDependencia > 0) {
+                    $conIngreso++;
+                }
+            }
 
             $resumen[] = [
                 'anio' => $anioFila['anio'],
-                'total_ingresos' => $totalIngresos,
-                'presupuesto' => $tope,
-                'porcentaje' => $porcentaje,
-                'dependencias_con_dato' => count(array_unique($dependenciasConDato)),
-                'dependencias_total' => $totalDependencias,
+                'tope' => $tope,
+                'ingresos' => $ingresos,
+                'disponible' => $tope - $ingresos,
+                'porcentaje' => $tope > 0 ? min(100, ($ingresos / $tope) * 100) : 0.0,
+                'dependencias_con_techo' => $conTecho,
+                'dependencias_con_ingreso' => $conIngreso,
             ];
         }
 
         return $resumen;
     }
 
-    private function obtenerRelojArena(): array
+    /** Reloj del inicio a partir de sus fechas configuradas (null si no hay ninguna). */
+    private function obtenerRelojArena(?array $configuracion): array
     {
-        $configuracion = (new RelojArenaConfiguracion())->obtener();
-
         if ($configuracion === null) {
             return ['configurado' => false];
         }
 
-        $inicio = new DateTime($configuracion['fecha_inicio']);
-        $cierre = new DateTime($configuracion['fecha_cierre']);
-        $hoy = new DateTime('today');
+        // Cuenta desde las 00:00 del día de inicio hasta las 23:59:59 del día de cierre (es decir,
+        // hasta las 00:00 del día siguiente). Con menos de dos días faltantes, la cuenta pasa a horas.
+        // Los días son los de Colombia, sin depender de la zona horaria configurada en el servidor.
+        $zona = new DateTimeZone('America/Bogota');
+        $inicio = new DateTimeImmutable($configuracion['fecha_inicio'] . ' 00:00:00', $zona);
+        $fin = (new DateTimeImmutable($configuracion['fecha_cierre'] . ' 00:00:00', $zona))->modify('+1 day');
+        $ahora = new DateTimeImmutable('now', $zona);
 
-        $diasTotales = (int) $inicio->diff($cierre)->days;
+        $segundosTotales = max(1, $fin->getTimestamp() - $inicio->getTimestamp());
 
-        if ($hoy < $inicio) {
-            $diasTranscurridos = 0;
-            $diasFaltantes = $diasTotales;
-        } elseif ($hoy > $cierre) {
-            $diasTranscurridos = $diasTotales;
-            $diasFaltantes = 0;
+        if ($ahora < $inicio) {
+            $segundosTranscurridos = 0;
+            $segundosFaltantes = $segundosTotales;
+        } elseif ($ahora >= $fin) {
+            $segundosTranscurridos = $segundosTotales;
+            $segundosFaltantes = 0;
         } else {
-            $diasTranscurridos = (int) $inicio->diff($hoy)->days;
-            $diasFaltantes = (int) $hoy->diff($cierre)->days;
+            $segundosTranscurridos = $ahora->getTimestamp() - $inicio->getTimestamp();
+            $segundosFaltantes = $fin->getTimestamp() - $ahora->getTimestamp();
         }
 
-        $porcentajeTranscurrido = $diasTotales > 0 ? min(100, ($diasTranscurridos / $diasTotales) * 100) : 100.0;
+        if ($segundosFaltantes < 2 * 86400) {
+            $faltante = intdiv($segundosFaltantes, 3600);
+            $unidad = $faltante === 1 ? 'hora' : 'horas';
+        } else {
+            $faltante = intdiv($segundosFaltantes, 86400);
+            $unidad = $faltante === 1 ? 'día' : 'días';
+        }
 
         return [
             'configurado' => true,
             'fecha_inicio' => $inicio->format('d/m/Y'),
-            'fecha_cierre' => $cierre->format('d/m/Y'),
-            'dias_totales' => $diasTotales,
-            'dias_faltantes' => $diasFaltantes,
-            'porcentaje_transcurrido' => $porcentajeTranscurrido,
+            'fecha_cierre' => (new DateTimeImmutable($configuracion['fecha_cierre']))->format('d/m/Y'),
+            'faltante' => $faltante,
+            'unidad' => $unidad,
+            'porcentaje_transcurrido' => min(100, ($segundosTranscurridos / $segundosTotales) * 100),
         ];
     }
 

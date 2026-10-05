@@ -40,7 +40,6 @@ require_once __DIR__ . '/controlador/PerfilControlador.php';
 require_once __DIR__ . '/controlador/TechosControlador.php';
 require_once __DIR__ . '/controlador/HistorialControlador.php';
 require_once __DIR__ . '/controlador/ActaControlador.php';
-require_once __DIR__ . '/controlador/ConsultaControlador.php';
 require_once __DIR__ . '/controlador/DevControlador.php';
 require_once __DIR__ . '/controlador/AuditoriaControlador.php';
 require_once __DIR__ . '/controlador/AnalisisControlador.php';
@@ -173,10 +172,6 @@ switch ($ruta) {
 
     case 'repositorios':
         (new RepositorioControlador())->index();
-        break;
-
-    case 'consulta':
-        (new ConsultaControlador())->index();
         break;
 
     case 'autogestion':

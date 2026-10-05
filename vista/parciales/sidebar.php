@@ -17,16 +17,19 @@ $esDependenciaSuperadmin = false;
 // Usuarios > Permisos).
 $menuConfiguradoParaTipo = false;
 $itemsMenuSidebar = [];
+$accesoAnalisisSidebar = null;
 
 if (!empty($_SESSION['usuario_id']) && in_array($tipoCuentaActual, ['administrador', 'consejo_superior', 'invitado'], true)) {
     require_once __DIR__ . '/../../modelo/Usuario.php';
     require_once __DIR__ . '/../../modelo/MenuPermiso.php';
     require_once __DIR__ . '/../../modelo/Dependencia.php';
+    require_once __DIR__ . '/../../modelo/AccesoAnalisis.php';
 
     $modeloUsuarioSidebar = new Usuario();
     $usuarioActualSidebar = $modeloUsuarioSidebar->obtenerPorId((int) $_SESSION['usuario_id']);
 
     if ($usuarioActualSidebar !== null) {
+        $accesoAnalisisSidebar = AccesoAnalisis::resolver($usuarioActualSidebar, $tipoCuentaActual);
         $modeloMenuPermisoSidebar = new MenuPermiso();
 
         if ($tipoCuentaActual === 'invitado') {
@@ -208,7 +211,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <a href="index.php?ruta=perfil-proyectos" class="<?= $rutaActual === 'perfil-proyectos' ? 'activo' : '' ?>">Perfil de proyectos</a>
             <?php endif; ?>
 
-            <?php if ($puedeVerMenu('configuraciones') || $puedeVerMenu('usuarios') || $esDependenciaSuperadmin): ?>
+            <?php if ($puedeVerMenu('configuraciones') || $puedeVerMenu('usuarios') || $esDependenciaSuperadmin || $accesoAnalisisSidebar !== null): ?>
             <p class="grupo-menu">Administración</p>
             <?php if ($puedeVerMenu('configuraciones')): ?>
             <a href="index.php?ruta=configuraciones" class="<?= in_array($rutaActual, ['configuraciones', 'usuarios', 'roles', 'estamentos', 'lineas', 'motores', 'proyectos', 'rubros', 'anios-presupuestales', 'sedes', 'dependencias', 'facultades', 'jerarquias', 'variables-macroeconomicas', 'reloj-arena'], true) ? 'activo' : '' ?>">Configuraciones</a>
@@ -216,8 +219,10 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <?php if ($puedeVerMenu('usuarios')): ?>
             <a href="index.php?ruta=usuarios" class="<?= $rutaActual === 'usuarios' ? 'activo' : '' ?>">Usuarios</a>
             <?php endif; ?>
-            <?php if ($esDependenciaSuperadmin): ?>
+            <?php if ($accesoAnalisisSidebar !== null): ?>
             <a href="index.php?ruta=analisis" class="<?= $rutaActual === 'analisis' ? 'activo' : '' ?>">Análisis</a>
+            <?php endif; ?>
+            <?php if ($esDependenciaSuperadmin): ?>
             <a href="index.php?ruta=dev" class="<?= in_array($rutaActual, ['dev', 'dev-vista'], true) ? 'activo' : '' ?>">Dev</a>
             <?php endif; ?>
             <?php endif; ?>
@@ -231,7 +236,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             // igual que el resto — se muestra/oculta desde Jerarquías > Mapa > ⚙ o desde
             // Usuarios > Consulta > Permisos. Mientras nadie configure nada para este tipo, el
             // valor por defecto es mostrar solo "Consulta" (en vez de "sin restricción = todo").
-            $puedeVerMenuConsejo = $menuConfiguradoParaTipo ? $puedeVerMenu : static fn (string $clave): bool => $clave === 'consulta';
+            $puedeVerMenuConsejo = $menuConfiguradoParaTipo ? $puedeVerMenu : static fn (string $clave): bool => false;
             ?>
             <?php foreach ($itemsMenuSidebar as $grupoNombreSidebar => $itemsGrupoSidebar): ?>
             <?php $clavesVisiblesSidebar = array_filter(array_keys($itemsGrupoSidebar), $puedeVerMenuConsejo); ?>
@@ -242,6 +247,10 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <?php endforeach; ?>
             <?php endif; ?>
             <?php endforeach; ?>
+            <?php if ($accesoAnalisisSidebar !== null): ?>
+            <p class="grupo-menu">Análisis</p>
+            <a href="index.php?ruta=analisis" class="<?= $rutaActual === 'analisis' ? 'activo' : '' ?>">Análisis</a>
+            <?php endif; ?>
     <?php elseif ($tipoCuentaActual === 'invitado'): ?>
             <p class="grupo-menu">Resumen</p>
             <a href="index.php" class="<?= in_array($rutaActual, ['dashboard', 'perfil-proyectos'], true) ? 'activo' : '' ?>">Inicio</a>

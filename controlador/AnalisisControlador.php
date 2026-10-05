@@ -2,6 +2,7 @@
 
 require_once __DIR__ . '/../modelo/Usuario.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
+require_once __DIR__ . '/../modelo/AccesoAnalisis.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/Linea.php';
 require_once __DIR__ . '/../modelo/Motor.php';
@@ -81,9 +82,14 @@ class AnalisisControlador
 
     public function index(): void
     {
-        $this->verificarAcceso();
+        $acceso = $this->resolverAcceso();
+        AccesoAnalisis::establecer($acceso);
 
-        $tab = in_array($_GET['tab'] ?? '', self::TABS_VALIDAS, true) ? $_GET['tab'] : 'programacion';
+        if ($acceso['clase'] !== 'superadmin') {
+            $this->aplicarRestriccionesNoSuperadmin($acceso);
+        }
+
+        $tab =in_array($_GET['tab'] ?? '', self::TABS_VALIDAS, true) ? $_GET['tab'] : 'programacion';
         $vista = in_array($_GET['vista'] ?? '', self::VISTAS_VALIDAS, true) ? $_GET['vista'] : 'tiempo_real';
         $pestanaArbol = $tab === 'programacion' ? 'programacion_presupuestal' : 'articulacion_pdi';
         $lado = ($_GET['lado'] ?? '') === 'egresos' ? 'egresos' : 'ingresos';
@@ -141,29 +147,64 @@ class AnalisisControlador
         $this->renderizarAnalisis($vista, $rolVista, $anioActivo, $dependenciasTodas);
     }
 
-    private function verificarAcceso(): void
+    /** Acceso a Análisis del usuario actual (ver AccesoAnalisis). Sin acceso, al dashboard. */
+    private function resolverAcceso(): array
     {
         if (empty($_SESSION['usuario_id'])) {
             header('Location: index.php?ruta=login');
             exit;
         }
 
-        if (($_SESSION['usuario_rol'] ?? '') !== 'administrador') {
-            header('Location: index.php?ruta=dashboard');
-            exit;
-        }
-
         $usuarioActual = (new Usuario())->obtenerPorId((int) $_SESSION['usuario_id']);
-        $dependencia = !empty($usuarioActual['dependencia_id'])
-            ? (new Dependencia())->obtenerPorId((int) $usuarioActual['dependencia_id'])
+        $acceso = $usuarioActual !== null
+            ? AccesoAnalisis::resolver($usuarioActual, (string) ($_SESSION['usuario_rol'] ?? ''))
             : null;
 
-        $esDependenciaSuperadmin = $dependencia !== null && !empty($dependencia['es_raiz_superadmin']);
-
-        if (!$esDependenciaSuperadmin) {
+        if ($acceso === null) {
             header('Location: index.php?ruta=dashboard');
             exit;
         }
+
+        return $acceso;
+    }
+
+    /**
+     * Quien no es superadmin solo lee: sin POST ni acciones que cambian datos, y solo sus pestañas
+     * y su vista. Si la URL pide otra cosa (o no pide nada), redirige a la primera permitida; en la
+     * vista Usuario, la dependencia queda limitada a su subárbol.
+     */
+    private function aplicarRestriccionesNoSuperadmin(array $acceso): void
+    {
+        $accionesDeEscritura = ['exportar_plantilla_presupuesto', 'exportar_plantilla_proyectos', 'configurar_expansion_arbol'];
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' || in_array($_GET['accion'] ?? '', $accionesDeEscritura, true)) {
+            header('Location: index.php?ruta=dashboard');
+            exit;
+        }
+
+        $tab = in_array($_GET['tab'] ?? '', $acceso['pestanas'], true) ? $_GET['tab'] : $acceso['pestanas'][0];
+        $vista = in_array($_GET['vista'] ?? '', $acceso['vistas'], true) ? $_GET['vista'] : $acceso['vistas'][0];
+
+        $dependencia = trim((string) ($_GET['dependencia'] ?? ''));
+        if ($acceso['dependencias'] !== null && !in_array($dependencia, $acceso['dependencias'], true)) {
+            $dependencia = $acceso['dependencia'];
+        }
+
+        $correcta = $tab === ($_GET['tab'] ?? null)
+            && $vista === ($_GET['vista'] ?? null)
+            && ($vista !== 'usuario' || $dependencia === ($_GET['dependencia'] ?? null));
+
+        if ($correcta) {
+            return;
+        }
+
+        $parametros = array_merge($_GET, ['ruta' => 'analisis', 'tab' => $tab, 'vista' => $vista]);
+        if ($vista === 'usuario') {
+            $parametros['dependencia'] = $dependencia;
+        }
+
+        header('Location: index.php?' . http_build_query($parametros));
+        exit;
     }
 
     /** `usuarios.es_super_admin` (el SA), no la dependencia raíz que ya exige verificarAcceso(). */
@@ -300,7 +341,8 @@ class AnalisisControlador
         if ($vista === 'repositorio') {
             $versionIdSolicitada = (int) ($_GET['version_id'] ?? 0);
 
-            if ($versionIdSolicitada > 0) {
+            // Solo el superadmin elige la versión; los demás ven la que él dejó activa.
+            if ($versionIdSolicitada > 0 && AccesoAnalisis::actual()['clase'] === 'superadmin') {
                 // El admin acaba de elegir, desde el selector, cuál versión ver — esa elección
                 // queda como la activa para todos hasta que él la cambie de nuevo (no solo
                 // para esta visita ni solo mientras la URL conserve version_id).
@@ -394,7 +436,7 @@ class AnalisisControlador
             }
         } else {
             $fuenteDatos = new FuenteDatosAnalisis($versionIdActual, $dependenciaFiltroActual);
-            [$arbolDatos, $totalesGenerales] = $this->construirArbolPdi($fuenteDatos, $columnasAnios, $clavesColumnas, $sinDatosRepositorio, $vista === 'usuario');
+            [$arbolDatos, $totalesGenerales] = $this->construirArbolPdi($fuenteDatos, $columnasAnios, $clavesColumnas, $sinDatosRepositorio, $vista === 'usuario', $vista === 'tiempo_real');
         }
 
         $error = $_SESSION['analisis_flash_error'] ?? '';
@@ -519,11 +561,13 @@ class AnalisisControlador
     }
 
     /** Árbol Línea > Motor > Proyecto de siempre — portado de vista/dev/pruebas/arbol.php. */
-    private function construirArbolPdi(FuenteDatosAnalisis $fuenteDatos, array $columnasAnios, array $clavesColumnas, bool $sinDatosRepositorio, bool $modoUsuario): array
+    private function construirArbolPdi(FuenteDatosAnalisis $fuenteDatos, array $columnasAnios, array $clavesColumnas, bool $sinDatosRepositorio, bool $modoUsuario, bool $tiempoReal): array
     {
+        // En tiempo real, la asignación de Articulación PDI es solo gasto principal más programación
+        // presupuestal: no suma los gastos de Autogestión (extensión, postgrado, unisalud).
         $totalesPorColumna = [];
         foreach ($columnasAnios as $columna) {
-            $totalesPorColumna[$columna['clave']] = $this->totalesPorProyecto($columna['registro'], $columna['corte'], $fuenteDatos);
+            $totalesPorColumna[$columna['clave']] = $this->totalesPorProyecto($columna['registro'], $columna['corte'], $fuenteDatos, !$tiempoReal);
         }
 
         // El presupuesto institucional (líneas de Egresos con Proyecto(s) PDI) solo aporta al año
@@ -775,20 +819,20 @@ class AnalisisControlador
     }
 
     /**
-     * Igual que vista/dev/pruebas/arbol.php::totalesPorProyectoArbol(), vía FuenteDatosAnalisis —
-     * suma gasto_principal Y los 3 gastos de autogestión (antes solo sumaba gasto_principal).
+     * Igual que vista/dev/pruebas/arbol.php::totalesPorProyectoArbol(), vía FuenteDatosAnalisis.
+     * Suma gasto_principal y, si $incluirAutogestion, también los gastos de autogestión.
      */
-    private function totalesPorProyecto(?array $registroAnio, ?string $fechaCorte, FuenteDatosAnalisis $fuenteDatos): array
+    private function totalesPorProyecto(?array $registroAnio, ?string $fechaCorte, FuenteDatosAnalisis $fuenteDatos, bool $incluirAutogestion = true): array
     {
         if ($registroAnio === null) {
             return [];
         }
 
         $anioId = (int) $registroAnio['id'];
-        $gastos = array_merge(
-            $fuenteDatos->obtenerGastosPorAnio($anioId),
-            $fuenteDatos->obtenerGastosAutogestionPorAnio($anioId)
-        );
+        $gastos = $fuenteDatos->obtenerGastosPorAnio($anioId);
+        if ($incluirAutogestion) {
+            $gastos = array_merge($gastos, $fuenteDatos->obtenerGastosAutogestionPorAnio($anioId));
+        }
         $totales = [];
 
         foreach ($gastos as $gasto) {
@@ -978,7 +1022,9 @@ class AnalisisControlador
         $dependenciaFiltro = null;
 
         if ($vista === 'repositorio') {
-            $snapshotId = (int) ($_GET['snapshot_id'] ?? ($snapshots[0]['id'] ?? 0));
+            // Solo el superadmin elige el snapshot; los demás ven el más reciente.
+            $snapshotSolicitado = AccesoAnalisis::actual()['clase'] === 'superadmin' ? ($_GET['snapshot_id'] ?? null) : null;
+            $snapshotId = (int) ($snapshotSolicitado ?? ($snapshots[0]['id'] ?? 0));
             if ($snapshotId <= 0) {
                 $snapshotId = null;
             }

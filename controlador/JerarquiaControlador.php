@@ -79,7 +79,7 @@ class JerarquiaControlador
         $tiposDependencia = $this->modeloRolesPorTipo->obtenerTiposDisponibles();
         $roles = $this->modeloRol->obtenerTodos();
         $rolesPorTipo = $this->modeloRolesPorTipo->obtenerMapaCompleto();
-        $itemsMenu = require __DIR__ . '/../config/menu_items.php';
+        $itemsMenu = array_merge(require __DIR__ . '/../config/menu_items.php', require __DIR__ . '/../config/menu_items_analisis.php');
         $menuPorTipo = $this->modeloMenuPermiso->obtenerPlantillasCompletas();
         $techoFlexiblePorTipo = $this->modeloTechoFlexiblePermiso->obtenerDefaultsCompletos();
 
