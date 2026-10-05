@@ -32,6 +32,22 @@ class GeneradorXlsx
      *        (encabezado en la fila 2, datos desde la fila 3). "Disponible" se colorea en rojo si
      *        queda negativo.
      */
+    /**
+     * Celda numérica de una plantilla: si el valor es un número se escribe como número; si no, queda
+     * vacía pero con formato numérico. Una celda vacía cuenta como 0 en Cantidad×Costo unitario; una
+     * celda de texto vacía o con texto daría #VALUE!.
+     */
+    private static function celdaNumericaOVacia(string $referencia, string $valor, int $estilo): string
+    {
+        $valor = trim($valor);
+
+        if ($valor !== '' && is_numeric($valor)) {
+            return '<c r="' . $referencia . '" s="' . $estilo . '"><v>' . ($valor + 0) . '</v></c>';
+        }
+
+        return '<c r="' . $referencia . '" s="' . $estilo . '"/>';
+    }
+
     public static function descargar(
         string $nombreArchivo,
         array $encabezados,
@@ -116,6 +132,16 @@ class GeneradorXlsx
 
                     if ($esCalculada) {
                         $filaXml .= $celdaFormula(self::columnaLetra($col) . $fila, $letraCantidad . $fila . '*' . $letraValorUnitario . $fila, $estiloColumna);
+                        continue;
+                    }
+
+                    // Cantidad y costo unitario son números: se escriben como número (o vacías con formato), no como
+                    // texto, porque la fórmula Cantidad×Costo unitario con texto devuelve #VALUE! en todas las filas.
+                    if ($col === $validacionTecho['columnaCantidad'] || $col === $validacionTecho['columnaValorUnitario']) {
+                        $esCantidad = $col === $validacionTecho['columnaCantidad'];
+                        $estiloNumerico = $esCantidad ? ($esObligatoria ? 6 : 7) : ($esObligatoria ? 8 : 9);
+                        $valorNumerico = $fila === $numeroFilaEjemplo ? (string) ($filaEjemplo[$col] ?? '') : '';
+                        $filaXml .= self::celdaNumericaOVacia(self::columnaLetra($col) . $fila, $valorNumerico, $estiloNumerico);
                         continue;
                     }
 
@@ -258,13 +284,17 @@ class GeneradorXlsx
             . '</fills>'
             . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
             . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-            . '<cellXfs count="6">'
+            . '<cellXfs count="10">'
             . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
             . '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
             . '<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/>'
             . '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
             . '<xf numFmtId="0" fontId="0" fillId="4" borderId="0" xfId="0" applyFill="1"/>'
             . '<xf numFmtId="164" fontId="0" fillId="5" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1"/>'
+            . '<xf numFmtId="3" fontId="0" fillId="3" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1"/>'
+            . '<xf numFmtId="3" fontId="0" fillId="4" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1"/>'
+            . '<xf numFmtId="164" fontId="0" fillId="3" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1"/>'
+            . '<xf numFmtId="164" fontId="0" fillId="4" borderId="0" xfId="0" applyNumberFormat="1" applyFill="1"/>'
             . '</cellXfs>'
             . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
             . '<dxfs count="2">'
@@ -948,6 +978,14 @@ class GeneradorXlsx
                         continue;
                     }
 
+                    // Cantidad y costo unitario como número (ver descargar()): con texto la fórmula da #VALUE!.
+                    if ($col === $config['columnaCantidad'] || $col === $config['columnaValorUnitario']) {
+                        $estiloNumerico = $col === $config['columnaCantidad'] ? 5 : 6;
+                        $valorNumerico = $fila === $filaEjemplo ? (string) ($config['filaEjemplo'][$col] ?? '') : '';
+                        $filaXml .= self::celdaNumericaOVacia(self::columnaLetra($col) . $fila, $valorNumerico, $estiloNumerico);
+                        continue;
+                    }
+
                     if ($fila === $filaEjemplo && (string) ($config['filaEjemplo'][$col] ?? '') !== '') {
                         $filaXml .= $celdaTexto(self::columnaLetra($col) . $fila, (string) $config['filaEjemplo'][$col]);
                     }
@@ -1082,12 +1120,14 @@ class GeneradorXlsx
             . '</fills>'
             . '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>'
             . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-            . '<cellXfs count="5">'
+            . '<cellXfs count="7">'
             . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyProtection="1"><protection locked="0"/></xf>'
             . '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/>'
             . '<xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
             . '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
             . '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+            . '<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
+            . '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
             . '</cellXfs>'
             . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
             . '<dxfs count="2">'
