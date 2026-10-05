@@ -297,17 +297,16 @@ class Gasto
             "SELECT g.dependencia, COALESCE(SUM(
                     CASE
                         WHEN g.tipo_automatico = 'techo_hijo' THEN
-                            CASE WHEN EXISTS (
-                                SELECT 1 FROM gastos g2
-                                WHERE g2.anio_presupuestal_id = g.anio_presupuestal_id
-                                    AND g2.dependencia = dh.nombre
-                                    AND (g2.tipo_automatico IS NULL OR g2.tipo_automatico != 'techo_hijo')
-                            ) THEN g.valor_total ELSE 0 END
+                            CASE WHEN ep.dependencia IS NOT NULL THEN g.valor_total ELSE 0 END
                         ELSE g.valor_total
                     END
                 ), 0) AS total
              FROM gastos g
              LEFT JOIN dependencias dh ON dh.id = g.dependencia_hija_id
+             LEFT JOIN (
+                SELECT DISTINCT dependencia FROM gastos
+                WHERE anio_presupuestal_id = :anio_con_propio AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')
+             ) ep ON ep.dependencia = dh.nombre
              WHERE g.anio_presupuestal_id = :anio_presupuestal_id
                 AND NOT EXISTS (
                     SELECT 1 FROM peticiones_archivadas pa
@@ -315,7 +314,7 @@ class Gasto
                 )
              GROUP BY g.dependencia"
         );
-        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
+        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'anio_con_propio' => $anioPresupuestalId]);
 
         $totales = [];
         foreach ($consulta->fetchAll() as $fila) {
@@ -340,15 +339,14 @@ class Gasto
             "SELECT g.dependencia,
                     COALESCE(SUM(CASE WHEN g.tipo_automatico IS NULL OR g.tipo_automatico != 'techo_hijo' THEN g.valor_total ELSE 0 END), 0) AS propio,
                     COALESCE(SUM(CASE
-                            WHEN g.tipo_automatico = 'techo_hijo' AND EXISTS (
-                                SELECT 1 FROM gastos g2
-                                WHERE g2.anio_presupuestal_id = g.anio_presupuestal_id
-                                    AND g2.dependencia = dh.nombre
-                                    AND (g2.tipo_automatico IS NULL OR g2.tipo_automatico != 'techo_hijo')
-                            ) THEN g.valor_total ELSE 0 END
+                            WHEN g.tipo_automatico = 'techo_hijo' AND ep.dependencia IS NOT NULL THEN g.valor_total ELSE 0 END
                         ), 0) AS comprometido
              FROM gastos g
              LEFT JOIN dependencias dh ON dh.id = g.dependencia_hija_id
+             LEFT JOIN (
+                SELECT DISTINCT dependencia FROM gastos
+                WHERE anio_presupuestal_id = :anio_con_propio AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')
+             ) ep ON ep.dependencia = dh.nombre
              WHERE g.anio_presupuestal_id = :anio_presupuestal_id
                 AND NOT EXISTS (
                     SELECT 1 FROM peticiones_archivadas pa
@@ -356,7 +354,7 @@ class Gasto
                 )
              GROUP BY g.dependencia"
         );
-        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId]);
+        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'anio_con_propio' => $anioPresupuestalId]);
 
         $totales = [];
         foreach ($consulta->fetchAll() as $fila) {
