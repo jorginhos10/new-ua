@@ -1,1 +1,0 @@
-ALTER TABLE dependencias ADD COLUMN tipo VARCHAR(50) NULL AFTER nombre;

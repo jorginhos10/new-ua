@@ -1,1 +1,0 @@
-ALTER TABLE usuarios CHANGE COLUMN usuario correo VARCHAR(150) NOT NULL;

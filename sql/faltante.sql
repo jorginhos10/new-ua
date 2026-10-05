@@ -1,7 +1,61 @@
--- Categoría de gasto (37 subcategorías de actividad) para gastos principales.
--- Catálogo editable, mapeo rubro (por prefijo CPC) → categoría, y 3 columnas nuevas en gastos.
--- El motor corre en el navegador (publico/js/categorizador-gastos.js); el servidor solo valida y guarda.
+-- Faltante en producción (jorginho_presupuestos) respecto al código actual, comparado con sql/actual.sql
+-- (dump del 2026-10-05). Sin esto, las páginas que usan estas tablas o columnas devuelven 500.
+-- EJECUTAR UNA SOLA VEZ en phpMyAdmin. Servidor MySQL 5.7: no usa IF NOT EXISTS en ALTER.
 
+-- 1) Árbol de Análisis: estado desplegado/recogido por pestaña (?ruta=analisis).
+CREATE TABLE IF NOT EXISTS analisis_arbol_configuracion (
+    pestana VARCHAR(20) NOT NULL PRIMARY KEY,
+    expandido TINYINT(1) NOT NULL DEFAULT 1,
+    actualizado_por INT NULL,
+    actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 2) Mensajes globales (varias diapositivas en el inicio), ya con la audiencia del Consejo Superior.
+--    El primer mensaje toma el contenido actual de mensaje_global.
+CREATE TABLE IF NOT EXISTS mensajes_globales (
+    id INT NOT NULL AUTO_INCREMENT,
+    contenido TEXT NOT NULL,
+    audiencia ENUM('administrador', 'consejo_superior') NOT NULL DEFAULT 'administrador',
+    orden INT NOT NULL DEFAULT 0,
+    actualizado_por INT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_mensajes_globales_orden (orden),
+    CONSTRAINT fk_mensajes_globales_usuario FOREIGN KEY (actualizado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO mensajes_globales (contenido, orden, actualizado_por)
+SELECT mg.contenido, 1, mg.actualizado_por
+FROM mensaje_global mg
+WHERE mg.id = 1
+  AND mg.contenido IS NOT NULL
+  AND mg.contenido <> ''
+  AND NOT EXISTS (SELECT 1 FROM mensajes_globales);
+
+-- 3) Reloj del Consejo Superior.
+CREATE TABLE IF NOT EXISTS reloj_arena_consejo (
+    id INT PRIMARY KEY DEFAULT 1,
+    fecha_inicio DATE NOT NULL,
+    fecha_cierre DATE NOT NULL,
+    actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 4) NIT de sede (dos dígitos, 00 a 09, único).
+ALTER TABLE sedes ADD COLUMN nit CHAR(2) NULL AFTER codigo;
+
+UPDATE sedes SET nit = '01' WHERE id = 1;
+UPDATE sedes SET nit = '02' WHERE id = 2;
+UPDATE sedes SET nit = '03' WHERE id = 4;
+UPDATE sedes SET nit = '04' WHERE id = 5;
+UPDATE sedes SET nit = '05' WHERE id = 6;
+UPDATE sedes SET nit = '06' WHERE id = 8;
+
+ALTER TABLE sedes
+    MODIFY COLUMN nit CHAR(2) NOT NULL,
+    ADD UNIQUE KEY uq_sedes_nit (nit);
+
+-- 5) Categoría de gasto: catálogo, mapeo rubro → categoría y 3 columnas en gastos.
 CREATE TABLE IF NOT EXISTS categorias_gasto (
     id VARCHAR(10) NOT NULL PRIMARY KEY,
     macro VARCHAR(80) NOT NULL,

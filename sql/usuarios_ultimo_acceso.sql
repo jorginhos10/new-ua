@@ -1,2 +1,0 @@
-ALTER TABLE usuarios
-  ADD COLUMN ultimo_acceso TIMESTAMP NULL DEFAULT NULL AFTER creado_en;

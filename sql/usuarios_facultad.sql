@@ -1,1 +1,0 @@
-ALTER TABLE usuarios ADD COLUMN facultad VARCHAR(150) NULL AFTER nombre;
