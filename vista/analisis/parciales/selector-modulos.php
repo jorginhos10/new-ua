@@ -6,24 +6,16 @@
  * el-techo-no-deberia-kind-candle: ese módulo está descontinuado). Clic en una mini-tarjeta
  * recarga la pestaña con ese origen activo.
  *
- * Cada tarjeta muestra el total (sin decimales; el valor exacto va en el title), arriba a la
- * derecha el % de asignación de egresos ($asignacionPorModulo) y, cuando aplica, una barra que
- * hace de separador entre el nombre y los valores: Gasto = avance contra su techo
- * ($techosPorModulo; roja si lo supera); Autogestión = distribución de sus egresos en Gastos /
- * Inversiones / Excedentes ($distribucionPorModulo). Ver
- * AnalisisControlador::obtenerIndicadoresSelector(). Extensión y Postgrado ($paresGastoIngreso)
- * muestran Egresos e Ingresos como dos filas clicables — cada una lleva directo a esa pestaña de
- * la tabla (ver tabla-modulo.php). Todas las tarjetas tienen la misma altura mínima.
+ * Cada tarjeta muestra el total (sin decimales; el valor exacto va en el title) y una barra con su
+ * participación sobre el total de egresos de todos los módulos. Extensión y Postgrado
+ * ($paresGastoIngreso) muestran Egresos e Ingresos como dos filas clicables — cada una lleva
+ * directo a esa pestaña de la tabla (ver tabla-modulo.php) — más la diferencia entre ambos.
  *
- * Variables esperadas: $origenActivo, $totalesPorModulo, $techosPorModulo, $asignacionPorModulo,
- * $distribucionPorModulo, $paresGastoIngreso, $vista, $snapshotIdActual, $dependenciaFiltroActual.
+ * Variables esperadas: $origenActivo, $totalesPorModulo, $paresGastoIngreso, $vista,
+ * $snapshotIdActual, $dependenciaFiltroActual.
  */
 
 $paresGastoIngreso = $paresGastoIngreso ?? [];
-$techosPorModulo = $techosPorModulo ?? [];
-$asignacionPorModulo = $asignacionPorModulo ?? [];
-$distribucionPorModulo = $distribucionPorModulo ?? [];
-$clasesDistribucion = ['Gastos' => 'gastos', 'Inversiones' => 'inversiones', 'Excedentes' => 'excedentes', 'Otros' => 'otros'];
 
 $etiquetasModuloSelector = [
     'gasto_principal' => 'Gasto',
@@ -39,6 +31,12 @@ if ($vista === 'repositorio' && !empty($snapshotIdActual)) {
     $extraSelector['snapshot_id'] = $snapshotIdActual;
 } elseif ($vista === 'usuario' && !empty($dependenciaFiltroActual)) {
     $extraSelector['dependencia'] = $dependenciaFiltroActual;
+}
+
+// Base de la barra de participación: solo egresos (los ingresos no se reparten entre módulos).
+$totalEgresosSelector = 0.0;
+foreach (array_keys($etiquetasModuloSelector) as $origenSuma) {
+    $totalEgresosSelector += (float) ($totalesPorModulo[$origenSuma] ?? 0.0);
 }
 
 $monedaCorta = static fn (float $valor): string => '$' . number_format($valor, 0, ',', '.');
@@ -69,12 +67,9 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
         position: relative;
         display: flex;
         flex-direction: column;
-        justify-content: space-between;
-        gap: 0.25rem;
-        min-height: 88px;
-        box-sizing: border-box;
-        padding: 0.45rem 0.6rem 0.5rem;
-        border-radius: 8px;
+        gap: 0.35rem;
+        padding: 0.65rem 0.75rem 0.7rem;
+        border-radius: 10px;
         border: 1px solid var(--color-borde);
         background: var(--color-superficie);
         color: inherit;
@@ -114,13 +109,20 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
     }
 
     .analisis-selector-nombre {
-        font-size: 0.8rem;
+        font-size: 0.85rem;
         color: var(--color-texto);
         font-weight: 600;
     }
 
+    .analisis-selector-porcentaje {
+        font-size: 0.72rem;
+        color: var(--color-texto-tenue);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
     .analisis-selector-valor {
-        font-size: 0.9rem;
+        font-size: 1rem;
         font-weight: 600;
         color: var(--color-texto);
         font-variant-numeric: tabular-nums;
@@ -139,47 +141,6 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
         height: 100%;
         border-radius: inherit;
         background: var(--color-primario);
-    }
-
-    .analisis-selector-barra.excedido span {
-        background: var(--color-error-texto);
-    }
-
-    /* Autogestión: un tramo por categoría de egreso. */
-    .analisis-selector-barra.distribucion {
-        display: flex;
-        gap: 1px;
-    }
-
-    .analisis-selector-barra.distribucion span {
-        border-radius: 0;
-    }
-
-    .analisis-selector-barra.distribucion .gastos {
-        background: var(--color-costos);
-    }
-
-    .analisis-selector-barra.distribucion .inversiones {
-        background: var(--color-inversion);
-    }
-
-    .analisis-selector-barra.distribucion .excedentes {
-        background: var(--color-excedentes);
-    }
-
-    .analisis-selector-barra.distribucion .otros {
-        background: var(--color-borde-hover);
-    }
-
-    .analisis-selector-porcentaje {
-        font-size: 0.7rem;
-        color: var(--color-texto-tenue);
-        font-variant-numeric: tabular-nums;
-        white-space: nowrap;
-    }
-
-    .analisis-selector-porcentaje.excedido {
-        color: var(--color-error-texto);
     }
 
     .analisis-selector-item.vacio .analisis-selector-valor,
@@ -205,7 +166,7 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
         grid-template-columns: 8px auto 1fr;
         align-items: center;
         column-gap: 0.45rem;
-        min-height: 24px;
+        min-height: 32px;
         padding: 0 0.35rem;
         border-radius: 6px;
         color: var(--color-texto-secundario);
@@ -242,12 +203,35 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
     }
 
     .analisis-selector-lado-etiqueta {
-        font-size: 0.72rem;
+        font-size: 0.78rem;
     }
 
     .analisis-selector-lado-valor {
-        font-size: 0.78rem;
+        font-size: 0.85rem;
         text-align: right;
+    }
+
+    .analisis-selector-diferencia {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding-top: 0.35rem;
+        border-top: 1px dashed var(--color-borde);
+        font-size: 0.75rem;
+        color: var(--color-texto-tenue);
+        font-variant-numeric: tabular-nums;
+    }
+
+    .analisis-selector-diferencia strong {
+        font-weight: 600;
+    }
+
+    .analisis-selector-diferencia .positiva {
+        color: var(--color-exito-texto);
+    }
+
+    .analisis-selector-diferencia .negativa {
+        color: var(--color-error-texto);
     }
 </style>
 
@@ -260,39 +244,9 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
     $totalIngresosModulo = $origenIngresoPar !== null ? (float) ($totalesPorModulo[$origenIngresoPar] ?? 0.0) : 0.0;
     $esActivo = in_array($origenActivo, [$origenOpcion, $origenIngresoPar], true);
     $esVacio = $totalEgresosModulo == 0.0 && $totalIngresosModulo == 0.0;
-    $asignacion = $asignacionPorModulo[$origenOpcion] ?? null;
-    $techoModulo = $techosPorModulo[$origenOpcion] ?? null;
-    $distribucion = $distribucionPorModulo[$origenOpcion] ?? null;
-
-    // La barra (separador entre nombre y valores) se arma una vez para las dos variantes de tarjeta.
-    $htmlBarra = '';
-    if ($techoModulo !== null) {
-        $avanceTecho = $techoModulo['avance'] / $techoModulo['techo'] * 100;
-        $tituloTecho = number_format($avanceTecho, 1, ',', '.') . '% del ' . $techoModulo['etiqueta']
-            . ' (' . $monedaCorta($techoModulo['avance']) . ' de ' . $monedaCorta($techoModulo['techo']) . ')';
-        $htmlBarra = '<span class="analisis-selector-barra' . ($avanceTecho > 100 ? ' excedido' : '') . '" title="' . htmlspecialchars($tituloTecho) . '">'
-            . '<span style="width: ' . number_format(min(100, max($avanceTecho, 1.5)), 2, '.', '') . '%;"></span></span>';
-    } elseif ($distribucion !== null) {
-        $totalDistribucion = array_sum($distribucion);
-        $tramos = '';
-        $resumenTramos = [];
-        foreach ($distribucion as $categoria => $valorCategoria) {
-            if ($valorCategoria <= 0) {
-                continue;
-            }
-            $textoTramo = $categoria . ': ' . number_format($valorCategoria / $totalDistribucion * 100, 1, ',', '.') . '% (' . $monedaCorta($valorCategoria) . ')';
-            $resumenTramos[] = $textoTramo;
-            $tramos .= '<span class="' . $clasesDistribucion[$categoria] . '" style="flex: ' . number_format($valorCategoria, 2, '.', '') . ' 1 0;" title="' . htmlspecialchars($textoTramo) . '"></span>';
-        }
-        $htmlBarra = '<span class="analisis-selector-barra distribucion" title="' . htmlspecialchars('Distribución de egresos — ' . implode(' · ', $resumenTramos)) . '">' . $tramos . '</span>';
-    } elseif ($origenOpcion === 'gasto_principal') {
-        $htmlBarra = '<span class="analisis-selector-vacio">Sin techo</span>';
-    }
-
-    $htmlPorcentaje = $asignacion !== null
-        ? '<span class="analisis-selector-porcentaje' . ($asignacion['porcentaje'] > 100 ? ' excedido' : '') . '" title="' . htmlspecialchars($asignacion['titulo']) . '">'
-            . number_format($asignacion['porcentaje'], 1, ',', '.') . '%</span>'
-        : '';
+    $participacion = $totalEgresosSelector > 0 ? ($totalEgresosModulo / $totalEgresosSelector) * 100 : 0.0;
+    $textoParticipacion = number_format($participacion, 1, ',', '.') . '%';
+    $tituloParticipacion = $textoParticipacion . ' del total de egresos de todos los módulos';
     ?>
 
     <?php if ($origenIngresoPar === null): ?>
@@ -301,21 +255,26 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
        <?= $esActivo ? 'aria-current="page"' : '' ?>>
         <span class="analisis-selector-cabecera">
             <span class="analisis-selector-nombre"><?= htmlspecialchars($etiqueta) ?></span>
-            <?= $htmlPorcentaje ?>
+            <?php if (!$esVacio): ?>
+            <span class="analisis-selector-porcentaje" title="<?= htmlspecialchars($tituloParticipacion) ?>"><?= $textoParticipacion ?></span>
+            <?php endif; ?>
         </span>
-        <?= $htmlBarra ?>
         <span class="analisis-selector-valor" title="<?= htmlspecialchars($monedaExacta($totalEgresosModulo)) ?>"><?= $monedaCorta($totalEgresosModulo) ?></span>
         <?php if ($esVacio): ?>
         <span class="analisis-selector-vacio">Sin registros</span>
+        <?php else: ?>
+        <span class="analisis-selector-barra" title="<?= htmlspecialchars($tituloParticipacion) ?>"><span style="width: <?= number_format(max($participacion, 1.5), 2, '.', '') ?>%;"></span></span>
         <?php endif; ?>
     </a>
     <?php else: ?>
+    <?php $diferencia = $totalIngresosModulo - $totalEgresosModulo; ?>
     <div class="analisis-selector-item<?= $esActivo ? ' activo' : '' ?><?= $esVacio ? ' vacio' : '' ?>">
         <a href="<?= htmlspecialchars($urlOrigen($origenOpcion)) ?>" class="analisis-selector-cabecera">
             <span class="analisis-selector-nombre"><?= htmlspecialchars($etiqueta) ?></span>
-            <?= $htmlPorcentaje ?>
+            <?php if (!$esVacio): ?>
+            <span class="analisis-selector-porcentaje" title="<?= htmlspecialchars($tituloParticipacion) ?>"><?= $textoParticipacion ?></span>
+            <?php endif; ?>
         </a>
-        <?= $htmlBarra ?>
         <div class="analisis-selector-lados">
             <?php foreach (['egresos' => [$origenOpcion, 'Egresos', $totalEgresosModulo], 'ingresos' => [$origenIngresoPar, 'Ingresos', $totalIngresosModulo]] as $claveLado => [$origenLado, $etiquetaLado, $totalLado]): ?>
             <a href="<?= htmlspecialchars($urlOrigen($origenLado)) ?>"
@@ -328,6 +287,13 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
             </a>
             <?php endforeach; ?>
         </div>
+        <?php if (!$esVacio): ?>
+        <span class="analisis-selector-barra" title="<?= htmlspecialchars($tituloParticipacion) ?>"><span style="width: <?= number_format(max($participacion, 1.5), 2, '.', '') ?>%;"></span></span>
+        <div class="analisis-selector-diferencia" title="Ingresos − Egresos: <?= htmlspecialchars($monedaExacta($diferencia)) ?>">
+            <span>Ingresos − Egresos</span>
+            <strong class="<?= $diferencia >= 0 ? 'positiva' : 'negativa' ?>"><?= $diferencia >= 0 ? '+' : '−' ?><?= $monedaCorta(abs($diferencia)) ?></strong>
+        </div>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
     <?php endforeach; ?>
