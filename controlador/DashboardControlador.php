@@ -13,7 +13,8 @@ require_once __DIR__ . '/../modelo/RelojArenaConfiguracion.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/MensajeGlobal.php';
 require_once __DIR__ . '/../modelo/AutogestionPorcentaje.php';
-require_once __DIR__ . '/../modelo/RelojArenaFormulador.php';
+require_once __DIR__ . '/../modelo/Convocatoria.php';
+require_once __DIR__ . '/../modelo/CuentaRegresiva.php';
 require_once __DIR__ . '/../modelo/RelojArenaConsejo.php';
 
 class DashboardControlador
@@ -78,10 +79,16 @@ class DashboardControlador
         // habilitado ahora mismo, necesita saber cuándo sí lo estará.
         if ($rolUsuario === 'invitado') {
             $modeloNecesidad = new Necesidad();
-            $modeloRelojFormulador = new RelojArenaFormulador();
+            $modeloConvocatoria = new Convocatoria();
+            $usuarioInvitado = (new Usuario())->obtenerPorId((int) $_SESSION['usuario_id']);
+            $dependenciaInvitadoId = !empty($usuarioInvitado['dependencia_id']) ? (int) $usuarioInvitado['dependencia_id'] : null;
 
-            $dentroDeVentana = $modeloRelojFormulador->estaDentroDeVentana();
-            $configuracionFormulador = $modeloRelojFormulador->obtener();
+            // Una tarjeta por convocatoria visible: si está abierta, cuánto falta para cerrar; si no, cuándo abre o cerró.
+            $convocatoriasInvitado = array_map(static fn (array $c): array => [
+                'convocatoria' => $c,
+                'dentro' => Convocatoria::dentroDeVentana($c),
+                'reloj' => CuentaRegresiva::calcular($c['fecha_inicio'], $c['fecha_cierre']),
+            ], $modeloConvocatoria->visiblesPara('invitado', $dependenciaInvitadoId));
             $totalNecesidades = count($modeloNecesidad->obtenerPorUsuario((int) $_SESSION['usuario_id']));
 
             require __DIR__ . '/../vista/dashboard/invitado.php';
@@ -330,43 +337,7 @@ class DashboardControlador
             return ['configurado' => false];
         }
 
-        // Cuenta desde las 00:00 del día de inicio hasta las 23:59:59 del día de cierre (es decir,
-        // hasta las 00:00 del día siguiente). Con menos de dos días faltantes, la cuenta pasa a horas.
-        // Los días son los de Colombia, sin depender de la zona horaria configurada en el servidor.
-        $zona = new DateTimeZone('America/Bogota');
-        $inicio = new DateTimeImmutable($configuracion['fecha_inicio'] . ' 00:00:00', $zona);
-        $fin = (new DateTimeImmutable($configuracion['fecha_cierre'] . ' 00:00:00', $zona))->modify('+1 day');
-        $ahora = new DateTimeImmutable('now', $zona);
-
-        $segundosTotales = max(1, $fin->getTimestamp() - $inicio->getTimestamp());
-
-        if ($ahora < $inicio) {
-            $segundosTranscurridos = 0;
-            $segundosFaltantes = $segundosTotales;
-        } elseif ($ahora >= $fin) {
-            $segundosTranscurridos = $segundosTotales;
-            $segundosFaltantes = 0;
-        } else {
-            $segundosTranscurridos = $ahora->getTimestamp() - $inicio->getTimestamp();
-            $segundosFaltantes = $fin->getTimestamp() - $ahora->getTimestamp();
-        }
-
-        if ($segundosFaltantes < 2 * 86400) {
-            $faltante = intdiv($segundosFaltantes, 3600);
-            $unidad = $faltante === 1 ? 'hora' : 'horas';
-        } else {
-            $faltante = intdiv($segundosFaltantes, 86400);
-            $unidad = $faltante === 1 ? 'día' : 'días';
-        }
-
-        return [
-            'configurado' => true,
-            'fecha_inicio' => $inicio->format('d/m/Y'),
-            'fecha_cierre' => (new DateTimeImmutable($configuracion['fecha_cierre']))->format('d/m/Y'),
-            'faltante' => $faltante,
-            'unidad' => $unidad,
-            'porcentaje_transcurrido' => min(100, ($segundosTranscurridos / $segundosTotales) * 100),
-        ];
+        return CuentaRegresiva::calcular($configuracion['fecha_inicio'], $configuracion['fecha_cierre']);
     }
 
     private function obtenerSolicitudesRecientes(int $limite, array $dependenciasPermitidas): array

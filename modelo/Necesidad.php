@@ -34,16 +34,21 @@ class Necesidad
                 (usuario_id, vigencia, nombre_necesidad, descripcion, justificacion, estamento_solicitante_id,
                  beneficiarios_cantidad, linea_inversion, sublinea_inversion, detalle_inversion, sede_id, dependencia,
                  programa_academico, proyecto_pdi_id, articulacion_plan, espacio_intervenir, requisitos_normativos,
-                 valor, fuente_financiacion, responsable_usuario_id, observaciones)
+                 valor, fuente_financiacion, fuente_financiacion_id, responsable_usuario_id, observaciones,
+                 convocatoria_id, dependencia_id)
              VALUES
                 (:usuario_id, :vigencia, :nombre_necesidad, :descripcion, :justificacion, :estamento_solicitante_id,
                  :beneficiarios_cantidad, :linea_inversion, :sublinea_inversion, :detalle_inversion, :sede_id, :dependencia,
                  :programa_academico, :proyecto_pdi_id, :articulacion_plan, :espacio_intervenir, :requisitos_normativos,
-                 :valor, :fuente_financiacion, :responsable_usuario_id, :observaciones)'
+                 :valor, :fuente_financiacion, :fuente_financiacion_id, :responsable_usuario_id, :observaciones,
+                 :convocatoria_id, :dependencia_id)'
         );
 
         $consulta->execute([
             'usuario_id' => $usuarioId,
+            'convocatoria_id' => $datos['convocatoria_id'],
+            'fuente_financiacion_id' => $datos['fuente_financiacion_id'],
+            'dependencia_id' => $datos['dependencia_id'],
             'vigencia' => $datos['vigencia'],
             'nombre_necesidad' => $datos['nombre_necesidad'],
             'descripcion' => $datos['descripcion'] ?: null,
@@ -84,13 +89,16 @@ class Necesidad
                 sede_id = :sede_id, dependencia = :dependencia, programa_academico = :programa_academico,
                 proyecto_pdi_id = :proyecto_pdi_id, articulacion_plan = :articulacion_plan,
                 espacio_intervenir = :espacio_intervenir, requisitos_normativos = :requisitos_normativos,
-                valor = :valor, fuente_financiacion = :fuente_financiacion,
-                responsable_usuario_id = :responsable_usuario_id, observaciones = :observaciones
+                valor = :valor, fuente_financiacion = :fuente_financiacion, fuente_financiacion_id = :fuente_financiacion_id,
+                responsable_usuario_id = :responsable_usuario_id, observaciones = :observaciones,
+                dependencia_id = :dependencia_id
              WHERE id = :id'
         );
 
         $resultado = $consulta->execute([
             'id' => $id,
+            'fuente_financiacion_id' => $datos['fuente_financiacion_id'],
+            'dependencia_id' => $datos['dependencia_id'],
             'vigencia' => $datos['vigencia'],
             'nombre_necesidad' => $datos['nombre_necesidad'],
             'descripcion' => $datos['descripcion'] ?: null,
@@ -231,18 +239,22 @@ class Necesidad
      * "Enviar todo" siempre significa "enviar todos MIS borradores" — $propietarioId es
      * obligatorio para que nadie pueda reasignar/enviar borradores de otro usuario con este botón.
      */
-    public function enviarTodosBorrador(string $dependenciaDestinoNombre, int $rolDestinatarioId, ?int $usuarioDestinatarioId, int $propietarioId): int
+    public function enviarTodosBorrador(string $dependenciaDestinoNombre, int $rolDestinatarioId, ?int $usuarioDestinatarioId, int $propietarioId, ?int $convocatoriaId = null): int
     {
+        // Con $convocatoriaId, solo se envían los borradores de esa convocatoria (la que se está viendo).
         $consulta = $this->db->prepare(
             "UPDATE necesidades_academicas
              SET estado = 'enviado', rol_destinatario_id = :rol_destinatario_id, usuario_destinatario_id = :usuario_destinatario_id, dependencia_destino = :dependencia
-             WHERE estado = 'borrador' AND usuario_id = :propietario_id"
+             WHERE estado = 'borrador' AND usuario_id = :propietario_id
+               AND (:convocatoria_id IS NULL OR convocatoria_id = :convocatoria_id2)"
         );
         $consulta->execute([
             'dependencia' => $dependenciaDestinoNombre,
             'rol_destinatario_id' => $rolDestinatarioId,
             'usuario_destinatario_id' => $usuarioDestinatarioId,
             'propietario_id' => $propietarioId,
+            'convocatoria_id' => $convocatoriaId,
+            'convocatoria_id2' => $convocatoriaId,
         ]);
 
         return $consulta->rowCount();

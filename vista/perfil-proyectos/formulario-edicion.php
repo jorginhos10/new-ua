@@ -153,8 +153,13 @@
     </div>
 
     <div class="campo">
-        <label for="editar-proyecto-fuente_financiacion">Fuente de financiación *</label>
-        <input type="text" id="editar-proyecto-fuente_financiacion" name="fuente_financiacion" placeholder="Diligenciar" required>
+        <label for="editar-proyecto-fuente_financiacion_id">Fuente de financiación *</label>
+        <select id="editar-proyecto-fuente_financiacion_id" name="fuente_financiacion_id" required>
+            <option value="">Selecciona una fuente</option>
+            <?php foreach ($fuentesHabilitadas as $fuenteOpcion): ?>
+            <option value="<?= (int) $fuenteOpcion['id'] ?>"><?= htmlspecialchars($fuenteOpcion['nombre']) ?></option>
+            <?php endforeach; ?>
+        </select>
     </div>
 
     <div class="campo">

@@ -4,26 +4,26 @@
         <h1>Bienvenido, <?= htmlspecialchars($nombreUsuario) ?></h1>
         <p class="texto-atenuado">Rol: Formulador</p>
 
-        <?php if ($dentroDeVentana): ?>
-        <p class="mensaje-exito">
-            El formulario de necesidades está habilitado
-            <?php if ($configuracionFormulador !== null): ?>
-            hasta el <?= htmlspecialchars($configuracionFormulador['fecha_cierre']) ?>
-            <?php endif; ?>
-            .
-        </p>
-        <a href="index.php?ruta=perfil-proyectos" class="boton-enviar" style="display: inline-block; width: auto; text-decoration: none;">Ir a Perfil de proyectos</a>
+        <?php if (empty($convocatoriasInvitado)): ?>
+        <p class="mensaje-error">No tienes convocatorias de proyectos disponibles para tu usuario.</p>
         <?php else: ?>
-        <p class="mensaje-error">
-            El formulario de necesidades no está habilitado en este momento.
-            <?php if ($configuracionFormulador !== null): ?>
-            El plazo es del <?= htmlspecialchars($configuracionFormulador['fecha_inicio']) ?> al <?= htmlspecialchars($configuracionFormulador['fecha_cierre']) ?>.
+        <?php foreach ($convocatoriasInvitado as $elemento): $c = $elemento['convocatoria']; $reloj = $elemento['reloj']; ?>
+        <p class="<?= $elemento['dentro'] ? 'mensaje-exito' : 'mensaje-error' ?>">
+            <strong><?= htmlspecialchars($c['nombre']) ?></strong>:
+            <?php if ($elemento['dentro']): ?>
+            abierta, faltan <?= (int) $reloj['faltante'] ?> <?= htmlspecialchars($reloj['unidad']) ?> para cerrar (<?= htmlspecialchars($reloj['fecha_cierre']) ?>).
+            <?php elseif ($reloj['estado'] === 'pendiente'): ?>
+            abre el <?= htmlspecialchars($reloj['fecha_inicio']) ?>.
+            <?php else: ?>
+            cerrada el <?= htmlspecialchars($reloj['fecha_cierre']) ?>.
             <?php endif; ?>
         </p>
+        <?php endforeach; ?>
+        <a href="index.php?ruta=perfil-proyectos" class="boton-enviar" style="display: inline-block; width: auto; text-decoration: none;">Ir a Perfil de proyectos</a>
         <?php endif; ?>
 
         <p class="texto-atenuado" style="margin-top: 1rem;">
-            Tienes <strong><?= (int) $totalNecesidades ?></strong> necesidad<?= $totalNecesidades === 1 ? '' : 'es' ?> registrada<?= $totalNecesidades === 1 ? '' : 's' ?>.
+            Tienes <strong><?= (int) $totalNecesidades ?></strong> proyecto<?= $totalNecesidades === 1 ? '' : 's' ?> registrado<?= $totalNecesidades === 1 ? '' : 's' ?>.
         </p>
     </div>
 

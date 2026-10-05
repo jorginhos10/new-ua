@@ -646,6 +646,14 @@ de datos antes de correrlo.
 - **Aplicado en producción:** Pendiente. Desplegar el código y correr `sql/analisis_permisos_menu.sql` juntos. Sin el SQL, un administrador con plantilla propia no vería ninguna pestaña.
 - **Nota:** Techos y Metas no tiene vista Repositorio; por eso a consejo superior no se le muestra (decidido así; si después se construye ese Repositorio, quitar la exclusión en `AccesoAnalisis::PESTANAS_SIN_REPOSITORIO`). El Repositorio de PDI no tiene versiones guardadas en local.
 
+## 2026-10-05 — Catálogo de fuentes de financiación (Configuraciones > Listas)
+
+- **Archivo:** `sql/fuentes_financiacion.sql` (crea la tabla `fuentes_financiacion` y la carga con las fuentes ya usadas en los proyectos, con `INSERT IGNORE`). Código: `modelo/FuenteFinanciacion.php`, `controlador/FuenteFinanciacionControlador.php`, `vista/fuentes-financiacion/index.php`, ruta en `index.php` y tarjeta en `vista/configuraciones/index.php`.
+- **Cambio:** catálogo nuevo con alta, activar/desactivar (sin borrado) y estado. Todavía no lo usa Perfil de proyectos; eso llega con las convocatorias.
+- **Motivo:** las convocatorias van a habilitar fuentes de un catálogo en vez de texto libre.
+- **Aplicado en local:** Sí (2026-10-05). Carga inicial: 6 fuentes, incluidas "Plan de Fomento a la Calidad" y "Plan de Fomento de la Calidad", que parecen la misma fuente escrita distinto. Se dejaron separadas; conviene unificarlas antes de la migración de convocatorias.
+- **Aplicado en producción:** Pendiente. Correr `sql/fuentes_financiacion.sql` antes de desplegar el código.
+
 ---
 
 <!--

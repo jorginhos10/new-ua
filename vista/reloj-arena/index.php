@@ -21,26 +21,6 @@
     </div>
 
     <div class="tarjeta">
-        <h1>Reloj de arena del formulador</h1>
-        <p class="texto-atenuado">Define la fecha de inicio y la fecha de cierre en las que el invitado (formulador) puede registrar necesidades. Fuera de este rango no podrá formular.</p>
-
-        <?php if (!empty($errorFormulador)): ?>
-            <p class="mensaje-error"><?= htmlspecialchars($errorFormulador) ?></p>
-        <?php endif; ?>
-
-        <?php if (!empty($exitoFormulador)): ?>
-            <p class="mensaje-exito"><?= htmlspecialchars($exitoFormulador) ?></p>
-        <?php endif; ?>
-
-        <form method="POST" action="index.php?ruta=reloj-arena" class="form-agregar">
-            <input type="hidden" name="formulario" value="formulador">
-            <input type="date" name="fecha_inicio" value="<?= htmlspecialchars($configuracionFormulador['fecha_inicio'] ?? '') ?>" required>
-            <input type="date" name="fecha_cierre" value="<?= htmlspecialchars($configuracionFormulador['fecha_cierre'] ?? '') ?>" required>
-            <button type="submit">Guardar</button>
-        </form>
-    </div>
-
-    <div class="tarjeta">
         <h1>Reloj de arena del Consejo Superior</h1>
         <p class="texto-atenuado">Define las fechas del reloj de arena que ven en su inicio los usuarios del Consejo Superior.</p>
 

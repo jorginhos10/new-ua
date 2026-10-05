@@ -87,6 +87,13 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </div>
                     <p class="texto-atenuado">Gestiona el catálogo de sublíneas de inversión, condicionadas a una línea, para Perfil de proyectos.</p>
                 </a>
+                <a href="index.php?ruta=fuentes-financiacion" class="tarjeta-modulo">
+                    <div class="tarjeta-modulo-cabecera">
+                        <h2>Fuentes de financiación</h2>
+                        <?= $flechaModulo ?>
+                    </div>
+                    <p class="texto-atenuado">Gestiona el catálogo de fuentes de financiación que eligen los proyectos de Perfil de proyectos.</p>
+                </a>
             </div>
         </section>
 
@@ -104,7 +111,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <h2>Listas</h2>
                         <?= $flechaModulo ?>
                     </div>
-                    <p class="texto-atenuado">Línea, motor y proyecto del PDI, y los catálogos de estamentos, rubros, sedes, contratos comunes y líneas de inversión.</p>
+                    <p class="texto-atenuado">Línea, motor y proyecto del PDI, y los catálogos de estamentos, rubros, sedes, contratos comunes y líneas de inversión y fuentes de financiación.</p>
                 </a>
                 <a href="index.php?ruta=categorias-gasto" class="tarjeta-modulo">
                     <div class="tarjeta-modulo-cabecera">

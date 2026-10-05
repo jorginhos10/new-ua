@@ -1,19 +1,16 @@
 <?php
 
 require_once __DIR__ . '/../modelo/RelojArenaConfiguracion.php';
-require_once __DIR__ . '/../modelo/RelojArenaFormulador.php';
 require_once __DIR__ . '/../modelo/RelojArenaConsejo.php';
 
 class RelojArenaControlador
 {
     private RelojArenaConfiguracion $modeloReloj;
-    private RelojArenaFormulador $modeloRelojFormulador;
     private RelojArenaConsejo $modeloRelojConsejo;
 
     public function __construct()
     {
         $this->modeloReloj = new RelojArenaConfiguracion();
-        $this->modeloRelojFormulador = new RelojArenaFormulador();
         $this->modeloRelojConsejo = new RelojArenaConsejo();
     }
 
@@ -31,17 +28,13 @@ class RelojArenaControlador
 
         $error = '';
         $exito = '';
-        $errorFormulador = '';
-        $exitoFormulador = '';
         $errorConsejo = '';
         $exitoConsejo = '';
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $formulario = $_POST['formulario'] ?? 'dashboard';
 
-            if ($formulario === 'formulador') {
-                [$errorFormulador, $exitoFormulador] = $this->guardar($this->modeloRelojFormulador);
-            } elseif ($formulario === 'consejo') {
+            if ($formulario === 'consejo') {
                 [$errorConsejo, $exitoConsejo] = $this->guardar($this->modeloRelojConsejo);
             } else {
                 [$error, $exito] = $this->guardar($this->modeloReloj);
@@ -49,13 +42,12 @@ class RelojArenaControlador
         }
 
         $configuracion = $this->modeloReloj->obtener();
-        $configuracionFormulador = $this->modeloRelojFormulador->obtener();
         $configuracionConsejo = $this->modeloRelojConsejo->obtenerConDefecto();
 
         require __DIR__ . '/../vista/reloj-arena/index.php';
     }
 
-    private function guardar(RelojArenaConfiguracion|RelojArenaFormulador|RelojArenaConsejo $modelo): array
+    private function guardar(RelojArenaConfiguracion|RelojArenaConsejo $modelo): array
     {
         $fechaInicio = trim($_POST['fecha_inicio'] ?? '');
         $fechaCierre = trim($_POST['fecha_cierre'] ?? '');

@@ -7,50 +7,59 @@ require __DIR__ . '/../parciales/encabezado.php';
     <div class="tarjeta">
         <?php
         $barraTitulo = 'Perfil de proyectos';
-        $barraBotonesSecundarios = [
-            [
-                'id' => 'boton-seleccionar-perfil-proyectos',
-                'icono' => 'seleccionar',
-                'etiqueta' => 'Seleccionar elementos',
-                'disabled' => $modoEdicion,
+        // Mismo patrón de barra que Gastos: básico (selección, duplicar, eliminar) · datos (exportar)
+        // · principal (Crear + Enviar todos como ícono).
+        $barraGruposIconos = [
+            'basico' => [
+                [
+                    'id' => 'boton-seleccionar-perfil-proyectos',
+                    'icono' => 'seleccionar',
+                    'etiqueta' => 'Seleccionar elementos',
+                    'disabled' => $modoEdicion,
+                ],
+                ['separador' => true],
+                [
+                    'id' => 'boton-duplicar-perfil-proyectos',
+                    'icono' => 'duplicar',
+                    'etiqueta' => 'Duplicar seleccionados',
+                    'disabled' => true,
+                    'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
+                ],
+                [
+                    'id' => 'boton-eliminar-perfil-proyectos',
+                    'icono' => 'eliminar',
+                    'etiqueta' => 'Eliminar seleccionados',
+                    'disabled' => true,
+                    'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
+                ],
             ],
-            [
-                'id' => 'boton-duplicar-perfil-proyectos',
-                'icono' => 'duplicar',
-                'etiqueta' => 'Duplicar seleccionados',
-                'disabled' => true,
-                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
-            ],
-            [
-                'id' => 'boton-eliminar-perfil-proyectos',
-                'icono' => 'eliminar',
-                'etiqueta' => 'Eliminar seleccionados',
-                'disabled' => true,
-                'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
-            ],
-            [
-                'id' => 'boton-abrir-modal-enviar-todo-perfil-proyectos',
-                'icono' => 'enviar',
-                'etiqueta' => 'Enviar todos los proyectos en borrador',
-                'disabled' => $modoEdicion || !$puedeEnviarTodo,
-                'titulo_disabled' => 'No hay proyectos en borrador para enviar',
-            ],
-            [
-                'id' => null,
-                'icono' => 'exportar',
-                'etiqueta' => 'Exportar lista',
-                'tipo' => 'a',
-                'href' => 'index.php?ruta=perfil-proyectos-exportar',
+            'especifico' => [],
+            'datos' => [
+                [
+                    'id' => null,
+                    'icono' => 'exportar',
+                    'etiqueta' => 'Exportar lista',
+                    'tipo' => 'a',
+                    'href' => 'index.php?ruta=perfil-proyectos-exportar',
+                ],
             ],
         ];
         if ($modoEdicion) {
-            $barraBotonesSecundarios[] = [
+            $barraGruposIconos['basico'][] = ['separador' => true];
+            $barraGruposIconos['basico'][] = [
                 'id' => 'boton-nuevo-item-desde-edicion',
                 'icono' => 'nuevo',
                 'etiqueta' => 'Nuevo ítem',
             ];
         }
-        $fueraDeVentana = $esInvitado && !$dentroDeVentana;
+        $barraBuscar = $modoEdicion ? null : '[data-toggle-envio="perfil-proyectos"]';
+        $barraBotonEnviar = [
+            'id' => 'boton-abrir-modal-enviar-todo-perfil-proyectos',
+            'etiqueta' => 'Enviar todos los proyectos en borrador',
+            'disabled' => $modoEdicion || !$puedeEnviarTodo,
+            'titulo_disabled' => 'No hay proyectos en borrador para enviar',
+        ];
+        $fueraDeVentana = !$dentroDeVentana;
         $barraBotonPrincipal = $modoEdicion
             ? ['id' => 'boton-guardar-edicion-proyecto', 'etiqueta' => 'Guardar', 'form' => 'form-editar-proyecto']
             : [
@@ -74,19 +83,36 @@ require __DIR__ . '/../parciales/encabezado.php';
             <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
         <?php endif; ?>
 
-        <?php if ($fueraDeVentana): ?>
-            <p class="mensaje-error">
-                No estás dentro de la fecha habilitada para formular necesidades.
-                <?php if ($configuracionFormulador !== null): ?>
-                El plazo es del <?= htmlspecialchars($configuracionFormulador['fecha_inicio']) ?> al <?= htmlspecialchars($configuracionFormulador['fecha_cierre']) ?>.
+        <?php if (!$modoEdicion && !empty($convocatoriasVisibles)): ?>
+        <div class="pestanas" style="margin: 0 0 0.75rem;">
+            <?php foreach ($convocatoriasVisibles as $convocatoriaPestana): ?>
+            <a href="index.php?ruta=perfil-proyectos&convocatoria_id=<?= (int) $convocatoriaPestana['id'] ?>" class="pestana<?= $convocatoriaActual !== null && (int) $convocatoriaActual['id'] === (int) $convocatoriaPestana['id'] ? ' activa' : '' ?>"><?= htmlspecialchars($convocatoriaPestana['nombre']) ?></a>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
+        <?php if ($convocatoriaActual === null): ?>
+            <p class="mensaje-error">No tienes convocatorias disponibles para formular proyectos.</p>
+        <?php elseif (!$modoEdicion && $relojConvocatoria !== null): ?>
+            <p class="texto-atenuado">
+                <strong><?= htmlspecialchars($convocatoriaActual['nombre']) ?></strong> ·
+                <?php if ($relojConvocatoria['estado'] === 'pendiente'): ?>
+                abre el <?= htmlspecialchars($relojConvocatoria['fecha_inicio']) ?>
+                <?php elseif ($relojConvocatoria['estado'] === 'abierto'): ?>
+                faltan <?= (int) $relojConvocatoria['faltante'] ?> <?= htmlspecialchars($relojConvocatoria['unidad']) ?> para cerrar (<?= htmlspecialchars($relojConvocatoria['fecha_cierre']) ?>)
+                <?php else: ?>
+                cerrada el <?= htmlspecialchars($relojConvocatoria['fecha_cierre']) ?>
                 <?php endif; ?>
             </p>
+        <?php endif; ?>
+
+        <?php if ($fueraDeVentana && $convocatoriaActual !== null && !$modoEdicion): ?>
+            <p class="mensaje-error">La convocatoria "<?= htmlspecialchars($convocatoriaActual['nombre']) ?>" no está abierta para formular proyectos.</p>
         <?php endif; ?>
 
         <?php if ($modoEdicion): ?>
         <?php require __DIR__ . '/formulario-edicion.php'; ?>
         <?php else: ?>
-        <p>Formularios de necesidades diligenciados por los usuarios invitados. Haz clic en una fila para ver el detalle.</p>
 
         <?php
         $necesidadesBorrador = array_values(array_filter($necesidades, static fn (array $n): bool => $n['estado'] === 'borrador'));
@@ -128,14 +154,19 @@ require __DIR__ . '/../parciales/encabezado.php';
         };
         ?>
 
-        <details class="acordeon-grupo" open>
-            <summary class="acordeon-cabecera">
-                <span class="acordeon-flecha">▸</span>
-                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></span>
-                <span class="acordeon-titulo">Borradores</span>
-                <span class="acordeon-contador"><?= count($necesidadesBorrador) ?></span>
-            </summary>
-            <div class="acordeon-cuerpo">
+        <?php
+        // Botón único Borrador/Enviado, en su propia fila (como Gastos cuando no hay chips de techo).
+        $cantidadEnviadasNecesidad = count($necesidadesEnviadas);
+        $textoToggleBorrador = 'Borrador · ' . count($necesidadesBorrador);
+        $textoToggleEnviado = 'Enviado · ' . $cantidadEnviadasNecesidad . ' proyecto' . ($cantidadEnviadasNecesidad === 1 ? '' : 's');
+        ?>
+        <div class="fila-chips-toggle solo-toggle">
+            <button type="button" class="toggle-envio-boton es-borrador" data-toggle-envio-boton="perfil-proyectos"
+                data-texto-borrador="<?= htmlspecialchars($textoToggleBorrador) ?>"
+                data-texto-enviado="<?= htmlspecialchars($textoToggleEnviado) ?>"><?= htmlspecialchars($textoToggleBorrador) ?></button>
+        </div>
+        <div data-toggle-envio="perfil-proyectos" data-mostrando="borrador">
+        <div class="panel-toggle-envio" data-panel-envio="borrador">
                 <div
                     class="tabla-scroll tabla-bulk-seleccionable"
                     data-boton-seleccionar="boton-seleccionar-perfil-proyectos"
@@ -178,16 +209,8 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </table>
                 </div>
             </div>
-        </details>
 
-        <details class="acordeon-grupo">
-            <summary class="acordeon-cabecera">
-                <span class="acordeon-flecha">▸</span>
-                <span class="acordeon-icono-grupo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></span>
-                <span class="acordeon-titulo">Enviados</span>
-                <span class="acordeon-contador"><?= count($necesidadesEnviadas) ?></span>
-            </summary>
-            <div class="acordeon-cuerpo">
+            <div class="panel-toggle-envio oculto" data-panel-envio="enviado">
                 <div class="tabla-scroll">
                     <table class="tabla-usuarios">
                         <thead>
@@ -222,7 +245,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </table>
                 </div>
             </div>
-        </details>
+        </div>
         <?php endif; ?>
     </div>
 
@@ -235,6 +258,7 @@ require __DIR__ . '/../parciales/encabezado.php';
 
             <form method="POST" action="index.php?ruta=perfil-proyectos" class="form-necesidad">
                 <input type="hidden" name="accion" value="crear_proyecto">
+                <input type="hidden" name="convocatoria_id" value="<?= $convocatoriaActual !== null ? (int) $convocatoriaActual['id'] : '' ?>">
 
                 <div class="campo">
                     <label for="crear-proyecto-vigencia">Vigencia *</label>
@@ -325,7 +349,9 @@ require __DIR__ . '/../parciales/encabezado.php';
                     $nombreCampoDependencia = 'dependencia';
                     $idBaseDependenciaOverride = 'crear-proyecto-dependencia';
                     $dependenciasOpciones = $dependenciasSugeridas;
+                    $dependenciaValorInicial = $esInvitado ? $dependenciaPropiaNombre : null;
                     require __DIR__ . '/../parciales/selector-dependencia.php';
+                    $dependenciaValorInicial = null;
                     ?>
                 </div>
 
@@ -363,8 +389,13 @@ require __DIR__ . '/../parciales/encabezado.php';
                 </div>
 
                 <div class="campo">
-                    <label for="crear-proyecto-fuente_financiacion">Fuente de financiación *</label>
-                    <input type="text" id="crear-proyecto-fuente_financiacion" name="fuente_financiacion" placeholder="Diligenciar" required>
+                    <label for="crear-proyecto-fuente_financiacion_id">Fuente de financiación *</label>
+                    <select id="crear-proyecto-fuente_financiacion_id" name="fuente_financiacion_id" required>
+                        <option value="">Selecciona una fuente</option>
+                        <?php foreach ($fuentesHabilitadas as $fuenteOpcion): ?>
+                        <option value="<?= (int) $fuenteOpcion['id'] ?>"><?= htmlspecialchars($fuenteOpcion['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
 
                 <div class="campo">
@@ -407,6 +438,7 @@ require __DIR__ . '/../parciales/encabezado.php';
 
             <form method="POST" action="index.php?ruta=perfil-proyectos" class="form-necesidad">
                 <input type="hidden" name="accion" value="enviar_todo">
+                <input type="hidden" name="convocatoria_id" value="<?= $convocatoriaActual !== null ? (int) $convocatoriaActual['id'] : '' ?>">
 
                 <div class="campo">
                     <label for="enviar-todo-perfil-proyectos-usuario-invitado">¿A qué Gestor se enviará? *</label>
@@ -433,6 +465,7 @@ require __DIR__ . '/../parciales/encabezado.php';
 
             <form method="POST" action="index.php?ruta=perfil-proyectos" class="form-necesidad">
                 <input type="hidden" name="accion" value="enviar_todo">
+                <input type="hidden" name="convocatoria_id" value="<?= $convocatoriaActual !== null ? (int) $convocatoriaActual['id'] : '' ?>">
 
                 <div class="campo">
                     <label for="enviar-todo-perfil-proyectos-destino_buscador">Enviar a la dependencia *</label>

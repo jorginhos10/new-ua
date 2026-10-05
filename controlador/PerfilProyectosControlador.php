@@ -13,7 +13,9 @@ require_once __DIR__ . '/../modelo/Proyecto.php';
 require_once __DIR__ . '/../modelo/Estamento.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/PeticionArchivada.php';
-require_once __DIR__ . '/../modelo/RelojArenaFormulador.php';
+require_once __DIR__ . '/../modelo/Convocatoria.php';
+require_once __DIR__ . '/../modelo/FuenteFinanciacion.php';
+require_once __DIR__ . '/../modelo/CuentaRegresiva.php';
 
 class PerfilProyectosControlador
 {
@@ -28,7 +30,8 @@ class PerfilProyectosControlador
     private Proyecto $modeloProyecto;
     private Estamento $modeloEstamento;
     private AnioPresupuestal $modeloAnio;
-    private RelojArenaFormulador $modeloRelojFormulador;
+    private Convocatoria $modeloConvocatoria;
+    private FuenteFinanciacion $modeloFuente;
 
     private const CAMPOS_REQUERIDOS_PROYECTO = [
         'vigencia',
@@ -37,9 +40,8 @@ class PerfilProyectosControlador
         'linea_inversion',
         'sublinea_inversion',
         'sede_id',
-        'dependencia',
         'valor',
-        'fuente_financiacion',
+        'fuente_financiacion_id',
         'responsable_usuario_id',
     ];
 
@@ -60,7 +62,8 @@ class PerfilProyectosControlador
         $this->modeloProyecto = new Proyecto();
         $this->modeloEstamento = new Estamento();
         $this->modeloAnio = new AnioPresupuestal();
-        $this->modeloRelojFormulador = new RelojArenaFormulador();
+        $this->modeloConvocatoria = new Convocatoria();
+        $this->modeloFuente = new FuenteFinanciacion();
     }
 
     public function index(): void
@@ -78,26 +81,49 @@ class PerfilProyectosControlador
         $esInvitado = $_SESSION['usuario_rol'] === 'invitado';
         $error = '';
         $exito = '';
-        $dentroDeVentana = $esInvitado ? $this->modeloRelojFormulador->estaDentroDeVentana() : true;
-        $configuracionFormulador = $esInvitado ? $this->modeloRelojFormulador->obtener() : null;
-
-        if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'enviar_todo') {
-            [$error, $exito] = $this->enviarTodo($esInvitado);
-        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_proyecto') {
-            [$error, $exito] = $this->crearProyecto($esInvitado, $dentroDeVentana);
-        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'actualizar_proyecto') {
-            [$error, $exito] = $this->actualizarProyecto($esInvitado, $dentroDeVentana);
-        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'eliminar_seleccionados') {
-            [$error, $exito] = $this->eliminarSeleccionados();
-        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'duplicar_seleccionados') {
-            [$error, $exito] = $this->duplicarSeleccionados();
-        }
 
         $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
-        $necesidades = $this->modeloNecesidad->obtenerTodas();
-        $necesidades = $this->filtrarPorPropietarioODestinatario($necesidades, $usuarioActual);
+        $dependenciaUsuarioId = !empty($usuarioActual['dependencia_id']) ? (int) $usuarioActual['dependencia_id'] : null;
+        $convocatoriasVisibles = $this->modeloConvocatoria->visiblesPara($_SESSION['usuario_rol'], $dependenciaUsuarioId);
+
+        // Un proyecto en edición pertenece a su convocatoria; si no, la de la pestaña elegida o la primera.
+        $proyectoParaEditar = null;
+        if (isset($_GET['editar_id']) && ctype_digit((string) $_GET['editar_id'])) {
+            $proyectoParaEditar = $this->modeloNecesidad->obtenerPorId((int) $_GET['editar_id']);
+
+            // Nadie, sin importar el rol, puede entrar a editar un proyecto que no es suyo, ni uno ya enviado.
+            if ($proyectoParaEditar !== null && (int) $proyectoParaEditar['usuario_id'] !== (int) $_SESSION['usuario_id']) {
+                $proyectoParaEditar = null;
+            }
+
+            if ($proyectoParaEditar !== null && ($proyectoParaEditar['estado'] ?? 'borrador') === 'enviado') {
+                $proyectoParaEditar = null;
+            }
+        }
+
+        $convocatoriaActual = $this->resolverConvocatoriaActual($convocatoriasVisibles, $proyectoParaEditar);
+        $dentroDeVentana = $convocatoriaActual !== null
+            && ($esInvitado ? Convocatoria::dentroDeVentana($convocatoriaActual) : (int) $convocatoriaActual['activa'] === 1);
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'enviar_todo') {
+            [$error, $exito] = $this->enviarTodo($esInvitado, $convocatoriaActual, $dentroDeVentana);
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'crear_proyecto') {
+            [$error, $exito] = $this->crearProyecto($esInvitado, $convocatoriaActual, $dentroDeVentana, $usuarioActual);
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'actualizar_proyecto') {
+            [$error, $exito] = $this->actualizarProyecto($esInvitado, $usuarioActual);
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'eliminar_seleccionados') {
+            [$error, $exito] = $this->eliminarSeleccionados($esInvitado);
+        } elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'duplicar_seleccionados') {
+            [$error, $exito] = $this->duplicarSeleccionados($esInvitado);
+        }
+
+        $necesidadesTodas = $this->filtrarPorPropietarioODestinatario($this->modeloNecesidad->obtenerTodas(), $usuarioActual);
+        $necesidades = $convocatoriaActual === null ? [] : array_values(array_filter(
+            $necesidadesTodas,
+            static fn (array $n): bool => (int) ($n['convocatoria_id'] ?? 0) === (int) $convocatoriaActual['id']
+        ));
+
         $roles = $this->modeloRol->obtenerTodos();
-        $dependenciasSugeridas = array_column($this->modeloDependencia->obtenerActivas(), 'nombre');
         $dependenciasPrograma = $this->modeloDependencia->obtenerPorTipos(self::PROGRAMA_ACADEMICO_TIPOS);
         $lineasInversion = $this->modeloLineaInversion->obtenerActivas();
         $sublineasInversion = $this->modeloSublineaInversion->obtenerActivas();
@@ -105,35 +131,75 @@ class PerfilProyectosControlador
         $proyectos = $this->modeloProyecto->obtenerTodos();
         $estamentos = $this->modeloEstamento->obtenerTodos();
         $aniosVigencia = $this->obtenerAniosVigencia();
-        $puedeEnviarTodo = !empty(array_filter($necesidades, static fn (array $n): bool => ($n['estado'] ?? 'borrador') === 'borrador'));
+        $fuentesHabilitadas = $convocatoriaActual === null ? [] : $this->modeloConvocatoria->fuentesHabilitadas((int) $convocatoriaActual['id']);
+        $relojConvocatoria = $convocatoriaActual === null ? null : CuentaRegresiva::calcular($convocatoriaActual['fecha_inicio'], $convocatoriaActual['fecha_cierre']);
+
+        $necesidadesBorrador = array_values(array_filter($necesidades, static fn (array $n): bool => $n['estado'] === 'borrador'));
+        $puedeEnviarTodo = $dentroDeVentana && !empty($necesidadesBorrador);
+
+        // Dependencias que se pueden elegir: solo las del alcance de la convocatoria (si tiene alcance).
+        $alcanceDependencias = $convocatoriaActual === null ? null : $this->modeloConvocatoria->alcanceDependenciaIds((int) $convocatoriaActual['id']);
 
         // Para invitado (Formulador), "Responsable"/destinatario se acota siempre a los Gestores de
         // su propia Facultad — nunca ve ni puede elegir el mapa completo dependencia→rol→usuario de
         // la universidad, que solo se calcula/inyecta para administrador.
+        // El invitado solo ve su propia dependencia (el servidor la fuerza igual en prepararDatosProyecto()).
+        $dependenciaPropiaNombre = $dependenciaUsuarioId !== null
+            ? ($this->modeloDependencia->obtenerPorId($dependenciaUsuarioId)['nombre'] ?? null)
+            : null;
+
         if ($esInvitado) {
             $avaladores = $this->obtenerGestoresDeMiFacultad();
             $etiquetaResponsable = 'gestor';
             $dependenciasTodas = [];
             $usuariosPorDependenciaYRol = [];
+            $dependenciasSugeridas = $dependenciaPropiaNombre !== null ? [$dependenciaPropiaNombre] : [];
         } else {
             $avaladores = $this->obtenerAvaladores();
             $etiquetaResponsable = 'avalador';
             $dependenciasTodas = $this->modeloDependencia->obtenerActivasParaEnvio();
             $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
+            $dependenciasSugeridas = array_column($this->filtrarPorAlcance($this->modeloDependencia->obtenerActivas(), $alcanceDependencias), 'nombre');
         }
 
-        $proyectoParaEditar = null;
-        if (isset($_GET['editar_id']) && ctype_digit((string) $_GET['editar_id'])) {
-            $proyectoParaEditar = $this->modeloNecesidad->obtenerPorId((int) $_GET['editar_id']);
-
-            // Nadie, sin importar el rol, puede entrar a editar un proyecto que no es suyo.
-            if ($proyectoParaEditar !== null && (int) $proyectoParaEditar['usuario_id'] !== (int) $_SESSION['usuario_id']) {
-                $proyectoParaEditar = null;
-            }
-        }
         $volverEdicion = $_GET['volver'] ?? '';
 
         require __DIR__ . '/../vista/perfil-proyectos/index.php';
+    }
+
+    /**
+     * Convocatoria que se muestra: la del proyecto que se edita, o la elegida (POST o GET) entre las
+     * visibles para el usuario; si no hay elección válida, la primera visible.
+     */
+    private function resolverConvocatoriaActual(array $visibles, ?array $proyectoParaEditar): ?array
+    {
+        if ($proyectoParaEditar !== null) {
+            $idPreferido = (int) $proyectoParaEditar['convocatoria_id'];
+        } else {
+            $idPreferido = (int) ($_POST['convocatoria_id'] ?? $_GET['convocatoria_id'] ?? 0);
+        }
+
+        if ($idPreferido <= 0) {
+            return $visibles[0] ?? null;
+        }
+
+        foreach ($visibles as $convocatoria) {
+            if ((int) $convocatoria['id'] === $idPreferido) {
+                return $convocatoria;
+            }
+        }
+
+        return null;
+    }
+
+    /** Filtra filas de dependencias (con 'id') al alcance dado; null = sin restricción. */
+    private function filtrarPorAlcance(array $dependencias, ?array $alcance): array
+    {
+        if ($alcance === null) {
+            return $dependencias;
+        }
+
+        return array_values(array_filter($dependencias, static fn (array $d): bool => in_array((int) $d['id'], $alcance, true)));
     }
 
     /**
@@ -305,12 +371,13 @@ class PerfilProyectosControlador
         exit;
     }
 
-    private function crearProyecto(bool $esInvitado, bool $dentroDeVentana): array
+    /**
+     * Valida y normaliza el formulario de un proyecto dentro de su convocatoria. Devuelve [error, datos].
+     * La fuente debe estar habilitada en la convocatoria; el invitado formula siempre para su propia
+     * dependencia, y el administrador elige una dentro del alcance de la convocatoria.
+     */
+    private function prepararDatosProyecto(array $convocatoria, bool $esInvitado, ?array $usuarioActual): array
     {
-        if ($esInvitado && !$dentroDeVentana) {
-            return ['No estás dentro de la fecha habilitada para formular necesidades.', ''];
-        }
-
         $datos = [];
 
         foreach ($_POST as $campo => $valor) {
@@ -319,21 +386,21 @@ class PerfilProyectosControlador
 
         foreach (self::CAMPOS_REQUERIDOS_PROYECTO as $campo) {
             if (($datos[$campo] ?? '') === '') {
-                return ['Todos los campos obligatorios deben diligenciarse.', ''];
+                return ['Todos los campos obligatorios deben diligenciarse.', []];
             }
         }
 
         if (!is_numeric($datos['valor']) || (float) $datos['valor'] < 0) {
-            return ['El valor debe ser un número válido.', ''];
+            return ['El valor debe ser un número válido.', []];
         }
 
         if (!is_numeric($datos['vigencia'])) {
-            return ['Selecciona una vigencia válida.', ''];
+            return ['Selecciona una vigencia válida.', []];
         }
 
         if (isset($datos['beneficiarios_cantidad']) && $datos['beneficiarios_cantidad'] !== '') {
             if (!is_numeric($datos['beneficiarios_cantidad']) || (int) $datos['beneficiarios_cantidad'] < 0) {
-                return ['Los beneficiarios deben ser un número entero válido.', ''];
+                return ['Los beneficiarios deben ser un número entero válido.', []];
             }
             $datos['beneficiarios_cantidad'] = (int) $datos['beneficiarios_cantidad'];
         } else {
@@ -343,15 +410,49 @@ class PerfilProyectosControlador
         $lineaElegida = $this->modeloLineaInversion->obtenerPorCodigo($datos['linea_inversion']);
 
         if ($lineaElegida === null) {
-            return ['Selecciona una línea de inversión válida.', ''];
+            return ['Selecciona una línea de inversión válida.', []];
         }
 
         $sublinea = $this->modeloSublineaInversion->obtenerPorCodigo($datos['sublinea_inversion']);
 
         if ($sublinea === null || (int) $sublinea['linea_inversion_id'] !== (int) $lineaElegida['id']) {
-            return ['La sublínea de inversión seleccionada no pertenece a la línea elegida.', ''];
+            return ['La sublínea de inversión seleccionada no pertenece a la línea elegida.', []];
         }
 
+        $fuenteId = (int) $datos['fuente_financiacion_id'];
+        $fuente = null;
+        foreach ($this->modeloConvocatoria->fuentesHabilitadas((int) $convocatoria['id']) as $fuenteHabilitada) {
+            if ((int) $fuenteHabilitada['id'] === $fuenteId) {
+                $fuente = $fuenteHabilitada;
+                break;
+            }
+        }
+
+        if ($fuente === null) {
+            return ['Selecciona una fuente de financiación habilitada en la convocatoria.', []];
+        }
+
+        if ($esInvitado) {
+            $dependencia = !empty($usuarioActual['dependencia_id'])
+                ? $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id'])
+                : null;
+        } else {
+            $dependencia = $this->modeloDependencia->obtenerPorNombre($datos['dependencia'] ?? '');
+        }
+
+        if ($dependencia === null) {
+            return ['Selecciona una dependencia válida.', []];
+        }
+
+        if (!$this->modeloConvocatoria->permiteDependencia((int) $convocatoria['id'], (int) $dependencia['id'])) {
+            return ['La dependencia seleccionada no puede formular en esta convocatoria.', []];
+        }
+
+        $datos['convocatoria_id'] = (int) $convocatoria['id'];
+        $datos['dependencia'] = $dependencia['nombre'];
+        $datos['dependencia_id'] = (int) $dependencia['id'];
+        $datos['fuente_financiacion_id'] = $fuenteId;
+        $datos['fuente_financiacion'] = $fuente['nombre'];
         $datos['sede_id'] = (int) $datos['sede_id'];
         $datos['estamento_solicitante_id'] = (int) $datos['estamento_solicitante_id'];
         $datos['responsable_usuario_id'] = (int) $datos['responsable_usuario_id'];
@@ -359,17 +460,44 @@ class PerfilProyectosControlador
         $datos['vigencia'] = (int) $datos['vigencia'];
         $datos['beneficiarios_estamentos'] = array_map('intval', $_POST['beneficiarios_estamentos'] ?? []);
 
+        return ['', $datos];
+    }
+
+    /** Dentro de la ventana para el invitado; el administrador solo necesita que la convocatoria esté activa. */
+    private function puedeModificarPorVentana(bool $esInvitado, array $proyecto): bool
+    {
+        $convocatoria = $this->modeloConvocatoria->obtenerPorId((int) ($proyecto['convocatoria_id'] ?? 0));
+
+        if ($convocatoria === null) {
+            return false;
+        }
+
+        return $esInvitado ? Convocatoria::dentroDeVentana($convocatoria) : (int) $convocatoria['activa'] === 1;
+    }
+
+    private function crearProyecto(bool $esInvitado, ?array $convocatoria, bool $dentroDeVentana, ?array $usuarioActual): array
+    {
+        if ($convocatoria === null) {
+            return ['Selecciona una convocatoria disponible para tu usuario.', ''];
+        }
+
+        if (!$dentroDeVentana) {
+            return ['La convocatoria "' . $convocatoria['nombre'] . '" no está abierta para formular proyectos.', ''];
+        }
+
+        [$error, $datos] = $this->prepararDatosProyecto($convocatoria, $esInvitado, $usuarioActual);
+
+        if ($error !== '') {
+            return [$error, ''];
+        }
+
         $this->modeloNecesidad->crear($datos, (int) ($_SESSION['usuario_id'] ?? 0));
 
         return ['', 'Proyecto registrado correctamente.'];
     }
 
-    private function actualizarProyecto(bool $esInvitado, bool $dentroDeVentana): array
+    private function actualizarProyecto(bool $esInvitado, ?array $usuarioActual): array
     {
-        if ($esInvitado && !$dentroDeVentana) {
-            return ['No estás dentro de la fecha habilitada para formular necesidades.', ''];
-        }
-
         $id = (int) ($_POST['id'] ?? 0);
         $existente = $id > 0 ? $this->modeloNecesidad->obtenerPorId($id) : null;
 
@@ -378,64 +506,31 @@ class PerfilProyectosControlador
             return ['El proyecto que intentas editar no existe.', ''];
         }
 
-        $datos = [];
-
-        foreach ($_POST as $campo => $valor) {
-            $datos[$campo] = is_string($valor) ? trim($valor) : $valor;
+        if (($existente['estado'] ?? 'borrador') === 'enviado') {
+            return ['Un proyecto enviado ya no se puede editar.', ''];
         }
 
-        foreach (self::CAMPOS_REQUERIDOS_PROYECTO as $campo) {
-            if (($datos[$campo] ?? '') === '') {
-                return ['Todos los campos obligatorios deben diligenciarse.', ''];
-            }
+        if (!$this->puedeModificarPorVentana($esInvitado, $existente)) {
+            return ['La convocatoria de este proyecto no está abierta; no se puede editar.', ''];
         }
 
-        if (!is_numeric($datos['valor']) || (float) $datos['valor'] < 0) {
-            return ['El valor debe ser un número válido.', ''];
+        $convocatoria = $this->modeloConvocatoria->obtenerPorId((int) $existente['convocatoria_id']);
+        [$error, $datos] = $this->prepararDatosProyecto($convocatoria, $esInvitado, $usuarioActual);
+
+        if ($error !== '') {
+            return [$error, ''];
         }
-
-        if (!is_numeric($datos['vigencia'])) {
-            return ['Selecciona una vigencia válida.', ''];
-        }
-
-        if (isset($datos['beneficiarios_cantidad']) && $datos['beneficiarios_cantidad'] !== '') {
-            if (!is_numeric($datos['beneficiarios_cantidad']) || (int) $datos['beneficiarios_cantidad'] < 0) {
-                return ['Los beneficiarios deben ser un número entero válido.', ''];
-            }
-            $datos['beneficiarios_cantidad'] = (int) $datos['beneficiarios_cantidad'];
-        } else {
-            $datos['beneficiarios_cantidad'] = '';
-        }
-
-        $lineaElegida = $this->modeloLineaInversion->obtenerPorCodigo($datos['linea_inversion']);
-
-        if ($lineaElegida === null) {
-            return ['Selecciona una línea de inversión válida.', ''];
-        }
-
-        $sublinea = $this->modeloSublineaInversion->obtenerPorCodigo($datos['sublinea_inversion']);
-
-        if ($sublinea === null || (int) $sublinea['linea_inversion_id'] !== (int) $lineaElegida['id']) {
-            return ['La sublínea de inversión seleccionada no pertenece a la línea elegida.', ''];
-        }
-
-        $datos['sede_id'] = (int) $datos['sede_id'];
-        $datos['estamento_solicitante_id'] = (int) $datos['estamento_solicitante_id'];
-        $datos['responsable_usuario_id'] = (int) $datos['responsable_usuario_id'];
-        $datos['proyecto_pdi_id'] = !empty($datos['proyecto_id']) ? (int) $datos['proyecto_id'] : null;
-        $datos['vigencia'] = (int) $datos['vigencia'];
-        $datos['beneficiarios_estamentos'] = array_map('intval', $_POST['beneficiarios_estamentos'] ?? []);
 
         $this->modeloNecesidad->actualizar($id, $datos);
 
         (new PeticionArchivada())->sincronizarDesdeOrigen('necesidad', $id, (float) $datos['valor'], $datos['dependencia']);
 
-        $destino = !empty($_POST['volver']) ? $_POST['volver'] : 'index.php?ruta=perfil-proyectos';
+        $destino = !empty($_POST['volver']) ? $_POST['volver'] : 'index.php?ruta=perfil-proyectos&convocatoria_id=' . (int) $convocatoria['id'];
         header('Location: ' . $destino);
         exit;
     }
 
-    private function eliminarSeleccionados(): array
+    private function eliminarSeleccionados(bool $esInvitado): array
     {
         $ids = array_map('intval', $_POST['id'] ?? []);
         $eliminados = 0;
@@ -451,6 +546,7 @@ class PerfilProyectosControlador
             if ($existente !== null
                 && (int) $existente['usuario_id'] === (int) $_SESSION['usuario_id']
                 && ($existente['estado'] ?? 'borrador') === 'borrador'
+                && $this->puedeModificarPorVentana($esInvitado, $existente)
             ) {
                 $this->modeloNecesidad->eliminar($id);
                 $eliminados++;
@@ -464,7 +560,7 @@ class PerfilProyectosControlador
         return ['', 'Se eliminaron ' . $eliminados . ' proyecto(s).'];
     }
 
-    private function duplicarSeleccionados(): array
+    private function duplicarSeleccionados(bool $esInvitado): array
     {
         $ids = array_map('intval', $_POST['id'] ?? []);
         $db = Conexion::obtener();
@@ -478,7 +574,10 @@ class PerfilProyectosControlador
             // Nadie, sin importar el rol, puede duplicar un proyecto que no es suyo.
             $existente = $this->modeloNecesidad->obtenerPorId($id);
 
-            if ($existente === null || (int) $existente['usuario_id'] !== (int) $_SESSION['usuario_id']) {
+            if ($existente === null
+                || (int) $existente['usuario_id'] !== (int) $_SESSION['usuario_id']
+                || !$this->puedeModificarPorVentana($esInvitado, $existente)
+            ) {
                 continue;
             }
 
@@ -497,8 +596,16 @@ class PerfilProyectosControlador
         return ['', 'Se duplicaron ' . $duplicados . ' proyecto(s).'];
     }
 
-    private function enviarTodo(bool $esInvitado): array
+    private function enviarTodo(bool $esInvitado, ?array $convocatoria, bool $dentroDeVentana): array
     {
+        if ($convocatoria === null) {
+            return ['Selecciona una convocatoria disponible para tu usuario.', ''];
+        }
+
+        if (!$dentroDeVentana) {
+            return ['La convocatoria "' . $convocatoria['nombre'] . '" no está abierta; no se pueden enviar sus proyectos.', ''];
+        }
+
         if ($esInvitado) {
             // El invitado no elige dependencia/rol libremente — se derivan siempre de su propia
             // Facultad y del rol "Gestor"; solo se confía en qué Gestor puntual eligió del POST.
@@ -572,10 +679,17 @@ class PerfilProyectosControlador
         // petición en Pendientes, no solo la persona elegida.
         $usuarioDestinatarioResuelto = isset($destinatarios[0]) ? (int) $destinatarios[0]['id'] : null;
 
-        $enviados = $this->modeloNecesidad->enviarTodosBorrador($dependenciaDestinoNombre, $rolDestinatarioId, $usuarioDestinatarioResuelto, (int) $_SESSION['usuario_id']);
+        // Solo se envían los borradores de la convocatoria que se está viendo.
+        $enviados = $this->modeloNecesidad->enviarTodosBorrador(
+            $dependenciaDestinoNombre,
+            $rolDestinatarioId,
+            $usuarioDestinatarioResuelto,
+            (int) $_SESSION['usuario_id'],
+            (int) $convocatoria['id']
+        );
 
         if ($enviados === 0) {
-            return ['No hay proyectos en borrador para enviar.', ''];
+            return ['No hay proyectos en borrador para enviar en esta convocatoria.', ''];
         }
 
         $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);

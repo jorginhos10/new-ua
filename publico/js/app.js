@@ -458,7 +458,7 @@ document.addEventListener('DOMContentLoaded', function () {
             document.getElementById('editar-proyecto-espacio_intervenir').value = necesidad.espacio_intervenir || '';
             document.getElementById('editar-proyecto-requisitos_normativos').value = necesidad.requisitos_normativos || '';
             document.getElementById('editar-proyecto-valor').value = necesidad.valor || '';
-            document.getElementById('editar-proyecto-fuente_financiacion').value = necesidad.fuente_financiacion || '';
+            document.getElementById('editar-proyecto-fuente_financiacion_id').value = necesidad.fuente_financiacion_id || '';
             document.getElementById('editar-proyecto-responsable_usuario_id').value = necesidad.responsable_usuario_id || '';
             document.getElementById('editar-proyecto-observaciones').value = necesidad.observaciones || '';
         });
