@@ -449,6 +449,9 @@ class AnalisisControlador
         ];
         $tituloPagina = $tituloPaginaPorTab[$tab] ?? 'Análisis · Articulación PDI';
 
+        $esSuperAdmin = $this->esSuperAdmin();
+        $arbolExpandidoPorDefecto = (new AnalisisArbolConfiguracion())->obtenerExpandido($tab);
+
         // Exportar (GET, las 3 pestañas de árbol, en los 3 modos): se resuelve aquí, después de
         // armar el árbol, para que el archivo salga exactamente con lo que la página mostraría
         // (misma versión, dependencia, lado y fecha de corte).
@@ -920,6 +923,94 @@ class AnalisisControlador
         require __DIR__ . '/../vista/analisis/index.php';
     }
 
+    /** Autogestión: módulo de egresos de la tarjeta => su origen de ingresos. */
+    private const INGRESOS_AUTOGESTION_SELECTOR = [
+        'gasto_extension' => 'ingreso_extension',
+        'gasto_postgrado' => 'ingreso_postgrado',
+        'gasto_unisalud' => 'ingreso_unisalud',
+    ];
+
+    /**
+     * Indicadores de las tarjetas del selector de módulos (ver selector-modulos.php):
+     * - techos: barra de Gasto = egresos contra el presupuesto del año activo (el mismo
+     *   denominador de "Resumen de gastos" del Dashboard); en modo Usuario, contra el techo de esa
+     *   dependencia — salvo la raíz superadmin, que abarca todas y usa el presupuesto del año.
+     *   Sin techo configurado = sin barra (la vista lo indica con "Sin techo").
+     * - asignación (% de la esquina): Gasto = egresos / techo; Autogestión (Extensión, Postgrado,
+     *   Unisalud) = egresos / ingresos del módulo. Sin denominador = sin %.
+     * - distribución: barra de Autogestión = egresos repartidos por categoría (Gastos /
+     *   Inversiones / Excedentes, y "Otros" para cualquier otra, ej. "Contribución a posgrado").
+     *
+     * @return array{0: array<string, array{avance: float, techo: float, etiqueta: string}>, 1: array<string, array{porcentaje: float, titulo: string}>, 2: array<string, array<string, float>>}
+     */
+    private function obtenerIndicadoresSelector(?array $anioActivo, string $vista, ?int $snapshotId, ?string $dependenciaFiltro, array $dependenciasTodas, array $totalesPorModulo): array
+    {
+        if ($anioActivo === null) {
+            return [[], [], []];
+        }
+
+        $anioId = (int) $anioActivo['id'];
+        $monedaCorta = static fn (float $valor): string => '$' . number_format($valor, 0, ',', '.');
+        $techos = [];
+        $asignacion = [];
+        $distribucion = [];
+
+        $techoGasto = (float) ($anioActivo['presupuesto'] ?? 0);
+        $etiquetaGasto = 'presupuesto ' . $anioActivo['anio'];
+        if ($vista === 'usuario') {
+            $techoGasto = 0.0;
+            foreach ($dependenciasTodas as $dependencia) {
+                if ($dependencia['nombre'] === $dependenciaFiltro) {
+                    if (!empty($dependencia['es_raiz_superadmin'])) {
+                        $techoGasto = (float) ($anioActivo['presupuesto'] ?? 0);
+                    } else {
+                        $techoGasto = (float) ((new PresupuestoDependencia())->obtenerPorAnio($anioId)[(int) $dependencia['id']]['techo'] ?? 0);
+                        $etiquetaGasto = 'techo de ' . $dependencia['nombre'];
+                    }
+                    break;
+                }
+            }
+        }
+        if ($techoGasto > 0) {
+            $egresosGasto = (float) ($totalesPorModulo['gasto_principal'] ?? 0);
+            $techos['gasto_principal'] = ['avance' => $egresosGasto, 'techo' => $techoGasto, 'etiqueta' => $etiquetaGasto];
+            $asignacion['gasto_principal'] = [
+                'porcentaje' => $egresosGasto / $techoGasto * 100,
+                'titulo' => 'Egresos asignados del ' . $etiquetaGasto . ': ' . $monedaCorta($egresosGasto) . ' de ' . $monedaCorta($techoGasto),
+            ];
+        }
+
+        foreach (self::INGRESOS_AUTOGESTION_SELECTOR as $origenEgresos => $origenIngresos) {
+            $egresos = (float) ($totalesPorModulo[$origenEgresos] ?? 0);
+            $ingresos = $totalesPorModulo[$origenIngresos]
+                ?? $this->obtenerTotalModulo($origenIngresos, $anioId, $vista, $snapshotId, $dependenciaFiltro);
+            if ($ingresos > 0) {
+                $asignacion[$origenEgresos] = [
+                    'porcentaje' => $egresos / $ingresos * 100,
+                    'titulo' => 'Egresos asignados de los ingresos: ' . $monedaCorta($egresos) . ' de ' . $monedaCorta($ingresos),
+                ];
+            }
+
+            $porCategoria = ['Gastos' => 0.0, 'Inversiones' => 0.0, 'Excedentes' => 0.0, 'Otros' => 0.0];
+            foreach ($this->obtenerFilasCrudasModulo($origenEgresos, $anioId, $vista, $snapshotId, $dependenciaFiltro) as $fila) {
+                $categoria = (string) ($fila['categoria'] ?? '');
+                $grupo = 'Otros';
+                foreach (['Gastos', 'Inversiones', 'Excedentes'] as $prefijo) {
+                    if (stripos($categoria, $prefijo) === 0) {
+                        $grupo = $prefijo;
+                        break;
+                    }
+                }
+                $porCategoria[$grupo] += $this->obtenerValorFilaModulo($origenEgresos, $fila);
+            }
+            if (array_sum($porCategoria) > 0) {
+                $distribucion[$origenEgresos] = $porCategoria;
+            }
+        }
+
+        return [$techos, $asignacion, $distribucion];
+    }
+
     /**
      * [snapshot_id, dependencia] de "Análisis de distribución" según el modo: Repositorio → el
      * snapshot de la URL (o el más reciente); Usuario → la dependencia de la URL (o la primera).
@@ -931,7 +1022,9 @@ class AnalisisControlador
         $dependenciaFiltro = null;
 
         if ($vista === 'repositorio') {
-            $snapshotId = (int) ($_GET['snapshot_id'] ?? ($snapshots[0]['id'] ?? 0));
+            // Solo el superadmin elige el snapshot; los demás ven el más reciente.
+            $snapshotSolicitado = AccesoAnalisis::actual()['clase'] === 'superadmin' ? ($_GET['snapshot_id'] ?? null) : null;
+            $snapshotId = (int) ($snapshotSolicitado ?? ($snapshots[0]['id'] ?? 0));
             if ($snapshotId <= 0) {
                 $snapshotId = null;
             }
