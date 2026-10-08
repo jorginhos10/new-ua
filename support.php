@@ -134,7 +134,8 @@ if ($errorConexion === null) {
                 $pdo->prepare($c['sql'])->closeCursor();
             } catch (PDOException $e) {
                 $codigo = (int) ($e->errorInfo[1] ?? 0);
-                if ($codigo === 1064) { // consulta armada dinámicamente: no se puede validar aquí
+                // 1064/1103: consulta armada dinámicamente (sintaxis o nombre de tabla en variable): no se puede validar aquí
+                if (in_array($codigo, [1064, 1103], true)) {
                     $noVerificables++;
                     continue;
                 }
