@@ -23,6 +23,7 @@ class AccesoAnalisis
         'analisis' => 'analisis_distribucion',
         'proyectos' => 'analisis_proyectos',
         'techos' => 'analisis_techos',
+        'actas' => 'analisis_actas',
     ];
 
     public const PESTANAS_POR_DEFECTO = ['pdi', 'techos'];

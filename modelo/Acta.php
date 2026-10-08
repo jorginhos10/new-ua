@@ -61,6 +61,22 @@ class Acta
         return $consulta->fetchAll();
     }
 
+    /** Todas las actas cargadas, para la pestaña Actas de Análisis (más recientes primero). */
+    public function obtenerTodasConDetalle(): array
+    {
+        $consulta = $this->db->query(
+            'SELECT a.id, a.dependencia_id, a.nombre_archivo, a.tamano_bytes, a.creado_en, an.anio,
+                    r.nombre AS remitente_nombre, d.nombre AS destinatario_nombre
+             FROM actas a
+             JOIN anios_presupuestales an ON an.id = a.anio_presupuestal_id
+             JOIN usuarios r ON r.id = a.remitente_id
+             LEFT JOIN usuarios d ON d.id = a.destinatario_id
+             ORDER BY a.creado_en DESC'
+        );
+
+        return $consulta->fetchAll();
+    }
+
     public function obtenerPorId(int $id): ?array
     {
         $consulta = $this->db->prepare('SELECT * FROM actas WHERE id = :id');

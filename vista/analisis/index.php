@@ -241,6 +241,9 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php if (in_array('techos', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('techos', $vista === 'usuario' ? 'usuario' : 'tiempo_real')) ?>" class="<?= $tab === 'techos' ? 'activa' : '' ?>">Techos y Metas</a>
         <?php endif; ?>
+        <?php if (in_array('actas', $pestanasPermitidas, true)): ?>
+        <a href="<?= htmlspecialchars(analisisUrl('actas', $vista)) ?>" class="<?= $tab === 'actas' ? 'activa' : '' ?>">Actas</a>
+        <?php endif; ?>
     </nav>
 
     <div class="analisis-acciones">
@@ -319,7 +322,7 @@ require __DIR__ . '/../parciales/encabezado.php';
         </div>
         <?php endif; ?>
 
-        <?php if (AccesoAnalisis::actual()['clase'] === 'superadmin'): ?>
+        <?php if (AccesoAnalisis::actual()['clase'] === 'superadmin' && $tab !== 'actas'): ?>
         <div class="analisis-toggle">
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'tiempo_real', $paramsTab)) ?>" class="<?= $vista === 'tiempo_real' ? 'activo' : '' ?>">Tiempo real</a>
             <?php if ($tab !== 'techos'): ?>
@@ -352,7 +355,7 @@ require __DIR__ . '/../parciales/encabezado.php';
             </option>
             <?php endforeach; ?>
         </select>
-        <?php elseif ($vista === 'usuario'): ?>
+        <?php elseif ($vista === 'usuario' && $tab !== 'actas'): ?>
         <select class="analisis-selector-modo" onchange="if(this.value){window.location.href=this.value;}">
             <?php foreach (AccesoAnalisis::dependenciasSelector($dependenciasTodas) as $dependenciaOpcion): ?>
             <option value="<?= htmlspecialchars(analisisUrl($tab, 'usuario', ['dependencia' => $dependenciaOpcion['nombre']] + $paramsTab + (isset($origenActivo) ? ['origen' => $origenActivo] : []))) ?>" <?= $dependenciaOpcion['nombre'] === $dependenciaFiltroActual ? 'selected' : '' ?>>
@@ -376,6 +379,8 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php require __DIR__ . '/parciales/arbol.php'; ?>
     <?php elseif ($tab === 'techos'): ?>
         <?php require __DIR__ . '/parciales/techos-metas.php'; ?>
+    <?php elseif ($tab === 'actas'): ?>
+        <?php require __DIR__ . '/parciales/actas.php'; ?>
     <?php else: ?>
         <div style="display:flex; gap:0.75rem; flex:1; min-height:0; padding:0.5rem;">
             <div style="width:220px; flex-shrink:0;">

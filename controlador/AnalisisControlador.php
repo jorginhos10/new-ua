@@ -23,6 +23,7 @@ require_once __DIR__ . '/../modelo/AnalisisArbolConfiguracion.php';
 require_once __DIR__ . '/../modelo/TechosMetas.php';
 require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
 require_once __DIR__ . '/../modelo/IngresoUnisalud.php';
+require_once __DIR__ . '/../modelo/Acta.php';
 require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
 require_once __DIR__ . '/PeticionesControlador.php';
@@ -36,7 +37,12 @@ require_once __DIR__ . '/PeticionesControlador.php';
  */
 class AnalisisControlador
 {
-    private const TABS_VALIDAS = ['pdi', 'programacion', 'analisis', 'proyectos', 'techos'];
+    private const TABS_VALIDAS = ['pdi', 'programacion', 'analisis', 'proyectos', 'techos', 'actas'];
+
+    /** Dependencias que cargan actas en el módulo Actas (ver ActaControlador::TIPOS_DEPENDENCIA_PERMITIDOS). */
+    private const TIPOS_DEPENDENCIA_ACTAS = ['Facultad', 'Vicerrectoria'];
+
+    private const CARPETA_ACTAS = __DIR__ . '/../almacenamiento/actas/';
 
     private const VISTAS_VALIDAS = ['tiempo_real', 'repositorio', 'usuario'];
 
@@ -125,9 +131,21 @@ class AnalisisControlador
             return;
         }
 
+        if ($tab === 'actas' && ($_GET['accion'] ?? '') === 'descargar_acta') {
+            $this->descargarActa($acceso);
+
+            return;
+        }
+
         $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
         $anioActivo = $aniosActivos[0] ?? null;
         $dependenciasTodas = (new Dependencia())->obtenerTodas();
+
+        if ($tab === 'actas') {
+            $this->renderizarActas($vista, $acceso, $dependenciasTodas);
+
+            return;
+        }
 
         // Compartidas por las 4 pestañas — ver vista/analisis/index.php.
         $rolVista = $vista === 'tiempo_real' ? 'admin' : 'consulta';
@@ -705,6 +723,67 @@ class AnalisisControlador
         $tituloPagina = 'Análisis · Techos y Metas';
 
         require __DIR__ . '/../vista/analisis/index.php';
+    }
+
+    /**
+     * Pestaña Actas: una fila por Facultad/Vicerrectoría activa con las actas que cargó en el
+     * módulo Actas. Solo lectura y sin modos de datos; quien no es superadmin solo ve las de su
+     * subárbol de dependencias (mismo alcance que la vista Usuario).
+     */
+    private function renderizarActas(string $vista, array $acceso, array $dependenciasTodas): void
+    {
+        $actasPorDependencia = [];
+        foreach ((new Acta())->obtenerTodasConDetalle() as $acta) {
+            $actasPorDependencia[(int) $acta['dependencia_id']][] = $acta;
+        }
+
+        $dependenciasActas = [];
+        foreach ($dependenciasTodas as $dependencia) {
+            $tieneActas = isset($actasPorDependencia[(int) $dependencia['id']]);
+            $esListable = in_array($dependencia['tipo'] ?? '', self::TIPOS_DEPENDENCIA_ACTAS, true)
+                && ($dependencia['estado'] ?? '') === 'activo'
+                && empty($dependencia['no_listar']);
+
+            if (!$esListable && !$tieneActas) {
+                continue;
+            }
+            if ($acceso['dependencias'] !== null && !in_array($dependencia['nombre'], $acceso['dependencias'], true)) {
+                continue;
+            }
+
+            $dependenciasActas[] = $dependencia + ['actas' => $actasPorDependencia[(int) $dependencia['id']] ?? []];
+        }
+
+        $tab = 'actas';
+        $error = '';
+        $exito = '';
+        $tituloPagina = 'Análisis · Actas';
+
+        require __DIR__ . '/../vista/analisis/index.php';
+    }
+
+    /** Descarga (en línea) un acta, si su dependencia está dentro del alcance del usuario. */
+    private function descargarActa(array $acceso): void
+    {
+        $id = (int) ($_GET['id'] ?? 0);
+        $acta = $id > 0 ? (new Acta())->obtenerPorId($id) : null;
+        $dependencia = $acta !== null ? (new Dependencia())->obtenerPorId((int) $acta['dependencia_id']) : null;
+
+        $permitida = $acta !== null
+            && ($acceso['dependencias'] === null || ($dependencia !== null && in_array($dependencia['nombre'], $acceso['dependencias'], true)));
+        $rutaArchivo = $permitida ? self::CARPETA_ACTAS . basename($acta['nombre_almacenado']) : '';
+
+        if (!$permitida || !is_file($rutaArchivo)) {
+            http_response_code(404);
+            exit('Acta no encontrada.');
+        }
+
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="' . str_replace(['"', "\r", "\n"], '', basename($acta['nombre_archivo'])) . '"');
+        header('Content-Length: ' . filesize($rutaArchivo));
+        header('Cache-Control: private, max-age=0, must-revalidate');
+        readfile($rutaArchivo);
+        exit;
     }
 
     private function tieneDinero(array $valores): bool

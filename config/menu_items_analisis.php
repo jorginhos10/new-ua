@@ -10,5 +10,6 @@ return [
         'analisis_distribucion' => 'Análisis de distribución',
         'analisis_proyectos' => 'Proyectos (análisis)',
         'analisis_techos' => 'Techos y Metas',
+        'analisis_actas' => 'Actas',
     ],
 ];
