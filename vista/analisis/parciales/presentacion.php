@@ -126,8 +126,34 @@ $puedeEditarPresentacion = $puedeEditarPresentacion ?? false;
 
     <?php if ($urlPresentacionIncrustada !== null): ?>
     <div class="presentacion-analisis-marco">
-        <iframe src="<?= htmlspecialchars($urlPresentacionIncrustada) ?>" title="Presentación" allowfullscreen referrerpolicy="no-referrer"></iframe>
+        <iframe id="presentacion-analisis-visor" src="<?= htmlspecialchars($urlPresentacionIncrustada) ?>" title="Presentación" allowfullscreen referrerpolicy="no-referrer"></iframe>
     </div>
+    <script>
+    // El visor de Office está en otro dominio: el navegador solo le entrega las flechas cuando
+    // tiene el foco (no se le pueden reenviar teclas desde aquí). Se le da el foco al cargar y
+    // cada vez que se toca una tecla de navegación fuera de un campo de texto.
+    (function () {
+        var visor = document.getElementById('presentacion-analisis-visor');
+        if (!visor) {
+            return;
+        }
+        var teclasNavegacion = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '];
+        var enfocarVisor = function () {
+            visor.focus();
+            try { visor.contentWindow.focus(); } catch (e) {}
+        };
+
+        visor.addEventListener('load', enfocarVisor);
+        document.addEventListener('keydown', function (evento) {
+            var destino = evento.target;
+            var escribiendo = destino && (destino.tagName === 'INPUT' || destino.tagName === 'TEXTAREA' || destino.tagName === 'SELECT' || destino.isContentEditable);
+            if (!escribiendo && teclasNavegacion.indexOf(evento.key) !== -1) {
+                evento.preventDefault();
+                enfocarVisor();
+            }
+        });
+    })();
+    </script>
     <?php else: ?>
     <div class="presentacion-analisis-vacio">
         <strong>Todavía no hay una presentación cargada.</strong>
