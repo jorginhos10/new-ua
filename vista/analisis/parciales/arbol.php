@@ -25,7 +25,9 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
 {
     $tieneHijos = !empty($nodo['hijos']);
     $esTotal = $nodo['esTotal'] ?? false;
-    $clases = 'arbol-fila nivel-' . $nodo['nivel'] . ($esTotal ? ' arbol-fila-total' : '') . ($tieneHijos ? ' arbol-fila-expandible' : '');
+    // Recogido por defecto: todas las filas con hijos salen contraídas y solo se ven las raíces.
+    $clases = 'arbol-fila nivel-' . $nodo['nivel'] . ($esTotal ? ' arbol-fila-total' : '') . ($tieneHijos ? ' arbol-fila-expandible' : '')
+        . (!$expandido && $tieneHijos ? ' arbol-contraido' : '') . (!$expandido && $padreId !== null ? ' arbol-fila-oculta' : '');
     echo '<tr class="' . $clases . '" data-id="' . htmlspecialchars($nodo['id']) . '"'
         . ($padreId !== null ? ' data-padre="' . htmlspecialchars($padreId) . '"' : '')
         . ' data-expandido="' . ($expandido ? '1' : '0') . '">';
@@ -39,7 +41,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
     echo '<td class="arbol-celda-etiqueta"><div class="arbol-etiqueta-contenido">';
     echo '<span class="arbol-sangria" style="width:' . ($nodo['nivel'] * 24) . 'px"></span>';
     if ($tieneHijos) {
-        echo '<button type="button" class="arbol-boton-expandir" data-id="' . htmlspecialchars($nodo['id']) . '" title="Contraer/expandir" aria-label="Contraer/expandir" aria-expanded="true">'
+        echo '<button type="button" class="arbol-boton-expandir" data-id="' . htmlspecialchars($nodo['id']) . '" title="Contraer/expandir" aria-label="Contraer/expandir" aria-expanded="' . ($expandido ? 'true' : 'false') . '">'
             . '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>'
             . '</button>';
     } else {
@@ -508,7 +510,7 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
             </thead>
             <tbody>
                 <?php if (empty($arbolDatos)): ?>
-                <tr><td colspan="<?= count($columnasAnios) + 1 + count($columnasExtra) ?>" class="texto-atenuado arbol-celda-vacia">No hay datos para mostrar.</td></tr>
+                <tr><td colspan="<?= count($columnasAnios) + 1 + count($columnasExtra) + ($mostrarVariacion ? 1 : 0) ?>" class="texto-atenuado arbol-celda-vacia">No hay datos para mostrar.</td></tr>
                 <?php endif; ?>
                 <?php foreach ($arbolDatos as $nodoLinea): ?>
                 <?php renderFilaArbolAnalisis($nodoLinea, $columnasAnios, null, $columnasExtra, $mostrarVariacion, $arbolExpandidoPorDefecto); ?>
@@ -670,6 +672,51 @@ document.addEventListener('DOMContentLoaded', function () {
             boton.setAttribute('aria-expanded', expandidoActual ? 'false' : 'true');
         }
         actualizarVisibilidad();
+    }
+
+    // --- Solo SA: estado por defecto (desplegado/recogido) de las listas de esta pestaña, para
+    // todos. Se guarda en BD y además se aplica de una vez a la vista actual. ---
+    function aplicarExpansionATodas(expandido) {
+        filas.forEach(function (fila) {
+            if (!fila.classList.contains('arbol-fila-expandible')) {
+                return;
+            }
+            fila.dataset.expandido = expandido ? '1' : '0';
+            fila.classList.toggle('arbol-contraido', !expandido);
+            var boton = fila.querySelector('.arbol-boton-expandir');
+            if (boton) {
+                boton.setAttribute('aria-expanded', expandido ? 'true' : 'false');
+            }
+        });
+        actualizarVisibilidad();
+    }
+
+    var botonExpansionDefecto = document.getElementById('arbol-boton-expansion-defecto');
+    if (botonExpansionDefecto) {
+        botonExpansionDefecto.addEventListener('click', function () {
+            var nuevoValor = !botonExpansionDefecto.classList.contains('activo');
+            var datos = new FormData();
+            datos.append('accion', 'configurar_expansion_arbol');
+            datos.append('expandido', nuevoValor ? '1' : '0');
+
+            botonExpansionDefecto.disabled = true;
+            fetch(window.location.href, { method: 'POST', body: datos, credentials: 'same-origin' })
+                .then(function (respuesta) { return respuesta.json(); })
+                .then(function (resultado) {
+                    if (!resultado.ok) {
+                        throw new Error(resultado.error || 'No se pudo guardar.');
+                    }
+                    botonExpansionDefecto.classList.toggle('activo', nuevoValor);
+                    botonExpansionDefecto.setAttribute('aria-pressed', nuevoValor ? 'true' : 'false');
+                    aplicarExpansionATodas(nuevoValor);
+                })
+                .catch(function (error) {
+                    alert('No se pudo guardar la configuración: ' + error.message);
+                })
+                .then(function () {
+                    botonExpansionDefecto.disabled = false;
+                });
+        });
     }
 
     // Un solo listener por celda de descripción: cubre el clic en el botón y en el texto
