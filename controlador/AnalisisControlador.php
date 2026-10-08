@@ -39,8 +39,8 @@ class AnalisisControlador
 {
     private const TABS_VALIDAS = ['pdi', 'programacion', 'analisis', 'proyectos', 'techos', 'actas'];
 
-    /** Dependencias que cargan actas en el módulo Actas (ver ActaControlador::TIPOS_DEPENDENCIA_PERMITIDOS). */
-    private const TIPOS_DEPENDENCIA_ACTAS = ['Facultad', 'Vicerrectoria'];
+    /** Pestaña Actas: solo dependencias de tipo Facultad, menos estas (tipo Facultad pero no son facultades). */
+    private const DEPENDENCIAS_EXCLUIDAS_ACTAS = ['DIRECTIVAS'];
 
     private const CARPETA_ACTAS = __DIR__ . '/../almacenamiento/actas/';
 
@@ -726,7 +726,7 @@ class AnalisisControlador
     }
 
     /**
-     * Pestaña Actas: una fila por Facultad/Vicerrectoría activa con las actas que cargó en el
+     * Pestaña Actas: una fila por facultad activa (tipo Facultad, sin DIRECTIVAS) con las actas que cargó en el
      * módulo Actas. Solo lectura y sin modos de datos; quien no es superadmin solo ve las de su
      * subárbol de dependencias (mismo alcance que la vista Usuario).
      */
@@ -739,12 +739,12 @@ class AnalisisControlador
 
         $dependenciasActas = [];
         foreach ($dependenciasTodas as $dependencia) {
-            $tieneActas = isset($actasPorDependencia[(int) $dependencia['id']]);
-            $esListable = in_array($dependencia['tipo'] ?? '', self::TIPOS_DEPENDENCIA_ACTAS, true)
+            $esListable = ($dependencia['tipo'] ?? '') === 'Facultad'
+                && !in_array($dependencia['nombre'], self::DEPENDENCIAS_EXCLUIDAS_ACTAS, true)
                 && ($dependencia['estado'] ?? '') === 'activo'
                 && empty($dependencia['no_listar']);
 
-            if (!$esListable && !$tieneActas) {
+            if (!$esListable) {
                 continue;
             }
             if ($acceso['dependencias'] !== null && !in_array($dependencia['nombre'], $acceso['dependencias'], true)) {

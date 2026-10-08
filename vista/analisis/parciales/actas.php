@@ -1,6 +1,6 @@
 <?php
 /**
- * Pestaña "Actas" de ?ruta=analisis: una fila por Facultad/Vicerrectoría con las actas que cargó
+ * Pestaña "Actas" de ?ruta=analisis: una fila por facultad con las actas que cargó
  * en el módulo Actas y el enlace para descargar cada una. Variables esperadas (ver
  * AnalisisControlador::renderizarActas()): $dependenciasActas (cada dependencia con su lista 'actas').
  */
@@ -65,12 +65,6 @@ $tamanoLegible = static fn (int $bytes): string => $bytes >= 1048576
         font-weight: 600;
     }
 
-    .actas-analisis-tipo {
-        display: block;
-        font-size: 0.75rem;
-        font-weight: 400;
-        color: var(--color-texto-tenue);
-    }
 
     .actas-analisis-lista {
         list-style: none;
@@ -110,25 +104,24 @@ $tamanoLegible = static fn (int $bytes): string => $bytes >= 1048576
 
 <div class="actas-analisis">
     <p class="actas-analisis-resumen">
-        <?= $dependenciasConActa ?> de <?= count($dependenciasActas) ?> dependencias han cargado acta · <?= $totalActas ?> acta<?= $totalActas === 1 ? '' : 's' ?> en total
+        <?= $dependenciasConActa ?> de <?= count($dependenciasActas) ?> facultades han cargado acta · <?= $totalActas ?> acta<?= $totalActas === 1 ? '' : 's' ?> en total
     </p>
 
     <table class="actas-analisis-tabla">
         <thead>
             <tr>
-                <th style="width: 35%;">Facultad / Dependencia</th>
+                <th style="width: 35%;">Facultad</th>
                 <th>Actas</th>
             </tr>
         </thead>
         <tbody>
             <?php if (empty($dependenciasActas)): ?>
-            <tr><td colspan="2" class="actas-analisis-sin-acta">No hay dependencias para mostrar.</td></tr>
+            <tr><td colspan="2" class="actas-analisis-sin-acta">No hay facultades para mostrar.</td></tr>
             <?php endif; ?>
             <?php foreach ($dependenciasActas as $dependencia): ?>
             <tr>
                 <td class="actas-analisis-dependencia">
                     <?= htmlspecialchars(Dependencia::nombreVisible($dependencia['nombre'])) ?>
-                    <span class="actas-analisis-tipo"><?= htmlspecialchars((string) ($dependencia['tipo'] ?? '')) ?></span>
                 </td>
                 <td>
                     <?php if (empty($dependencia['actas'])): ?>
