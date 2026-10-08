@@ -220,7 +220,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <a href="index.php?ruta=usuarios" class="<?= $rutaActual === 'usuarios' ? 'activo' : '' ?>">Usuarios</a>
             <?php endif; ?>
             <?php if ($accesoAnalisisSidebar !== null): ?>
-            <a href="index.php?ruta=analisis" class="<?= $rutaActual === 'analisis' ? 'activo' : '' ?>">Análisis</a>
+            <a href="index.php?ruta=analisis" class="<?= $rutaActual === 'analisis' ? 'activo' : '' ?>">Programación presupuestal</a>
             <?php endif; ?>
             <?php if ($esDependenciaSuperadmin): ?>
             <a href="index.php?ruta=dev" class="<?= in_array($rutaActual, ['dev', 'dev-vista'], true) ? 'activo' : '' ?>">Dev</a>
@@ -249,7 +249,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <?php endforeach; ?>
             <?php if ($accesoAnalisisSidebar !== null): ?>
             <p class="grupo-menu">Análisis</p>
-            <a href="index.php?ruta=analisis" class="<?= $rutaActual === 'analisis' ? 'activo' : '' ?>">Análisis</a>
+            <a href="index.php?ruta=analisis" class="<?= $rutaActual === 'analisis' ? 'activo' : '' ?>">Programación presupuestal</a>
             <?php endif; ?>
     <?php elseif ($tipoCuentaActual === 'invitado'): ?>
             <p class="grupo-menu">Resumen</p>
