@@ -24,6 +24,7 @@ require_once __DIR__ . '/../modelo/TechosMetas.php';
 require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
 require_once __DIR__ . '/../modelo/IngresoUnisalud.php';
 require_once __DIR__ . '/../modelo/Acta.php';
+require_once __DIR__ . '/../modelo/AnalisisPresentacion.php';
 require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
 require_once __DIR__ . '/PeticionesControlador.php';
@@ -37,7 +38,7 @@ require_once __DIR__ . '/PeticionesControlador.php';
  */
 class AnalisisControlador
 {
-    private const TABS_VALIDAS = ['pdi', 'programacion', 'analisis', 'proyectos', 'techos', 'actas'];
+    private const TABS_VALIDAS = ['pdi', 'programacion', 'analisis', 'proyectos', 'techos', 'actas', 'presentacion'];
 
     /** Pestaña Actas: solo dependencias de tipo Facultad, menos estas (tipo Facultad pero no son facultades). */
     private const DEPENDENCIAS_EXCLUIDAS_ACTAS = ['DIRECTIVAS'];
@@ -143,6 +144,12 @@ class AnalisisControlador
 
         if ($tab === 'actas') {
             $this->renderizarActas($vista, $acceso, $dependenciasTodas);
+
+            return;
+        }
+
+        if ($tab === 'presentacion') {
+            $this->renderizarPresentacion($vista, $acceso);
 
             return;
         }
@@ -274,6 +281,9 @@ class AnalisisControlador
         } elseif ($tab === 'proyectos' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'importar_proyectos') {
             $error = $this->importarPresupuestoProyectos();
             $exito = $error === '' ? 'Proyectos importado correctamente.' : '';
+        } elseif ($tab === 'presentacion' && ($_POST['accion'] ?? '') === 'guardar_presentacion') {
+            $error = $this->guardarPresentacion();
+            $exito = $error === '' ? 'Presentación actualizada.' : '';
         }
 
         if ($error !== '') {
@@ -760,6 +770,36 @@ class AnalisisControlador
         $tituloPagina = 'Análisis · Actas';
 
         require __DIR__ . '/../vista/analisis/index.php';
+    }
+
+    /** Pestaña Presentación: la diapositiva (.ppsx) de OneDrive incrustada. Solo el superadmin cambia el enlace. */
+    private function renderizarPresentacion(string $vista, array $acceso): void
+    {
+        $presentacion = (new AnalisisPresentacion())->obtener();
+        $urlPresentacionIncrustada = $presentacion !== null ? AnalisisPresentacion::urlIncrustada($presentacion['url']) : null;
+        $puedeEditarPresentacion = $acceso['clase'] === 'superadmin';
+
+        $tab = 'presentacion';
+        $error = $_SESSION['analisis_flash_error'] ?? '';
+        $exito = $_SESSION['analisis_flash_exito'] ?? '';
+        unset($_SESSION['analisis_flash_error'], $_SESSION['analisis_flash_exito']);
+        $tituloPagina = 'Análisis · Presentación';
+
+        require __DIR__ . '/../vista/analisis/index.php';
+    }
+
+    /** POST del superadmin (los demás no llegan aquí: ver aplicarRestriccionesNoSuperadmin()). */
+    private function guardarPresentacion(): string
+    {
+        $url = AnalisisPresentacion::normalizarEnlace((string) ($_POST['url_presentacion'] ?? ''));
+
+        if ($url === null) {
+            return 'Pega un enlace de OneDrive válido (https://1drv.ms/..., https://onedrive.live.com/... o de SharePoint), o el código "Insertar" de OneDrive.';
+        }
+
+        (new AnalisisPresentacion())->guardar($url, (int) $_SESSION['usuario_id']);
+
+        return '';
     }
 
     /** Descarga (en línea) un acta, si su dependencia está dentro del alcance del usuario. */

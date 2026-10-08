@@ -11,5 +11,6 @@ return [
         'analisis_proyectos' => 'Proyectos (análisis)',
         'analisis_techos' => 'Techos y Metas',
         'analisis_actas' => 'Actas',
+        'analisis_presentacion' => 'Presentación',
     ],
 ];
