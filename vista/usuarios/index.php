@@ -19,11 +19,14 @@ function celdaFiltroUsuario(int $indice): string
     <div class="tarjeta">
         <div class="cabecera-modulo">
             <h1>Usuarios</h1>
-            <?php if ($tab === 'administradores'): ?>
-            <button type="button" id="boton-abrir-modal-administrador" class="boton-agregar">+ Agregar administrador</button>
-            <?php elseif ($tab === 'consejo-superior'): ?>
-            <button type="button" id="boton-abrir-modal-administrador" class="boton-agregar">+ Agregar miembro</button>
-            <?php endif; ?>
+            <div class="grupo-acciones-encabezado">
+                <a href="index.php?ruta=usuarios&tab=<?= htmlspecialchars($tab) ?>&accion=exportar" class="boton-accion boton-accion-ver" title="Descargar en Excel los usuarios de esta pestaña">Exportar a Excel</a>
+                <?php if ($tab === 'administradores'): ?>
+                <button type="button" id="boton-abrir-modal-administrador" class="boton-agregar">+ Agregar administrador</button>
+                <?php elseif ($tab === 'consejo-superior'): ?>
+                <button type="button" id="boton-abrir-modal-administrador" class="boton-agregar">+ Agregar miembro</button>
+                <?php endif; ?>
+            </div>
         </div>
 
         <div class="pestanas">

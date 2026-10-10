@@ -7,6 +7,7 @@ require_once __DIR__ . '/../modelo/TipoDependenciaRol.php';
 require_once __DIR__ . '/../modelo/MenuPermiso.php';
 require_once __DIR__ . '/../modelo/TechoFlexiblePermiso.php';
 require_once __DIR__ . '/../modelo/Estamento.php';
+require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 
 class UsuarioControlador
 {
@@ -61,6 +62,12 @@ class UsuarioControlador
         $tabSolicitado = $_GET['tab'] ?? 'administradores';
         $tab = in_array($tabSolicitado, ['invitados', 'consejo-superior'], true) ? $tabSolicitado : 'administradores';
 
+        if (($_GET['accion'] ?? '') === 'exportar') {
+            $this->exportar($tab);
+
+            return;
+        }
+
         $administradores = $this->modeloUsuario->obtenerPorRol('administrador');
         $invitados = $this->modeloUsuario->obtenerPorRol('invitado');
         $consejoSuperior = $this->modeloUsuario->obtenerPorRol('consejo_superior');
@@ -104,6 +111,38 @@ class UsuarioControlador
         unset($invitado);
 
         require __DIR__ . '/../vista/usuarios/index.php';
+    }
+
+    /** .xlsx de solo lectura con los usuarios de la pestaña que se está viendo (mismas columnas de la tabla). */
+    private function exportar(string $tab): void
+    {
+        [$rolCuenta, $nombreHoja] = match ($tab) {
+            'invitados' => ['invitado', 'Formulador'],
+            'consejo-superior' => ['consejo_superior', 'Consulta'],
+            default => ['administrador', 'Administradores'],
+        };
+
+        $filas = [];
+        foreach ($this->modeloUsuario->obtenerPorRol($rolCuenta) as $usuario) {
+            $esSuperAdmin = (int) ($usuario['es_super_admin'] ?? 0) === 1;
+
+            $filas[] = [
+                (string) $usuario['nombre'],
+                (string) $usuario['correo'],
+                $esSuperAdmin ? 'Superadmin' : (string) ($usuario['rol_catalogo'] ?? ''),
+                $esSuperAdmin ? 'Superadmin' : Dependencia::nombreVisible($usuario['dependencia_nombre'] ?? ''),
+                (string) ($usuario['estamento_nombre'] ?? ''),
+                (string) $usuario['creado_en'],
+                $usuario['ultimo_acceso'] !== null ? (string) $usuario['ultimo_acceso'] : 'Nunca',
+            ];
+        }
+
+        GeneradorXlsx::descargarHojas('usuarios_' . str_replace('-', '_', $tab) . '_' . date('Y-m-d') . '.xlsx', [[
+            'nombre' => $nombreHoja,
+            'encabezados' => ['Nombre', 'Correo', 'Rol', 'Dependencia', 'Estamento', 'Creado', 'Último acceso'],
+            'filas' => empty($filas) ? [['No hay usuarios para mostrar.']] : $filas,
+        ]]);
+        exit;
     }
 
     /**
