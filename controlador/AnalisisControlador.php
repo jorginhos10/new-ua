@@ -25,6 +25,7 @@ require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
 require_once __DIR__ . '/../modelo/IngresoUnisalud.php';
 require_once __DIR__ . '/../modelo/Acta.php';
 require_once __DIR__ . '/../modelo/AnalisisPresentacion.php';
+require_once __DIR__ . '/../modelo/MensajeGlobal.php';
 require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
 require_once __DIR__ . '/PeticionesControlador.php';
@@ -96,7 +97,7 @@ class AnalisisControlador
             $this->aplicarRestriccionesNoSuperadmin($acceso);
         }
 
-        $tab =in_array($_GET['tab'] ?? '', self::TABS_VALIDAS, true) ? $_GET['tab'] : 'programacion';
+        $tab =in_array($_GET['tab'] ?? '', self::TABS_VALIDAS, true) ? $_GET['tab'] : 'presentacion';
         $vista = in_array($_GET['vista'] ?? '', self::VISTAS_VALIDAS, true) ? $_GET['vista'] : 'tiempo_real';
         $pestanaArbol = $tab === 'programacion' ? 'programacion_presupuestal' : 'articulacion_pdi';
         $lado = ($_GET['lado'] ?? '') === 'egresos' ? 'egresos' : 'ingresos';
@@ -281,9 +282,15 @@ class AnalisisControlador
         } elseif ($tab === 'proyectos' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'importar_proyectos') {
             $error = $this->importarPresupuestoProyectos();
             $exito = $error === '' ? 'Proyectos importado correctamente.' : '';
-        } elseif ($tab === 'presentacion' && ($_POST['accion'] ?? '') === 'guardar_presentacion') {
-            $error = $this->guardarPresentacion();
-            $exito = $error === '' ? 'Presentación actualizada.' : '';
+        } elseif ($tab === 'presentacion' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'guardar_enlace_presentacion') {
+            $esNuevo = (int) ($_POST['id'] ?? 0) <= 0;
+            $error = $this->guardarEnlacePresentacion();
+            $exito = $error === '' ? ($esNuevo ? 'Enlace agregado.' : 'Enlace actualizado.') : '';
+        } elseif ($tab === 'presentacion' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'eliminar_enlace_presentacion') {
+            $error = $this->eliminarEnlacePresentacion();
+            $exito = $error === '' ? 'Enlace eliminado.' : '';
+        } elseif ($tab === 'presentacion' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'mover_enlace_presentacion') {
+            $error = $this->moverEnlacePresentacion();
         }
 
         if ($error !== '') {
@@ -473,7 +480,7 @@ class AnalisisControlador
 
         $tituloPaginaPorTab = [
             'programacion' => 'Análisis · Programación presupuestal ' . $anioVigenteNumero,
-            'proyectos' => 'Análisis · Proyectos',
+            'proyectos' => 'Análisis · Proyectos de Inversión',
         ];
         $tituloPagina = $tituloPaginaPorTab[$tab] ?? 'Análisis · Articulación PDI';
 
@@ -501,12 +508,12 @@ class AnalisisControlador
     {
         $nombreHoja = match ($tab) {
             'programacion' => $lado === 'ingresos' ? 'Ingresos' : 'Egresos',
-            'proyectos' => 'Proyectos',
+            'proyectos' => 'Proyectos de Inversión',
             default => 'Articulación PDI',
         };
         $titulo = match ($tab) {
             'programacion' => 'Programación presupuestal ' . $anioVigenteNumero . ' — ' . $nombreHoja,
-            'proyectos' => 'Proyectos',
+            'proyectos' => 'Proyectos de Inversión',
             default => 'Articulación PDI',
         };
 
@@ -524,20 +531,28 @@ class AnalisisControlador
             $descripcionModo = 'Usuario — ' . ($dependenciaFiltroActual ?? '');
         }
 
+        // Igual que en la plantilla (ver exportarPlantillaPresupuesto()): "Indexación" solo en
+        // Programación presupuestal, siempre al final, nunca en medio de las otras columnas.
+        $incluirIndexacion = $tab === 'programacion';
+
         $encabezados = array_merge(
             array_column($columnasExtra, 'etiqueta'),
             [$etiquetaColumnaArbol],
-            array_column($columnasAnios, 'etiqueta')
+            array_column($columnasAnios, 'etiqueta'),
+            $incluirIndexacion ? ['Indexación'] : []
         );
 
         $filas = [];
-        $this->aplanarArbolParaExportar($arbolDatos, 0, $columnasAnios, $columnasExtra, $filas);
+        $this->aplanarArbolParaExportar($arbolDatos, 0, $columnasAnios, $columnasExtra, $incluirIndexacion, $filas);
 
         if (!empty($filas)) {
             $filaTotal = array_fill(0, count($columnasExtra), ['valor' => '', 'estilo' => 3]);
             $filaTotal[] = ['valor' => 'Total', 'estilo' => 3];
             foreach ($columnasAnios as $columna) {
                 $filaTotal[] = ['valor' => $this->formatoMonedaExportar((float) ($totalesGenerales[$columna['clave']] ?? 0.0)), 'estilo' => 3];
+            }
+            if ($incluirIndexacion) {
+                $filaTotal[] = ['valor' => '', 'estilo' => 3];
             }
             $filas[] = $filaTotal;
         }
@@ -568,7 +583,7 @@ class AnalisisControlador
     }
 
     /** Padre antes que sus hijos; la profundidad sangra la descripción y las raíces/totales van en negrita. */
-    private function aplanarArbolParaExportar(array $nodos, int $profundidad, array $columnasAnios, array $columnasExtra, array &$filas): void
+    private function aplanarArbolParaExportar(array $nodos, int $profundidad, array $columnasAnios, array $columnasExtra, bool $incluirIndexacion, array &$filas): void
     {
         foreach ($nodos as $nodo) {
             $enNegrita = $profundidad === 0 || !empty($nodo['esTotal']);
@@ -582,9 +597,12 @@ class AnalisisControlador
             foreach ($columnasAnios as $columna) {
                 $fila[] = $celda($this->formatoMonedaExportar((float) ($nodo['valores'][$columna['clave']] ?? 0.0)));
             }
+            if ($incluirIndexacion) {
+                $fila[] = $celda((string) ($nodo['indexacion'] ?? ''));
+            }
             $filas[] = $fila;
 
-            $this->aplanarArbolParaExportar($nodo['hijos'] ?? [], $profundidad + 1, $columnasAnios, $columnasExtra, $filas);
+            $this->aplanarArbolParaExportar($nodo['hijos'] ?? [], $profundidad + 1, $columnasAnios, $columnasExtra, $incluirIndexacion, $filas);
         }
     }
 
@@ -772,32 +790,79 @@ class AnalisisControlador
         require __DIR__ . '/../vista/analisis/index.php';
     }
 
-    /** Pestaña Presentación: la diapositiva (.ppsx) de OneDrive incrustada. Solo el superadmin cambia el enlace. */
+    /** Pestaña Documentos (antes "Presentación"): lista de enlaces de OneDrive/SharePoint. Solo el superadmin la administra. */
     private function renderizarPresentacion(string $vista, array $acceso): void
     {
-        $presentacion = (new AnalisisPresentacion())->obtener();
-        $urlPresentacionIncrustada = $presentacion !== null ? AnalisisPresentacion::urlIncrustada($presentacion['url']) : null;
-        $puedeEditarPresentacion = $acceso['clase'] === 'superadmin';
+        $enlacesPresentacion = (new AnalisisPresentacion())->obtenerTodos();
+        foreach ($enlacesPresentacion as &$enlace) {
+            $enlace['url_incrustada'] = AnalisisPresentacion::urlIncrustada($enlace['url']);
+        }
+        unset($enlace);
+        // "Usuario" es una vista previa de lo que ve cualquier otro usuario: sin controles de edición.
+        $puedeEditarPresentacion = $acceso['clase'] === 'superadmin' && $vista === 'tiempo_real';
+        // El mensaje que explica la sección: misma estructura que Mensajes globales (Configuraciones),
+        // con su propia audiencia — se edita desde ahí, acá solo se muestra.
+        $mensajesPresentacion = (new MensajeGlobal())->listar('analisis_presentacion');
 
         $tab = 'presentacion';
         $error = $_SESSION['analisis_flash_error'] ?? '';
         $exito = $_SESSION['analisis_flash_exito'] ?? '';
         unset($_SESSION['analisis_flash_error'], $_SESSION['analisis_flash_exito']);
-        $tituloPagina = 'Análisis · Presentación';
+        $tituloPagina = 'Análisis · Documentos';
 
         require __DIR__ . '/../vista/analisis/index.php';
     }
 
     /** POST del superadmin (los demás no llegan aquí: ver aplicarRestriccionesNoSuperadmin()). */
-    private function guardarPresentacion(): string
+    private function guardarEnlacePresentacion(): string
     {
-        $url = AnalisisPresentacion::normalizarEnlace((string) ($_POST['url_presentacion'] ?? ''));
+        $nombre = trim((string) ($_POST['nombre_enlace'] ?? ''));
+        $url = AnalisisPresentacion::normalizarEnlace((string) ($_POST['url_enlace'] ?? ''));
+        $id = (int) ($_POST['id'] ?? 0);
+
+        if ($nombre === '') {
+            return 'Ponle un nombre al enlace.';
+        }
 
         if ($url === null) {
             return 'Pega un enlace de OneDrive válido (https://1drv.ms/..., https://onedrive.live.com/... o de SharePoint), o el código "Insertar" de OneDrive.';
         }
 
-        (new AnalisisPresentacion())->guardar($url, (int) $_SESSION['usuario_id']);
+        $modelo = new AnalisisPresentacion();
+
+        if ($id > 0) {
+            if ($modelo->obtenerPorId($id) === null) {
+                return 'El enlace que intentas editar ya no existe.';
+            }
+
+            $modelo->actualizar($id, $nombre, $url, (int) $_SESSION['usuario_id']);
+        } else {
+            $modelo->crear($nombre, $url, (int) $_SESSION['usuario_id']);
+        }
+
+        return '';
+    }
+
+    private function eliminarEnlacePresentacion(): string
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+        $modelo = new AnalisisPresentacion();
+
+        if ($id <= 0 || $modelo->obtenerPorId($id) === null) {
+            return 'El enlace que intentas eliminar ya no existe.';
+        }
+
+        $modelo->eliminar($id);
+
+        return '';
+    }
+
+    private function moverEnlacePresentacion(): string
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+        $direccion = ($_POST['direccion'] ?? '') === 'arriba' ? 'arriba' : 'abajo';
+
+        (new AnalisisPresentacion())->mover($id, $direccion);
 
         return '';
     }
@@ -1467,6 +1532,10 @@ class AnalisisControlador
         for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
             $encabezados[] = (string) ($anioVigenteNumero - $desplazamiento);
         }
+        // Al final, nunca en medio: así un archivo descargado antes de agregar esta columna sigue
+        // leyéndose bien (le falta la última, nada más) — y el mismo orden sirve para el botón
+        // "Exportar a Excel" (ver exportarArbol()), que la agrega también al final.
+        $encabezados[] = 'Indexación';
 
         $modeloPresupuesto = new PresupuestoInstitucional();
         $hojas = [];
@@ -1487,6 +1556,7 @@ class AnalisisControlador
                 for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
                     $fila[] = $this->formatoNumeroExportar($nodo['valores'][$anioVigenteNumero - $desplazamiento] ?? 0.0);
                 }
+                $fila[] = $nodo['esTotal'] ? '' : ($nodo['indexacion'] ?? '');
                 $filas[] = $fila;
             }
 
@@ -1598,6 +1668,9 @@ class AnalisisControlador
         for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
             $indicesHistoricos[4 + $desplazamiento] = $anioVigenteNumero - $desplazamiento;
         }
+        // Última columna, después de los 4 históricos (índice 10): el criterio de indexación
+        // (texto libre — "IPC", "SMMLV", "ICES"...), solo para hojas (nunca una fila total).
+        $indiceIndexacion = 6 + count($indicesHistoricos);
 
         foreach ($filas as $indice => $fila) {
             $numeroFilaExcel = $indice + 2;
@@ -1678,6 +1751,12 @@ class AnalisisControlador
                 $valores[$anioHistorico] = ['valor_final' => $crudo !== '' && is_numeric($crudo) ? (float) $crudo : 0.0];
             }
 
+            $indexacion = trim((string) ($fila[$indiceIndexacion] ?? ''));
+            if ($indexacion !== '' && $esTotal) {
+                $errores[] = "$nombreHoja, fila $numeroFilaExcel: una fila total (termina en \".0\") no puede tener Indexación.";
+                $filaValida = false;
+            }
+
             if (!$filaValida) {
                 continue;
             }
@@ -1686,6 +1765,7 @@ class AnalisisControlador
                 'codigo' => $codigo,
                 'descripcion' => $descripcion,
                 'proyectos_ids' => $proyectosIds,
+                'indexacion' => $indexacion !== '' ? $indexacion : null,
                 'valores' => $valores,
             ];
         }

@@ -10,12 +10,13 @@ CREATE TABLE IF NOT EXISTS analisis_arbol_configuracion (
     actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 2) Mensajes globales (varias diapositivas en el inicio), ya con la audiencia del Consejo Superior.
+-- 2) Mensajes globales (varias diapositivas en el inicio), con las audiencias de Consejo Superior
+--    y de la pestaña "Presentación" de Análisis (mensaje editable que explica esa sección).
 --    El primer mensaje toma el contenido actual de mensaje_global.
 CREATE TABLE IF NOT EXISTS mensajes_globales (
     id INT NOT NULL AUTO_INCREMENT,
     contenido TEXT NOT NULL,
-    audiencia ENUM('administrador', 'consejo_superior') NOT NULL DEFAULT 'administrador',
+    audiencia ENUM('administrador', 'consejo_superior', 'analisis_presentacion') NOT NULL DEFAULT 'administrador',
     orden INT NOT NULL DEFAULT 0,
     actualizado_por INT NULL,
     creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -230,3 +231,23 @@ ALTER TABLE gastos
     ADD COLUMN categoria_confianza DECIMAL(4, 3) NULL,
     ADD KEY idx_gastos_categoria_gasto (categoria_gasto_id),
     ADD CONSTRAINT fk_gastos_categoria_gasto FOREIGN KEY (categoria_gasto_id) REFERENCES categorias_gasto (id);
+
+-- 6) Pestaña "Presentación" de Análisis: lista de enlaces de OneDrive/SharePoint (presentación,
+--    Word, Excel o PDF) con nombre y orden propio — ya no es un solo enlace sin nombre.
+CREATE TABLE IF NOT EXISTS analisis_presentacion (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    url VARCHAR(2000) NOT NULL,
+    orden INT NOT NULL DEFAULT 0,
+    actualizado_por INT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_analisis_presentacion_orden (orden),
+    CONSTRAINT fk_analisis_presentacion_usuario FOREIGN KEY (actualizado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7) Indexación por línea de Programación presupuestal (solo hojas): el criterio con el que se
+--    proyecta esa línea (ej. "IPC", "SMMLV", "ICES"), diligenciado desde la plantilla Excel y
+--    mostrado como un punto de color (con el texto como tooltip) junto al valor del año vigente.
+ALTER TABLE presupuesto_institucional_lineas
+    ADD COLUMN indexacion VARCHAR(50) NULL AFTER descripcion;

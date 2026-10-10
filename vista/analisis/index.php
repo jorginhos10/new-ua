@@ -226,8 +226,14 @@ require __DIR__ . '/../parciales/encabezado.php';
 <div class="analisis-barra">
     <?php $pestanasPermitidas = AccesoAnalisis::actual()['pestanas']; ?>
     <nav class="analisis-tabs">
+        <?php if (in_array('presentacion', $pestanasPermitidas, true)): ?>
+        <a href="<?= htmlspecialchars(analisisUrl('presentacion', $vista)) ?>" class="<?= $tab === 'presentacion' ? 'activa' : '' ?>">Documentos</a>
+        <?php endif; ?>
         <?php if (in_array('programacion', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => $lado])) ?>" class="<?= $tab === 'programacion' ? 'activa' : '' ?>">Programación presupuestal <?= htmlspecialchars((string) $anioLabelActivo) ?></a>
+        <?php endif; ?>
+        <?php if (in_array('proyectos', $pestanasPermitidas, true)): ?>
+        <a href="<?= htmlspecialchars(analisisUrl('proyectos', $vista)) ?>" class="<?= $tab === 'proyectos' ? 'activa' : '' ?>">Proyectos de Inversión</a>
         <?php endif; ?>
         <?php if (in_array('pdi', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('pdi', $vista)) ?>" class="<?= $tab === 'pdi' ? 'activa' : '' ?>">Articulación PDI</a>
@@ -235,17 +241,8 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php if (in_array('analisis', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('analisis', $vista)) ?>" class="<?= $tab === 'analisis' ? 'activa' : '' ?>">Análisis de distribución</a>
         <?php endif; ?>
-        <?php if (in_array('proyectos', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('proyectos', $vista)) ?>" class="<?= $tab === 'proyectos' ? 'activa' : '' ?>">Proyectos</a>
-        <?php endif; ?>
         <?php if (in_array('techos', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('techos', $vista === 'usuario' ? 'usuario' : 'tiempo_real')) ?>" class="<?= $tab === 'techos' ? 'activa' : '' ?>">Techos y Metas</a>
-        <?php endif; ?>
-        <?php if (in_array('actas', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('actas', $vista)) ?>" class="<?= $tab === 'actas' ? 'activa' : '' ?>">Actas</a>
-        <?php endif; ?>
-        <?php if (in_array('presentacion', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('presentacion', $vista)) ?>" class="<?= $tab === 'presentacion' ? 'activa' : '' ?>">Presentación</a>
         <?php endif; ?>
     </nav>
 
@@ -325,10 +322,10 @@ require __DIR__ . '/../parciales/encabezado.php';
         </div>
         <?php endif; ?>
 
-        <?php if (AccesoAnalisis::actual()['clase'] === 'superadmin' && !in_array($tab, ['actas', 'presentacion'], true)): ?>
+        <?php if (AccesoAnalisis::actual()['clase'] === 'superadmin' && !in_array($tab, ['actas'], true)): ?>
         <div class="analisis-toggle">
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'tiempo_real', $paramsTab)) ?>" class="<?= $vista === 'tiempo_real' ? 'activo' : '' ?>">Tiempo real</a>
-            <?php if ($tab !== 'techos'): ?>
+            <?php if (!in_array($tab, ['techos', 'presentacion'], true)): ?>
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'repositorio', $paramsTab)) ?>" class="<?= $vista === 'repositorio' ? 'activo' : '' ?>">Repositorio</a>
             <?php endif; ?>
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'usuario', $paramsTab)) ?>" class="<?= $vista === 'usuario' ? 'activo' : '' ?>">Usuario</a>

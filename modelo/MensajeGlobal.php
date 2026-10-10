@@ -17,8 +17,11 @@ class MensajeGlobal
         $this->db = Conexion::obtener();
     }
 
-    /** Audiencias que pueden tener mensajes: los administradores y el Consejo Superior. */
-    public const AUDIENCIAS = ['administrador', 'consejo_superior'];
+    /**
+     * Audiencias que pueden tener mensajes: los administradores, el Consejo Superior, y el mensaje
+     * de la pestaña "Documentos" (antes "Presentación") de Análisis (explica qué hay en esa sección).
+     */
+    public const AUDIENCIAS = ['administrador', 'consejo_superior', 'analisis_presentacion'];
 
     /** @return array<int, array{id: int|string, contenido: string, orden: int|string, audiencia: string}> */
     public function listar(string $audiencia): array

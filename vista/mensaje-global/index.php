@@ -1,10 +1,27 @@
-<?php $tituloPagina = 'Mensaje global'; require __DIR__ . '/../parciales/encabezado.php';
-$etiquetaAudiencia = $audiencia === 'consejo_superior' ? 'Consejo Superior' : 'administradores';
+<?php
+$tituloPagina = 'Mensaje global';
+require __DIR__ . '/../parciales/encabezado.php';
+
+// Nombre de la audiencia (pestañas) y dónde se ve, para los textos de abajo.
+$etiquetasAudiencia = [
+    'administrador' => 'administradores',
+    'consejo_superior' => 'Consejo Superior',
+    'analisis_presentacion' => 'Documentos',
+];
+$lugaresAudiencia = [
+    'administrador' => 'carrusel del inicio de administradores',
+    'consejo_superior' => 'carrusel del inicio de Consejo Superior',
+    'analisis_presentacion' => 'pestaña Documentos de Análisis',
+];
+$etiquetaAudiencia = $etiquetasAudiencia[$audiencia] ?? $etiquetasAudiencia['administrador'];
+$lugarAudiencia = $lugaresAudiencia[$audiencia] ?? $lugaresAudiencia['administrador'];
+$esCarrusel = $audiencia !== 'analisis_presentacion';
 ?>
 
     <nav class="pestanas">
         <a href="index.php?ruta=mensaje-global&audiencia=administrador" class="pestana<?= $audiencia === 'administrador' ? ' activa' : '' ?>">Administradores</a>
         <a href="index.php?ruta=mensaje-global&audiencia=consejo_superior" class="pestana<?= $audiencia === 'consejo_superior' ? ' activa' : '' ?>">Consejo Superior</a>
+        <a href="index.php?ruta=mensaje-global&audiencia=analisis_presentacion" class="pestana<?= $audiencia === 'analisis_presentacion' ? ' activa' : '' ?>">Documentos (Análisis)</a>
     </nav>
 
     <div class="tarjeta">
@@ -13,8 +30,12 @@ $etiquetaAudiencia = $audiencia === 'consejo_superior' ? 'Consejo Superior' : 'a
             <button type="button" id="boton-nuevo-mensaje">Nuevo mensaje</button>
         </div>
         <p class="texto-atenuado">
-            Cada mensaje es una diapositiva del carrusel del inicio de <?= htmlspecialchars($etiquetaAudiencia) ?>.
+            <?php if ($esCarrusel): ?>
+            Cada mensaje es una diapositiva del <?= htmlspecialchars($lugarAudiencia) ?>.
             Admite formato Markdown. Si un mensaje es largo, se reparte en varias diapositivas.
+            <?php else: ?>
+            Se muestra en la <?= htmlspecialchars($lugarAudiencia) ?>, para explicar qué hay en esa sección. Admite formato Markdown.
+            <?php endif; ?>
         </p>
 
         <?php if (!empty($aviso)): ?>

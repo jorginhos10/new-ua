@@ -25,6 +25,38 @@ class PresupuestoInstitucional
 
     public const TIPOS_VALIDOS = ['ingreso', 'egreso', 'proyecto'];
 
+    /**
+     * Color del punto de "Indexación" (solo hojas de Programación presupuestal — el criterio con
+     * el que se proyecta esa línea, diligenciado por texto libre desde la plantilla Excel). Los
+     * términos conocidos usan los colores institucionales/secundarios del manual de marca; uno
+     * nuevo que no esté en la lista cae en la paleta de respaldo según un hash de su texto, para
+     * que siempre salga un color estable sin tener que tocar este código.
+     */
+    private const COLORES_INDEXACION = [
+        'IPC' => '#143163',   // azul institucional
+        'SMMLV' => '#D85819', // naranja institucional
+        'ICES' => '#F9B233',  // amarillo secundario
+    ];
+
+    private const PALETA_INDEXACION_RESPALDO = ['#FF9912', '#1D71B8', '#706F6F'];
+
+    public static function colorIndexacion(?string $texto): ?string
+    {
+        $texto = trim((string) $texto);
+        if ($texto === '') {
+            return null;
+        }
+
+        $clave = mb_strtoupper($texto);
+        if (isset(self::COLORES_INDEXACION[$clave])) {
+            return self::COLORES_INDEXACION[$clave];
+        }
+
+        $paleta = self::PALETA_INDEXACION_RESPALDO;
+
+        return $paleta[crc32($clave) % count($paleta)];
+    }
+
     public function __construct()
     {
         $this->db = Conexion::obtener();
@@ -57,7 +89,7 @@ class PresupuestoInstitucional
     private function obtenerLineas(string $tipo): array
     {
         $consulta = $this->db->prepare(
-            'SELECT id, codigo, es_total, descripcion, orden
+            'SELECT id, codigo, es_total, descripcion, indexacion, orden
              FROM presupuesto_institucional_lineas
              WHERE tipo = :tipo
              ORDER BY orden ASC, codigo ASC'
@@ -74,7 +106,8 @@ class PresupuestoInstitucional
      * concreto antes de llamar aquí, y de vuelta a esa clave después).
      *
      * Cada nodo: id, codigo, etiqueta, nivel, esTotal, valores[anio]=>float, valorCorte,
-     * proyectosPdi (string ya resuelto a nombres, solo hojas de Egresos con mapeo), hijos[].
+     * proyectosPdi (string ya resuelto a nombres, solo hojas de Egresos con mapeo), indexacion
+     * (texto libre, solo hojas — ver colorIndexacion()), hijos[].
      */
     public function obtenerArbolConValores(string $tipo, array $anios): array
     {
@@ -190,6 +223,7 @@ class PresupuestoInstitucional
                 'valorCorte' => $valorCorte,
                 'proyectosPdi' => $proyectosPorLinea[(int) $linea['id']]['nombres'] ?? '',
                 'proyectosPdiNits' => $proyectosPorLinea[(int) $linea['id']]['nits'] ?? '',
+                'indexacion' => $linea['indexacion'] ?? null,
                 'hijos' => [],
             ];
         }
@@ -475,8 +509,8 @@ class PresupuestoInstitucional
      * descendientes, nunca lo que traiga el archivo en esa celda).
      *
      * Forma esperada de cada línea en $lineasIngreso/$lineasEgreso:
-     * ['codigo'=>string, 'descripcion'=>string, 'proyectos_ids'=>int[], 'valores'=>[anio =>
-     * ['valor_final'=>float, 'valor_corte'=>?float]]].
+     * ['codigo'=>string, 'descripcion'=>string, 'proyectos_ids'=>int[], 'indexacion'=>?string,
+     * 'valores'=>[anio => ['valor_final'=>float, 'valor_corte'=>?float]]].
      */
     public function guardarLote(array $lineasIngreso, array $lineasEgreso, int $usuarioId): void
     {
@@ -514,10 +548,10 @@ class PresupuestoInstitucional
     private function guardarLadoLote(string $tipo, array $lineas, int $usuarioId): void
     {
         $upsertLinea = $this->db->prepare(
-            'INSERT INTO presupuesto_institucional_lineas (tipo, codigo, es_total, descripcion, orden, actualizado_por)
-             VALUES (:tipo, :codigo, :es_total, :descripcion, :orden, :actualizado_por)
+            'INSERT INTO presupuesto_institucional_lineas (tipo, codigo, es_total, descripcion, indexacion, orden, actualizado_por)
+             VALUES (:tipo, :codigo, :es_total, :descripcion, :indexacion, :orden, :actualizado_por)
              ON DUPLICATE KEY UPDATE es_total = VALUES(es_total), descripcion = VALUES(descripcion),
-                 orden = VALUES(orden), actualizado_por = VALUES(actualizado_por)'
+                 indexacion = VALUES(indexacion), orden = VALUES(orden), actualizado_por = VALUES(actualizado_por)'
         );
         $obtenerId = $this->db->prepare(
             'SELECT id FROM presupuesto_institucional_lineas WHERE tipo = :tipo AND codigo = :codigo'
@@ -541,6 +575,7 @@ class PresupuestoInstitucional
                 'codigo' => $codigo,
                 'es_total' => self::esCodigoTotal($codigo) ? 1 : 0,
                 'descripcion' => $linea['descripcion'],
+                'indexacion' => $linea['indexacion'] ?? null,
                 'orden' => $orden,
                 'actualizado_por' => $usuarioId,
             ]);

@@ -3,9 +3,9 @@
 require_once __DIR__ . '/../config/conexion.php';
 
 /**
- * Presentación (.ppsx en OneDrive) de la pestaña "Presentación" de ?ruta=analisis. Una sola fila
- * (id = 1) con el enlace que pegó el superadmin; se muestra incrustada con el visor de Office
- * (ver urlIncrustada()).
+ * Enlaces de la pestaña "Presentación" de ?ruta=analisis: una lista (no solo uno) de documentos de
+ * OneDrive/SharePoint — presentación, Word, Excel o PDF — con nombre visible y orden propio, que el
+ * superadmin administra. Cada uno se ve incrustado con el visor de Office (ver urlIncrustada()).
  */
 class AnalisisPresentacion
 {
@@ -19,28 +19,97 @@ class AnalisisPresentacion
         $this->db = Conexion::obtener();
     }
 
-    public function obtener(): ?array
+    /** @return array<int, array{id: int, nombre: string, url: string, orden: int, actualizado_en: string, actualizado_por_nombre: ?string}> */
+    public function obtenerTodos(): array
     {
         $consulta = $this->db->query(
-            'SELECT p.url, p.actualizado_en, u.nombre AS actualizado_por_nombre
+            'SELECT p.id, p.nombre, p.url, p.orden, p.actualizado_en, u.nombre AS actualizado_por_nombre
              FROM analisis_presentacion p
              LEFT JOIN usuarios u ON u.id = p.actualizado_por
-             WHERE p.id = 1'
+             ORDER BY p.orden, p.id'
         );
-        $fila = $consulta->fetch();
 
-        return $fila !== false && $fila['url'] !== '' ? $fila : null;
+        return $consulta->fetchAll();
     }
 
-    public function guardar(string $url, int $usuarioId): bool
+    public function obtenerPorId(int $id): ?array
+    {
+        $consulta = $this->db->prepare('SELECT id, nombre, url, orden FROM analisis_presentacion WHERE id = :id');
+        $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
+    public function crear(string $nombre, string $url, int $usuarioId): int
+    {
+        $ordenConsulta = $this->db->query('SELECT COALESCE(MAX(orden), 0) + 1 FROM analisis_presentacion');
+        $orden = (int) $ordenConsulta->fetchColumn();
+
+        $consulta = $this->db->prepare(
+            'INSERT INTO analisis_presentacion (nombre, url, orden, actualizado_por)
+             VALUES (:nombre, :url, :orden, :usuario_id)'
+        );
+        $consulta->execute(['nombre' => $nombre, 'url' => $url, 'orden' => $orden, 'usuario_id' => $usuarioId]);
+
+        return (int) $this->db->lastInsertId();
+    }
+
+    public function actualizar(int $id, string $nombre, string $url, int $usuarioId): bool
     {
         $consulta = $this->db->prepare(
-            'INSERT INTO analisis_presentacion (id, url, actualizado_por)
-             VALUES (1, :url, :usuario_id)
-             ON DUPLICATE KEY UPDATE url = VALUES(url), actualizado_por = VALUES(actualizado_por)'
+            'UPDATE analisis_presentacion SET nombre = :nombre, url = :url, actualizado_por = :usuario_id WHERE id = :id'
         );
 
-        return $consulta->execute(['url' => $url, 'usuario_id' => $usuarioId]);
+        return $consulta->execute(['id' => $id, 'nombre' => $nombre, 'url' => $url, 'usuario_id' => $usuarioId]);
+    }
+
+    public function eliminar(int $id): bool
+    {
+        $consulta = $this->db->prepare('DELETE FROM analisis_presentacion WHERE id = :id');
+
+        return $consulta->execute(['id' => $id]);
+    }
+
+    /**
+     * Sube o baja un enlace una posición, intercambiando su "orden" con el del vecino inmediato.
+     * Sin vecino en esa dirección (ya está en un extremo), no hace nada.
+     */
+    public function mover(int $id, string $direccion): bool
+    {
+        $actual = $this->obtenerPorId($id);
+
+        if ($actual === null) {
+            return false;
+        }
+
+        $comparador = $direccion === 'arriba' ? '<' : '>';
+        $orden = $direccion === 'arriba' ? 'DESC' : 'ASC';
+
+        $consulta = $this->db->prepare(
+            "SELECT id, orden FROM analisis_presentacion WHERE orden $comparador :orden ORDER BY orden $orden LIMIT 1"
+        );
+        $consulta->execute(['orden' => $actual['orden']]);
+        $vecino = $consulta->fetch();
+
+        if ($vecino === false) {
+            return false;
+        }
+
+        $this->db->beginTransaction();
+
+        try {
+            $this->db->prepare('UPDATE analisis_presentacion SET orden = :orden WHERE id = :id')
+                ->execute(['orden' => $vecino['orden'], 'id' => $actual['id']]);
+            $this->db->prepare('UPDATE analisis_presentacion SET orden = :orden WHERE id = :id')
+                ->execute(['orden' => $actual['orden'], 'id' => $vecino['id']]);
+            $this->db->commit();
+        } catch (Throwable $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
+
+        return true;
     }
 
     /**
@@ -71,7 +140,8 @@ class AnalisisPresentacion
     }
 
     /**
-     * URL para el <iframe>:
+     * URL para el <iframe>. Sirve igual para una presentación, un Word, un Excel o un PDF: el visor
+     * de Office de Microsoft los incrusta a todos de la misma forma.
      * - Ya es de incrustar (onedrive.live.com/embed o el visor de Office): tal cual.
      * - SharePoint / OneDrive de Microsoft 365: el mismo enlace con action=embedview.
      * - OneDrive personal (1drv.ms o enlace de compartir): visor de Office sobre la descarga

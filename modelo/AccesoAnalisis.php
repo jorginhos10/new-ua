@@ -16,15 +16,20 @@ require_once __DIR__ . '/MenuPermiso.php';
  */
 class AccesoAnalisis
 {
-    /** Pestaña => clave de menú que la habilita. El orden es el de la barra de pestañas. */
+    /**
+     * Pestaña => clave de menú que la habilita. El orden es el de preferencia: para quien no tiene
+     * "tab" en la URL, gana la primera de estas por la que SÍ tenga permiso (ver
+     * AnalisisControlador::aplicarRestriccionesNoSuperadmin()) — Documentos (antes "Presentación")
+     * primero, como en la barra de pestañas de la vista.
+     */
     public const PESTANAS = [
+        'presentacion' => 'analisis_presentacion',
         'programacion' => 'analisis_programacion',
+        'proyectos' => 'analisis_proyectos',
         'pdi' => 'analisis_pdi',
         'analisis' => 'analisis_distribucion',
-        'proyectos' => 'analisis_proyectos',
         'techos' => 'analisis_techos',
         'actas' => 'analisis_actas',
-        'presentacion' => 'analisis_presentacion',
     ];
 
     public const PESTANAS_POR_DEFECTO = ['pdi', 'techos'];

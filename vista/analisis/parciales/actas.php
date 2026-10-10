@@ -1,8 +1,10 @@
 <?php
 /**
  * Pestaña "Actas" de ?ruta=analisis: una fila por facultad con las actas que cargó
- * en el módulo Actas y el enlace para descargar cada una. Variables esperadas (ver
- * AnalisisControlador::renderizarActas()): $dependenciasActas (cada dependencia con su lista 'actas').
+ * en el módulo Actas y el enlace para descargar cada una. Ya no está en la barra de
+ * pestañas: se entra desde el botón "Actas" junto al mensaje global de Presentación, y el
+ * botón "Volver" de aquí regresa ahí. Variables esperadas (ver AnalisisControlador::renderizarActas()):
+ * $dependenciasActas (cada dependencia con su lista 'actas'), $vista (para volver a la misma vista).
  */
 
 $dependenciasActas = $dependenciasActas ?? [];
@@ -18,8 +20,24 @@ $tamanoLegible = static fn (int $bytes): string => $bytes >= 1048576
     .actas-analisis {
         flex: 1;
         min-height: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 1rem;
+        margin: 0.5rem;
+    }
+
+    .actas-analisis-cuerpo {
+        flex: 1;
+        min-height: 0;
         overflow: auto;
-        padding: 0 0.5rem 1rem;
+    }
+
+    .actas-analisis-cabecera {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-shrink: 0;
     }
 
     .actas-analisis-resumen {
@@ -28,19 +46,38 @@ $tamanoLegible = static fn (int $bytes): string => $bytes >= 1048576
         color: var(--color-texto-secundario);
     }
 
+    .actas-boton-volver {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.8rem;
+        border: 1px solid var(--color-borde);
+        border-radius: 6px;
+        background: var(--color-superficie);
+        color: var(--color-texto);
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .actas-boton-volver:hover {
+        border-color: var(--color-primario);
+        color: var(--color-primario);
+    }
+
     .actas-analisis-tabla {
         width: 100%;
         border-collapse: collapse;
-        background: var(--color-superficie);
-        border: 1px solid var(--color-borde);
-        border-radius: 8px;
         font-size: 0.85rem;
     }
 
     .actas-analisis-tabla th {
         position: sticky;
         top: 0;
-        background: var(--color-fondo);
+        z-index: 1;
+        background: var(--color-superficie);
         color: var(--color-texto-secundario);
         font-size: 0.75rem;
         font-weight: 600;
@@ -102,11 +139,18 @@ $tamanoLegible = static fn (int $bytes): string => $bytes >= 1048576
     }
 </style>
 
-<div class="actas-analisis">
-    <p class="actas-analisis-resumen">
-        <?= $dependenciasConActa ?> de <?= count($dependenciasActas) ?> facultades han cargado acta · <?= $totalActas ?> acta<?= $totalActas === 1 ? '' : 's' ?> en total
-    </p>
+<div class="tarjeta actas-analisis">
+    <div class="actas-analisis-cabecera">
+        <p class="actas-analisis-resumen">
+            <?= $dependenciasConActa ?> de <?= count($dependenciasActas) ?> facultades han cargado acta · <?= $totalActas ?> acta<?= $totalActas === 1 ? '' : 's' ?> en total
+        </p>
+        <a class="actas-boton-volver" href="<?= htmlspecialchars(analisisUrl('presentacion', $vista)) ?>">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+            Volver
+        </a>
+    </div>
 
+    <div class="actas-analisis-cuerpo">
     <table class="actas-analisis-tabla">
         <thead>
             <tr>
@@ -149,4 +193,5 @@ $tamanoLegible = static fn (int $bytes): string => $bytes >= 1048576
             <?php endforeach; ?>
         </tbody>
     </table>
+    </div>
 </div>
