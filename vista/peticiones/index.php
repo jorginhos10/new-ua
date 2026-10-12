@@ -49,6 +49,9 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <button type="button" id="boton-pendientes-enviar" class="boton-agregar" disabled>Enviar</button>
                 <button type="button" id="boton-pendientes-devolver-borrador" class="boton-accion" disabled title="Devuelve el ítem a borrador en su propio módulo, sin destinatario, para que su dueño lo corrija y lo reenvíe.">Devolver a borrador</button>
                 <button type="button" id="boton-pendientes-eliminar" class="boton-accion boton-accion-eliminar" disabled>Eliminar seleccionados</button>
+                <?php if ($modoJerarquia && $esSuperAdminRaiz): ?>
+                <button type="button" id="boton-enviar-todo-superadmin" class="boton-agregar" title="Redirige de una sola vez TODO lo pendiente del sistema (de cualquier dependencia, sin seleccionar nada) a un usuario de Superadmin — no toca lo ya archivado, en expediente, ni lo que ya esté destinado a Superadmin.">Enviar todo a Superadmin</button>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
             <?php if ($vista === 'consolidado'): ?>
@@ -574,6 +577,57 @@ require __DIR__ . '/../parciales/encabezado.php';
             </form>
         </div>
     </div>
+
+    <?php if ($modoJerarquia && $esSuperAdminRaiz): ?>
+    <?php
+    // Usuarios de Superadmin para el <select> del modal de abajo — se aplana el mapa que ya arma
+    // el controlador (obtenerMapaPorDependenciaYRol()), sin consulta nueva.
+    $usuariosSuperadminPlano = [];
+    foreach (($usuariosPorDependenciaYRol['Superadmin'] ?? []) as $usuariosDelRol) {
+        foreach ($usuariosDelRol as $usuarioSuperadmin) {
+            $usuariosSuperadminPlano[] = $usuarioSuperadmin;
+        }
+    }
+    ?>
+    <div id="modal-enviar-todo-superadmin" class="modal-fondo">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Enviar todo a Superadmin</h2>
+                <button type="button" id="boton-cerrar-modal-enviar-todo-superadmin" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <p class="mensaje-error">
+                Esto redirige de una sola vez TODO lo pendiente del sistema (de cualquier dependencia,
+                sin necesidad de seleccionar nada) al usuario que elijas abajo — no toca lo ya
+                archivado, en expediente, ni lo que ya esté destinado a Superadmin. No tiene deshacer
+                fácil.
+            </p>
+
+            <form
+                method="POST"
+                action="index.php?ruta=peticiones"
+                class="form-necesidad"
+                onsubmit="return confirm('¿Confirmas que quieres redirigir TODO lo pendiente del sistema al usuario elegido? Esta acción no se puede deshacer fácilmente.');"
+            >
+                <input type="hidden" name="accion" value="enviar_todo_pendiente_superadmin">
+                <input type="hidden" name="vista" value="pendientes">
+                <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+
+                <div class="campo campo-ancho">
+                    <label for="enviar-todo-superadmin-usuario">¿A quién de Superadmin se enviará? *</label>
+                    <select id="enviar-todo-superadmin-usuario" name="usuario_destinatario_id" required>
+                        <option value="">Selecciona a quién enviarlo</option>
+                        <?php foreach ($usuariosSuperadminPlano as $usuarioSuperadmin): ?>
+                        <option value="<?= (int) $usuarioSuperadmin['id'] ?>"><?= htmlspecialchars($usuarioSuperadmin['nombre'] . ' (' . $usuarioSuperadmin['rol_nombre'] . ')') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <button type="submit" class="boton-enviar">Enviar todo</button>
+            </form>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <div id="modal-enviar-pendientes" class="modal-fondo">
         <div class="modal-caja">

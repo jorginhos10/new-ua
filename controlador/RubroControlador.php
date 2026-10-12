@@ -1,9 +1,9 @@
 <?php
 
+require_once __DIR__ . '/ControladorListaCatalogo.php';
 require_once __DIR__ . '/../modelo/Rubro.php';
-require_once __DIR__ . '/../modelo/CsvConfiguracion.php';
 
-class RubroControlador
+class RubroControlador extends ControladorListaCatalogo
 {
     private Rubro $modeloRubro;
 
@@ -12,81 +12,37 @@ class RubroControlador
         $this->modeloRubro = new Rubro();
     }
 
-    public function index(): void
+    protected function modelo(): object
     {
-        if (empty($_SESSION['usuario_id'])) {
-            header('Location: index.php?ruta=login');
-            exit;
-        }
-
-        if ($_SESSION['usuario_rol'] !== 'administrador') {
-            header('Location: index.php?ruta=dashboard');
-            exit;
-        }
-
-        if (($_GET['accion_csv'] ?? '') === 'plantilla') {
-            $this->exportarCsv();
-        }
-
-        $error = '';
-        $exito = '';
-
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $accion = $_POST['accion'] ?? '';
-
-            if ($accion === 'cambiar_estado') {
-                $this->cambiarEstado();
-            } elseif ($accion === 'importar_csv') {
-                [$error, $exito] = $this->importarCsv();
-            } else {
-                [$error, $exito] = $this->guardar();
-            }
-        }
-
-        $rubros = $this->modeloRubro->obtenerTodos();
-
-        require __DIR__ . '/../vista/rubros/index.php';
+        return $this->modeloRubro;
     }
 
-    private function exportarCsv(): void
+    protected function tabla(): string
     {
-        $filas = array_map(
-            static fn (array $r): array => [$r['codigo'], $r['descripcion'], $r['estado']],
-            $this->modeloRubro->obtenerTodos()
-        );
-
-        CsvConfiguracion::exportar('rubros.csv', ['codigo', 'descripcion', 'estado'], $filas);
+        return 'rubros';
     }
 
-    private function importarCsv(): array
+    protected function ruta(): string
     {
-        $filas = CsvConfiguracion::leerArchivoSubido($_FILES['archivo_csv'] ?? []);
-
-        if ($filas === null) {
-            return ['No se pudo leer el archivo CSV. Verifica que el archivo tenga el formato correcto.', ''];
-        }
-
-        $resultado = $this->modeloRubro->sincronizarDesdeCsv($filas);
-
-        $mensaje = 'Se crearon ' . $resultado['creados'] . ', se actualizaron ' . $resultado['actualizados']
-            . ' y se desactivaron ' . $resultado['desactivados'] . ' rubro(s).';
-
-        return ['', $mensaje];
+        return 'rubros';
     }
 
-    private function cambiarEstado(): void
+    protected function vista(): string
     {
-        $id = (int) ($_POST['id'] ?? 0);
-
-        if ($id > 0) {
-            $this->modeloRubro->cambiarEstado($id);
-        }
-
-        header('Location: index.php?ruta=rubros');
-        exit;
+        return __DIR__ . '/../vista/rubros/index.php';
     }
 
-    private function guardar(): array
+    protected function columnasCsv(): array
+    {
+        return ['codigo', 'descripcion', 'estado'];
+    }
+
+    protected function filaCsv(array $registro): array
+    {
+        return [$registro['codigo'], $registro['descripcion'], $registro['estado']];
+    }
+
+    protected function crear(): array
     {
         $codigo = trim($_POST['codigo'] ?? '');
         $descripcion = trim($_POST['descripcion'] ?? '');
@@ -102,5 +58,24 @@ class RubroControlador
         $this->modeloRubro->crear($codigo, $descripcion);
 
         return ['', 'Rubro agregado correctamente.'];
+    }
+
+    protected function actualizar(): array
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+        $codigo = trim($_POST['codigo'] ?? '');
+        $descripcion = trim($_POST['descripcion'] ?? '');
+
+        if ($id <= 0 || $this->modeloRubro->obtenerPorId($id) === null) {
+            return ['El rubro que intentas editar no existe.', ''];
+        }
+
+        if ($codigo === '' || $descripcion === '') {
+            return ['El código y la descripción son obligatorios.', ''];
+        }
+
+        $this->modeloRubro->actualizar($id, $codigo, $descripcion);
+
+        return ['', 'Rubro actualizado correctamente.'];
     }
 }

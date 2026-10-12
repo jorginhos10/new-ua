@@ -1,9 +1,9 @@
 <?php
 
+require_once __DIR__ . '/ControladorListaCatalogo.php';
 require_once __DIR__ . '/../modelo/ContratoComun.php';
-require_once __DIR__ . '/../modelo/CsvConfiguracion.php';
 
-class ContratoComunControlador
+class ContratoComunControlador extends ControladorListaCatalogo
 {
     private ContratoComun $modeloContratoComun;
 
@@ -12,81 +12,37 @@ class ContratoComunControlador
         $this->modeloContratoComun = new ContratoComun();
     }
 
-    public function index(): void
+    protected function modelo(): object
     {
-        if (empty($_SESSION['usuario_id'])) {
-            header('Location: index.php?ruta=login');
-            exit;
-        }
-
-        if ($_SESSION['usuario_rol'] !== 'administrador') {
-            header('Location: index.php?ruta=dashboard');
-            exit;
-        }
-
-        if (($_GET['accion_csv'] ?? '') === 'plantilla') {
-            $this->exportarCsv();
-        }
-
-        $error = '';
-        $exito = '';
-
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $accion = $_POST['accion'] ?? '';
-
-            if ($accion === 'cambiar_estado') {
-                $this->cambiarEstado();
-            } elseif ($accion === 'importar_csv') {
-                [$error, $exito] = $this->importarCsv();
-            } else {
-                [$error, $exito] = $this->guardar();
-            }
-        }
-
-        $contratosComunes = $this->modeloContratoComun->obtenerTodos();
-
-        require __DIR__ . '/../vista/contratos-comunes/index.php';
+        return $this->modeloContratoComun;
     }
 
-    private function exportarCsv(): void
+    protected function tabla(): string
     {
-        $filas = array_map(
-            static fn (array $c): array => [$c['codigo'], $c['descripcion'], $c['estado']],
-            $this->modeloContratoComun->obtenerTodos()
-        );
-
-        CsvConfiguracion::exportar('contratos_comunes.csv', ['codigo', 'descripcion', 'estado'], $filas);
+        return 'contratos_comunes';
     }
 
-    private function importarCsv(): array
+    protected function ruta(): string
     {
-        $filas = CsvConfiguracion::leerArchivoSubido($_FILES['archivo_csv'] ?? []);
-
-        if ($filas === null) {
-            return ['No se pudo leer el archivo CSV. Verifica que el archivo tenga el formato correcto.', ''];
-        }
-
-        $resultado = $this->modeloContratoComun->sincronizarDesdeCsv($filas);
-
-        $mensaje = 'Se crearon ' . $resultado['creados'] . ', se actualizaron ' . $resultado['actualizados']
-            . ' y se desactivaron ' . $resultado['desactivados'] . ' contrato(s) común(es).';
-
-        return ['', $mensaje];
+        return 'contratos-comunes';
     }
 
-    private function cambiarEstado(): void
+    protected function vista(): string
     {
-        $id = (int) ($_POST['id'] ?? 0);
-
-        if ($id > 0) {
-            $this->modeloContratoComun->cambiarEstado($id);
-        }
-
-        header('Location: index.php?ruta=contratos-comunes');
-        exit;
+        return __DIR__ . '/../vista/contratos-comunes/index.php';
     }
 
-    private function guardar(): array
+    protected function columnasCsv(): array
+    {
+        return ['codigo', 'descripcion', 'estado'];
+    }
+
+    protected function filaCsv(array $registro): array
+    {
+        return [$registro['codigo'], $registro['descripcion'], $registro['estado']];
+    }
+
+    protected function crear(): array
     {
         $codigo = trim($_POST['codigo'] ?? '');
         $descripcion = trim($_POST['descripcion'] ?? '');
@@ -102,5 +58,24 @@ class ContratoComunControlador
         $this->modeloContratoComun->crear($codigo, $descripcion);
 
         return ['', 'Contrato común agregado correctamente.'];
+    }
+
+    protected function actualizar(): array
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+        $codigo = trim($_POST['codigo'] ?? '');
+        $descripcion = trim($_POST['descripcion'] ?? '');
+
+        if ($id <= 0 || $this->modeloContratoComun->obtenerPorId($id) === null) {
+            return ['El contrato común que intentas editar no existe.', ''];
+        }
+
+        if ($codigo === '' || $descripcion === '') {
+            return ['El código y la descripción son obligatorios.', ''];
+        }
+
+        $this->modeloContratoComun->actualizar($id, $codigo, $descripcion);
+
+        return ['', 'Contrato común actualizado correctamente.'];
     }
 }

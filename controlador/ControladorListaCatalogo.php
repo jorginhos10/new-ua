@@ -44,6 +44,25 @@ abstract class ControladorListaCatalogo
         return ['Acción no implementada.', ''];
     }
 
+    /**
+     * Filas a mostrar en la tabla — por defecto, todas sin más. Las subclases con columnas FK
+     * (Motor/Proyecto/Sublínea de inversión) o un conteo calculado (Fuentes de financiación)
+     * sobreescriben esto para devolver las filas ya enriquecidas con esas columnas extra.
+     */
+    protected function registros(): array
+    {
+        return $this->modelo()->obtenerTodos();
+    }
+
+    /**
+     * Variables extra que necesite la vista además de $registros (ej. las opciones de un <select>
+     * de FK) — se extraen al scope de la vista por nombre de clave. Vacío en la mayoría.
+     */
+    protected function datosExtra(): array
+    {
+        return [];
+    }
+
     public function index(): void
     {
         $this->requerirAdministrador();
@@ -71,6 +90,9 @@ abstract class ControladorListaCatalogo
             }
         }
 
+        $registros = $this->registros();
+        extract($this->datosExtra());
+
         require $this->vista();
     }
 
@@ -92,7 +114,7 @@ abstract class ControladorListaCatalogo
         $columnas = $this->columnasCsv();
         $filas = array_map(
             fn (array $registro): array => $this->filaCsv($registro),
-            $this->modelo()->obtenerTodos()
+            $this->registros()
         );
 
         CsvConfiguracion::exportar($this->ruta() . '.csv', $columnas, $filas);

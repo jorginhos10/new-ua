@@ -1,112 +1,22 @@
 <?php
 /**
- * Configuraciones: pantalla principal, y el submenú "Listas" (index.php?ruta=configuraciones&grupo=listas)
- * que agrupa los catálogos PDI y de listas. Lo que no va en el submenú queda junto al botón "Listas".
+ * Configuraciones: pantalla principal. El antiguo submenú "Listas"
+ * (index.php?ruta=configuraciones&grupo=listas) ya no existe — los 10 catálogos que agrupaba
+ * (Línea/Motor/Proyecto del PDI + Estamentos/Rubros/Sedes/Contratos comunes/Líneas y sublíneas de
+ * inversión/Fuentes de financiación) ahora se navegan entre sí con la barra de pestañas de
+ * vista/parciales/landing-lista.php, así que el botón "Listas" entra directo al primer catálogo.
  */
-$grupo = $_GET['grupo'] ?? '';
-$tituloPagina = $grupo === 'listas' ? 'Listas' : 'Configuraciones';
+$tituloPagina = 'Configuraciones';
 $flechaModulo = '<svg class="tarjeta-modulo-flecha" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>';
 require __DIR__ . '/../parciales/encabezado.php';
 ?>
-
-<?php if ($grupo === 'listas'): ?>
-
-    <a href="index.php?ruta=configuraciones" class="enlace-volver-configuraciones">← Configuraciones</a>
-
-    <div class="grid-modulos">
-
-        <section class="grupo-configuraciones">
-            <h2 class="grupo-configuraciones-titulo grupo-pdi">PDI</h2>
-            <div class="box-items-config">
-                <a href="index.php?ruta=lineas" class="tarjeta-modulo">
-                    <div class="tarjeta-modulo-cabecera">
-                        <h2>Línea</h2>
-                        <?= $flechaModulo ?>
-                    </div>
-                    <p class="texto-atenuado">Gestiona las líneas de inversión (ej. L1, L2, L3).</p>
-                </a>
-                <a href="index.php?ruta=motores" class="tarjeta-modulo">
-                    <div class="tarjeta-modulo-cabecera">
-                        <h2>Motor</h2>
-                        <?= $flechaModulo ?>
-                    </div>
-                    <p class="texto-atenuado">Gestiona los motores, asociados a una línea (ej. M1, M2, M3).</p>
-                </a>
-                <a href="index.php?ruta=proyectos" class="tarjeta-modulo">
-                    <div class="tarjeta-modulo-cabecera">
-                        <h2>Proyecto</h2>
-                        <?= $flechaModulo ?>
-                    </div>
-                    <p class="texto-atenuado">Gestiona los proyectos, asociados a un motor (ej. P1, P2, P3).</p>
-                </a>
-            </div>
-        </section>
-
-        <section class="grupo-configuraciones">
-            <h2 class="grupo-configuraciones-titulo grupo-listas">Listas</h2>
-            <div class="box-items-config">
-                <a href="index.php?ruta=estamentos" class="tarjeta-modulo">
-                    <div class="tarjeta-modulo-cabecera">
-                        <h2>Estamentos</h2>
-                        <?= $flechaModulo ?>
-                    </div>
-                    <p class="texto-atenuado">Gestiona el catálogo de estamentos.</p>
-                </a>
-                <a href="index.php?ruta=rubros" class="tarjeta-modulo">
-                    <div class="tarjeta-modulo-cabecera">
-                        <h2>Rubros</h2>
-                        <?= $flechaModulo ?>
-                    </div>
-                    <p class="texto-atenuado">Gestiona el catálogo de rubros presupuestales.</p>
-                </a>
-                <a href="index.php?ruta=sedes" class="tarjeta-modulo">
-                    <div class="tarjeta-modulo-cabecera">
-                        <h2>Sedes</h2>
-                        <?= $flechaModulo ?>
-                    </div>
-                    <p class="texto-atenuado">Gestiona las sedes de la universidad.</p>
-                </a>
-                <a href="index.php?ruta=contratos-comunes" class="tarjeta-modulo">
-                    <div class="tarjeta-modulo-cabecera">
-                        <h2>Contratos comunes</h2>
-                        <?= $flechaModulo ?>
-                    </div>
-                    <p class="texto-atenuado">Gestiona el catálogo de contratos comunes (BCC) para el campo "Contratos comunes" de los gastos.</p>
-                </a>
-                <a href="index.php?ruta=lineas-inversion" class="tarjeta-modulo">
-                    <div class="tarjeta-modulo-cabecera">
-                        <h2>Líneas de inversión</h2>
-                        <?= $flechaModulo ?>
-                    </div>
-                    <p class="texto-atenuado">Gestiona el catálogo de líneas de inversión para Perfil de proyectos.</p>
-                </a>
-                <a href="index.php?ruta=sublineas-inversion" class="tarjeta-modulo">
-                    <div class="tarjeta-modulo-cabecera">
-                        <h2>Sublíneas de inversión</h2>
-                        <?= $flechaModulo ?>
-                    </div>
-                    <p class="texto-atenuado">Gestiona el catálogo de sublíneas de inversión, condicionadas a una línea, para Perfil de proyectos.</p>
-                </a>
-                <a href="index.php?ruta=fuentes-financiacion" class="tarjeta-modulo">
-                    <div class="tarjeta-modulo-cabecera">
-                        <h2>Fuentes de financiación</h2>
-                        <?= $flechaModulo ?>
-                    </div>
-                    <p class="texto-atenuado">Gestiona el catálogo de fuentes de financiación que eligen los proyectos de Perfil de proyectos.</p>
-                </a>
-            </div>
-        </section>
-
-    </div>
-
-<?php else: ?>
 
     <div class="grid-modulos">
 
         <section class="grupo-configuraciones">
             <h2 class="grupo-configuraciones-titulo grupo-listas">Catálogos</h2>
             <div class="box-items-config">
-                <a href="index.php?ruta=configuraciones&grupo=listas" class="tarjeta-modulo">
+                <a href="index.php?ruta=lineas" class="tarjeta-modulo">
                     <div class="tarjeta-modulo-cabecera">
                         <h2>Listas</h2>
                         <?= $flechaModulo ?>
@@ -231,7 +141,5 @@ require __DIR__ . '/../parciales/encabezado.php';
         </section>
 
     </div>
-
-<?php endif; ?>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

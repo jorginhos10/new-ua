@@ -1,8 +1,9 @@
 <?php
 
+require_once __DIR__ . '/ControladorListaCatalogo.php';
 require_once __DIR__ . '/../modelo/Linea.php';
 
-class LineaControlador
+class LineaControlador extends ControladorListaCatalogo
 {
     private Linea $modeloLinea;
 
@@ -11,31 +12,42 @@ class LineaControlador
         $this->modeloLinea = new Linea();
     }
 
-    public function index(): void
+    protected function modelo(): object
     {
-        if (empty($_SESSION['usuario_id'])) {
-            header('Location: index.php?ruta=login');
-            exit;
-        }
-
-        if ($_SESSION['usuario_rol'] !== 'administrador') {
-            header('Location: index.php?ruta=dashboard');
-            exit;
-        }
-
-        $error = '';
-        $exito = '';
-
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            [$error, $exito] = $this->guardar();
-        }
-
-        $lineas = $this->modeloLinea->obtenerTodas();
-
-        require __DIR__ . '/../vista/lineas/index.php';
+        return $this->modeloLinea;
     }
 
-    private function guardar(): array
+    protected function tabla(): string
+    {
+        return 'lineas';
+    }
+
+    protected function ruta(): string
+    {
+        return 'lineas';
+    }
+
+    protected function vista(): string
+    {
+        return __DIR__ . '/../vista/lineas/index.php';
+    }
+
+    protected function registros(): array
+    {
+        return $this->modeloLinea->obtenerTodas();
+    }
+
+    protected function columnasCsv(): array
+    {
+        return ['codigo', 'nombre', 'estado'];
+    }
+
+    protected function filaCsv(array $registro): array
+    {
+        return [$registro['codigo'], $registro['nombre'], $registro['estado']];
+    }
+
+    protected function crear(): array
     {
         $codigo = trim($_POST['codigo'] ?? '');
         $nombre = trim($_POST['nombre'] ?? '');
@@ -51,5 +63,24 @@ class LineaControlador
         $this->modeloLinea->crear($codigo, $nombre);
 
         return ['', 'Línea agregada correctamente.'];
+    }
+
+    protected function actualizar(): array
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+        $codigo = trim($_POST['codigo'] ?? '');
+        $nombre = trim($_POST['nombre'] ?? '');
+
+        if ($id <= 0 || $this->modeloLinea->obtenerPorId($id) === null) {
+            return ['La línea que intentas editar no existe.', ''];
+        }
+
+        if ($codigo === '' || $nombre === '') {
+            return ['El código y el nombre son obligatorios.', ''];
+        }
+
+        $this->modeloLinea->actualizar($id, $codigo, $nombre);
+
+        return ['', 'Línea actualizada correctamente.'];
     }
 }

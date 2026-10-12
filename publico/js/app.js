@@ -3120,6 +3120,37 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+
+    var botonEnviarTodoSuperadmin = document.getElementById('boton-enviar-todo-superadmin');
+    var modalEnviarTodoSuperadmin = document.getElementById('modal-enviar-todo-superadmin');
+
+    if (botonEnviarTodoSuperadmin && modalEnviarTodoSuperadmin) {
+        var botonCerrarEnviarTodoSuperadmin = document.getElementById('boton-cerrar-modal-enviar-todo-superadmin');
+
+        var cerrarEnviarTodoSuperadmin = function () {
+            modalEnviarTodoSuperadmin.classList.remove('abierto');
+        };
+
+        botonEnviarTodoSuperadmin.addEventListener('click', function () {
+            modalEnviarTodoSuperadmin.classList.add('abierto');
+        });
+
+        if (botonCerrarEnviarTodoSuperadmin) {
+            botonCerrarEnviarTodoSuperadmin.addEventListener('click', cerrarEnviarTodoSuperadmin);
+        }
+
+        modalEnviarTodoSuperadmin.addEventListener('click', function (evento) {
+            if (evento.target === modalEnviarTodoSuperadmin) {
+                cerrarEnviarTodoSuperadmin();
+            }
+        });
+
+        document.addEventListener('keydown', function (evento) {
+            if (evento.key === 'Escape') {
+                cerrarEnviarTodoSuperadmin();
+            }
+        });
+    }
 });
 
 document.addEventListener('DOMContentLoaded', function () {

@@ -236,6 +236,10 @@ class PeticionesControlador
                 [$errorEnviarPend, $exitoEnviarPend] = $this->enviarPendientesGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorEnviarPend;
                 $_SESSION['peticiones_flash_exito'] = $exitoEnviarPend;
+            } elseif ($accion === 'enviar_todo_pendiente_superadmin') {
+                [$errorEnviarTodoSA, $exitoEnviarTodoSA] = $this->enviarTodoPendienteSuperadmin();
+                $_SESSION['peticiones_flash_error'] = $errorEnviarTodoSA;
+                $_SESSION['peticiones_flash_exito'] = $exitoEnviarTodoSA;
             } elseif ($accion === 'archivar_consolidado') {
                 [$errorArchivarCons, $exitoArchivarCons] = $this->archivarConsolidadoGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorArchivarCons;
@@ -2535,6 +2539,104 @@ class PeticionesControlador
         }
 
         return ['', 'Se enviaron ' . $enviados . ' ítem(s) a ' . $destinatarios[0]['nombre'] . ' (' . $rol['nombre'] . ' en "' . $dependenciaNombre . '").'];
+    }
+
+    /**
+     * Botón de un clic exclusivo del superadmin raíz, con "Auditar" encendido: toma TODO lo que ya
+     * está `enviado` en cualquier dependencia del sistema (nunca borradores — ver
+     * construirVistaJerarquica(), que ya los excluye) y que no esté archivado/aprobado/en
+     * expediente, y lo redirige de una sola vez a un usuario de Superadmin — mismo mecanismo que
+     * enviarPendientesGrupo() (redireccionarDirecto(), sin archivar, el ítem sigue "pendiente" solo
+     * que ahora destinado a Superadmin), pero sin selección manual: el conjunto se calcula aquí.
+     *
+     * Simplificación consciente: un ítem nunca tocado por Peticiones (estado_item === 'pendiente',
+     * sin fila en peticiones_archivadas) se considera siempre elegible, aunque en un caso muy raro
+     * ya pudiera haber sido enviado directamente a Superadmin desde su módulo de origen sin pasar
+     * por un redireccionamiento — redirigirlo de nuevo es inofensivo (mismo destino final, solo
+     * una notificación de más), así que no vale la pena consultar las columnas de destino de las
+     * 14 tablas de origen (de esquema inconsistente, ver TABLAS_ORIGEN) para cubrir ese caso.
+     */
+    private function enviarTodoPendienteSuperadmin(): array
+    {
+        if (!$this->esSuperAdminRaiz()) {
+            return ['No tienes permiso para esta acción.', ''];
+        }
+
+        $usuarioDestinatarioId = (int) ($_POST['usuario_destinatario_id'] ?? 0);
+        $usuarioDestinatario = $usuarioDestinatarioId > 0 ? $this->modeloUsuario->obtenerPorId($usuarioDestinatarioId) : null;
+
+        if ($usuarioDestinatario === null) {
+            return ['Selecciona a quién de Superadmin se le enviará.', ''];
+        }
+
+        $dependenciaSuperadmin = !empty($usuarioDestinatario['dependencia_id'])
+            ? $this->modeloDependencia->obtenerPorId((int) $usuarioDestinatario['dependencia_id'])
+            : null;
+
+        if ($dependenciaSuperadmin === null || empty($dependenciaSuperadmin['es_raiz_superadmin'])) {
+            return ['El usuario elegido no pertenece a Superadmin.', ''];
+        }
+
+        $rolDestinatarioId = (int) ($usuarioDestinatario['rol_id'] ?? 0);
+        $rol = $rolDestinatarioId > 0 ? $this->modeloRol->obtenerPorId($rolDestinatarioId) : null;
+        $nombreDependenciaSuperadmin = $dependenciaSuperadmin['nombre'];
+
+        $anioPresupuestalId = (int) ($_POST['anio_id'] ?? 0);
+
+        if ($anioPresupuestalId <= 0) {
+            return ['Selecciona un año presupuestal primero.', ''];
+        }
+
+        $dependenciasPermitidas = $this->obtenerDependenciasPermitidas();
+        $items = $this->construirVistaJerarquica($anioPresupuestalId, $dependenciasPermitidas);
+
+        $redireccionadoADependencia = [];
+        foreach ($this->modeloArchivada->obtenerRedireccionadas() as $fila) {
+            $redireccionadoADependencia[$fila['origen'] . ':' . $fila['origen_id']] = $fila['redireccionado_a_dependencia'];
+        }
+
+        $itemsAfectados = [];
+
+        foreach ($items as $item) {
+            if (!in_array($item['estado_item'], ['pendiente', 'redireccionada'], true)) {
+                continue; // archivada / aprobada / expediente quedan fuera, tal cual se pidió.
+            }
+
+            $clave = $item['origen'] . ':' . $item['origen_id'];
+            if (($redireccionadoADependencia[$clave] ?? null) === $nombreDependenciaSuperadmin) {
+                continue; // ya está destinado a Superadmin, nada que hacer.
+            }
+
+            $this->modeloArchivada->redireccionarDirecto([
+                'origen' => $item['origen'],
+                'origen_id' => $item['origen_id'],
+                'tipo' => $item['tipo'],
+                'detalle' => $item['detalle'],
+                'cantidad' => $item['cantidad'],
+                'valor' => $item['valor'],
+                'ruta_ver' => $item['ruta_ver'],
+                'ruta_origen' => $item['ruta_origen'],
+            ], $nombreDependenciaSuperadmin, $rolDestinatarioId, $usuarioDestinatarioId);
+
+            $itemsAfectados[] = ['origen' => $item['origen'], 'origen_id' => (int) $item['origen_id'], 'tipo' => $item['tipo'], 'detalle' => $item['detalle']];
+        }
+
+        if (empty($itemsAfectados)) {
+            return ['No hay ítems pendientes para enviar — todo lo que existe ya está archivado, en expediente o ya destinado a Superadmin.', ''];
+        }
+
+        $this->registrarConLote('redireccionada', 'Enviado masivamente a Superadmin (' . $usuarioDestinatario['nombre'] . ')', $itemsAfectados);
+
+        $enviados = count($itemsAfectados);
+        $remitenteId = (int) ($_SESSION['usuario_id'] ?? 0);
+        $this->modeloMensaje->crear(
+            $remitenteId,
+            $usuarioDestinatarioId,
+            'Petición enviada',
+            'Se te enviaron ' . $enviados . ' ítem(s) para tu gestión en "' . $nombreDependenciaSuperadmin . '" (envío masivo).'
+        );
+
+        return ['', 'Se enviaron ' . $enviados . ' ítem(s) a ' . $usuarioDestinatario['nombre'] . ($rol !== null ? ' (' . $rol['nombre'] . ')' : '') . '.'];
     }
 
     private function obtenerPorAccionYClave(string $accion): array

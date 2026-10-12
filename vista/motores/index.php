@@ -1,57 +1,24 @@
-<?php $tituloPagina = 'Motores'; require __DIR__ . '/../parciales/encabezado.php'; ?>
+<?php
+$opcionesLinea = array_map(
+    static fn (array $l): array => [
+        'value' => $l['id'],
+        'label' => $l['codigo'] . ' - ' . $l['nombre'] . ($l['estado'] === 'inactivo' ? ' (inactiva)' : ''),
+    ],
+    $lineasOpciones
+);
 
-    <div class="tarjeta">
-        <h1>Motores</h1>
-
-        <?php if (!empty($error)): ?>
-            <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
-        <?php endif; ?>
-
-        <?php if (!empty($exito)): ?>
-            <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
-        <?php endif; ?>
-
-        <?php if (empty($lineas)): ?>
-            <p class="mensaje-error">Primero debes crear al menos una línea en el módulo Líneas.</p>
-        <?php else: ?>
-            <form method="POST" action="index.php?ruta=motores" class="form-agregar">
-                <input type="text" name="codigo" placeholder="Código (ej. M1)" maxlength="10" required>
-                <input type="text" name="nombre" placeholder="Nombre del motor" required>
-                <select name="linea_id" required>
-                    <option value="">Selecciona una línea</option>
-                    <?php foreach ($lineas as $linea): ?>
-                    <option value="<?= (int) $linea['id'] ?>"><?= htmlspecialchars($linea['codigo'] . ' - ' . $linea['nombre']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <button type="submit">Agregar</button>
-            </form>
-        <?php endif; ?>
-
-        <table class="tabla-usuarios">
-            <thead>
-                <tr>
-                    <th>Código</th>
-                    <th>Nombre</th>
-                    <th>Línea</th>
-                    <th>Creado</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php foreach ($motores as $motor): ?>
-                <tr>
-                    <td><?= htmlspecialchars($motor['codigo']) ?></td>
-                    <td><?= htmlspecialchars($motor['nombre']) ?></td>
-                    <td><?= htmlspecialchars($motor['linea_codigo'] . ' - ' . $motor['linea_nombre']) ?></td>
-                    <td><?= htmlspecialchars($motor['creado_en']) ?></td>
-                </tr>
-                <?php endforeach; ?>
-                <?php if (empty($motores)): ?>
-                <tr>
-                    <td colspan="4">No hay motores registrados.</td>
-                </tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
-    </div>
-
-<?php require __DIR__ . '/../parciales/pie.php'; ?>
+$landing = [
+    'titulo' => 'Motores',
+    'ruta' => 'motores',
+    'csv' => true,
+    'estado' => true,
+    'eliminar' => true,
+    'columnas' => [
+        ['clave' => 'codigo', 'etiqueta' => 'Código', 'tipo' => 'texto', 'editable' => true, 'requerido' => true, 'maxlength' => 10, 'placeholder' => 'Código (ej. M1)', 'angosta' => true],
+        ['clave' => 'nombre', 'etiqueta' => 'Nombre', 'tipo' => 'texto', 'editable' => true, 'requerido' => true, 'placeholder' => 'Nombre del motor'],
+        ['clave' => 'linea_id', 'etiqueta' => 'Línea', 'tipo' => 'fk', 'editable' => true, 'requerido' => true, 'opciones' => $opcionesLinea, 'mensajeFaltante' => 'Primero debes crear al menos una línea en el módulo Líneas.'],
+        ['clave' => 'creado_en', 'etiqueta' => 'Creado', 'tipo' => 'calculado'],
+    ],
+    'filas' => $registros,
+];
+require __DIR__ . '/../parciales/landing-lista.php';

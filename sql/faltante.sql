@@ -304,3 +304,13 @@ CREATE TABLE IF NOT EXISTS documentos_versiones_datos (
     datos LONGTEXT NOT NULL,
     CONSTRAINT fk_documentos_versiones_datos_version FOREIGN KEY (version_id) REFERENCES documentos_versiones(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 10) Estandarizar landings de "Listas" (botón Listas de Configuraciones): agrega `estado`
+--    (activo/inactivo) a los 5 catálogos que todavía no lo tenían, para que activar/desactivar
+--    quede disponible en los 10 (lineas/motores/proyectos del PDI, estamentos, rubros, sedes,
+--    contratos_comunes, lineas_inversion, sublineas_inversion, fuentes_financiacion ya lo tenían).
+ALTER TABLE lineas ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER nombre;
+ALTER TABLE motores ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER linea_id;
+ALTER TABLE proyectos ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER motor_id;
+ALTER TABLE estamentos ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER nombre;
+ALTER TABLE sedes ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER nombre;

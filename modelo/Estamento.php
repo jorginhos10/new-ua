@@ -14,15 +14,24 @@ class Estamento
 
     public function obtenerTodos(): array
     {
-        $consulta = $this->db->query('SELECT id, nombre, creado_en FROM estamentos ORDER BY creado_en DESC');
+        $consulta = $this->db->query('SELECT id, nombre, estado, creado_en FROM estamentos ORDER BY creado_en DESC');
 
         return $consulta->fetchAll();
     }
 
     public function obtenerPorId(int $id): ?array
     {
-        $consulta = $this->db->prepare('SELECT id, nombre, creado_en FROM estamentos WHERE id = :id');
+        $consulta = $this->db->prepare('SELECT id, nombre, estado, creado_en FROM estamentos WHERE id = :id');
         $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
+    public function obtenerPorNombre(string $nombre): ?array
+    {
+        $consulta = $this->db->prepare('SELECT id, nombre, estado FROM estamentos WHERE nombre = :nombre LIMIT 1');
+        $consulta->execute(['nombre' => $nombre]);
         $fila = $consulta->fetch();
 
         return $fila !== false ? $fila : null;
@@ -55,6 +64,15 @@ class Estamento
         return $consulta->execute(['id' => $id, 'nombre' => $nombre]);
     }
 
+    public function cambiarEstado(int $id): bool
+    {
+        $consulta = $this->db->prepare(
+            "UPDATE estamentos SET estado = IF(estado = 'activo', 'inactivo', 'activo') WHERE id = :id"
+        );
+
+        return $consulta->execute(['id' => $id]);
+    }
+
     public function eliminar(int $id): bool
     {
         $consulta = $this->db->prepare('DELETE FROM estamentos WHERE id = :id');
@@ -63,14 +81,15 @@ class Estamento
     }
 
     /**
-     * Sincroniza el catálogo con el contenido de un CSV importado: crea los que faltan, y borra
-     * los que ya no aparecen en el archivo — salvo que sigan en uso en otra parte del sistema
-     * (ej. usuarios, necesidades), en cuyo caso se dejan tal cual para no romper esa referencia.
+     * Mismo patrón que Rubro/Linea (crear/actualizar/desactivar, nunca borra desde CSV) — antes
+     * este catálogo borraba de verdad las filas que ya no aparecían en el archivo; ahora que tiene
+     * `estado` se desactivan igual que el resto de los 10 catálogos de "Listas".
      */
     public function sincronizarDesdeCsv(array $filas): array
     {
         $nombresCsv = [];
         $creados = 0;
+        $actualizados = 0;
 
         foreach ($filas as $fila) {
             $nombre = trim($fila['nombre'] ?? '');
@@ -80,41 +99,38 @@ class Estamento
             }
 
             $nombresCsv[] = $nombre;
+            $estadoDeseado = strtolower(trim($fila['estado'] ?? '')) === 'inactivo' ? 'inactivo' : 'activo';
 
-            if (!$this->existeEstamento($nombre)) {
+            $existente = $this->obtenerPorNombre($nombre);
+
+            if ($existente === null) {
                 $this->crear($nombre);
+                $nuevoId = (int) $this->db->lastInsertId();
+
+                if ($estadoDeseado === 'inactivo') {
+                    $this->cambiarEstado($nuevoId);
+                }
+
                 $creados++;
+            } elseif ($existente['estado'] !== $estadoDeseado) {
+                $this->cambiarEstado((int) $existente['id']);
+                $actualizados++;
             }
         }
 
-        $eliminados = 0;
-        $omitidos = 0;
+        $desactivados = 0;
 
         foreach ($this->obtenerTodos() as $existente) {
             if (in_array($existente['nombre'], $nombresCsv, true)) {
                 continue;
             }
 
-            $id = (int) $existente['id'];
-
-            if ($this->estaEnUso($id)) {
-                $omitidos++;
-                continue;
-            }
-
-            try {
-                $this->eliminar($id);
-                $eliminados++;
-            } catch (PDOException $excepcion) {
-                $omitidos++;
+            if ($existente['estado'] === 'activo') {
+                $this->cambiarEstado((int) $existente['id']);
+                $desactivados++;
             }
         }
 
-        return ['creados' => $creados, 'eliminados' => $eliminados, 'omitidos' => $omitidos];
-    }
-
-    private function estaEnUso(int $id): bool
-    {
-        return CsvConfiguracion::tieneReferencias($this->db, 'estamentos', $id);
+        return ['creados' => $creados, 'actualizados' => $actualizados, 'desactivados' => $desactivados];
     }
 }

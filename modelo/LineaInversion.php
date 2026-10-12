@@ -72,13 +72,20 @@ class LineaInversion
         return $consulta->execute(['id' => $id]);
     }
 
-    public function actualizarDatos(int $id, string $nombre, string $descripcion): bool
+    public function actualizar(int $id, string $codigo, string $nombre, string $descripcion): bool
     {
         $consulta = $this->db->prepare(
-            'UPDATE lineas_inversion SET nombre = :nombre, descripcion = :descripcion WHERE id = :id'
+            'UPDATE lineas_inversion SET codigo = :codigo, nombre = :nombre, descripcion = :descripcion WHERE id = :id'
         );
 
-        return $consulta->execute(['id' => $id, 'nombre' => $nombre, 'descripcion' => $descripcion]);
+        return $consulta->execute(['id' => $id, 'codigo' => $codigo, 'nombre' => $nombre, 'descripcion' => $descripcion]);
+    }
+
+    public function eliminar(int $id): bool
+    {
+        $consulta = $this->db->prepare('DELETE FROM lineas_inversion WHERE id = :id');
+
+        return $consulta->execute(['id' => $id]);
     }
 
     /**
@@ -119,7 +126,7 @@ class LineaInversion
                 $cambio = false;
 
                 if ($existente['nombre'] !== $nombre || $existente['descripcion'] !== $descripcion) {
-                    $this->actualizarDatos((int) $existente['id'], $nombre, $descripcion);
+                    $this->actualizar((int) $existente['id'], $codigo, $nombre, $descripcion);
                     $cambio = true;
                 }
 

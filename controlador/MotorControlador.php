@@ -1,9 +1,10 @@
 <?php
 
+require_once __DIR__ . '/ControladorListaCatalogo.php';
 require_once __DIR__ . '/../modelo/Motor.php';
 require_once __DIR__ . '/../modelo/Linea.php';
 
-class MotorControlador
+class MotorControlador extends ControladorListaCatalogo
 {
     private Motor $modeloMotor;
     private Linea $modeloLinea;
@@ -14,32 +15,48 @@ class MotorControlador
         $this->modeloLinea = new Linea();
     }
 
-    public function index(): void
+    protected function modelo(): object
     {
-        if (empty($_SESSION['usuario_id'])) {
-            header('Location: index.php?ruta=login');
-            exit;
-        }
-
-        if ($_SESSION['usuario_rol'] !== 'administrador') {
-            header('Location: index.php?ruta=dashboard');
-            exit;
-        }
-
-        $error = '';
-        $exito = '';
-
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            [$error, $exito] = $this->guardar();
-        }
-
-        $motores = $this->modeloMotor->obtenerTodos();
-        $lineas = $this->modeloLinea->obtenerTodas();
-
-        require __DIR__ . '/../vista/motores/index.php';
+        return $this->modeloMotor;
     }
 
-    private function guardar(): array
+    protected function tabla(): string
+    {
+        return 'motores';
+    }
+
+    protected function ruta(): string
+    {
+        return 'motores';
+    }
+
+    protected function vista(): string
+    {
+        return __DIR__ . '/../vista/motores/index.php';
+    }
+
+    protected function columnasCsv(): array
+    {
+        return ['codigo', 'nombre', 'linea_codigo', 'estado'];
+    }
+
+    protected function filaCsv(array $registro): array
+    {
+        return [$registro['codigo'], $registro['nombre'], $registro['linea_codigo'], $registro['estado']];
+    }
+
+    /**
+     * Todas las líneas, no solo activas: si una línea ya asignada a un motor se desactiva, el
+     * <select> de edición del motor debe seguir mostrándola (marcada "inactiva") — si solo
+     * ofreciera activas, guardar cualquier otro cambio en ese motor reasignaría su línea en
+     * silencio al perder la opción seleccionada.
+     */
+    protected function datosExtra(): array
+    {
+        return ['lineasOpciones' => $this->modeloLinea->obtenerTodas()];
+    }
+
+    protected function crear(): array
     {
         $codigo = trim($_POST['codigo'] ?? '');
         $nombre = trim($_POST['nombre'] ?? '');
@@ -52,5 +69,25 @@ class MotorControlador
         $this->modeloMotor->crear($codigo, $nombre, (int) $lineaId);
 
         return ['', 'Motor agregado correctamente.'];
+    }
+
+    protected function actualizar(): array
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+        $codigo = trim($_POST['codigo'] ?? '');
+        $nombre = trim($_POST['nombre'] ?? '');
+        $lineaId = $_POST['linea_id'] ?? '';
+
+        if ($id <= 0 || $this->modeloMotor->obtenerPorId($id) === null) {
+            return ['El motor que intentas editar no existe.', ''];
+        }
+
+        if ($codigo === '' || $nombre === '' || $lineaId === '') {
+            return ['El código, el nombre y la línea son obligatorios.', ''];
+        }
+
+        $this->modeloMotor->actualizar($id, $codigo, $nombre, (int) $lineaId);
+
+        return ['', 'Motor actualizado correctamente.'];
     }
 }

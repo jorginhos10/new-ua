@@ -28,6 +28,15 @@ class ContratoComun
         return $consulta->fetchAll();
     }
 
+    public function obtenerPorId(int $id): ?array
+    {
+        $consulta = $this->db->prepare('SELECT id, codigo, descripcion, estado, creado_en FROM contratos_comunes WHERE id = :id');
+        $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
     public function existeCodigo(string $codigo): bool
     {
         $consulta = $this->db->prepare('SELECT id FROM contratos_comunes WHERE codigo = :codigo LIMIT 1');
@@ -54,11 +63,18 @@ class ContratoComun
         return $consulta->execute(['id' => $id]);
     }
 
-    public function actualizarDescripcion(int $id, string $descripcion): bool
+    public function actualizar(int $id, string $codigo, string $descripcion): bool
     {
-        $consulta = $this->db->prepare('UPDATE contratos_comunes SET descripcion = :descripcion WHERE id = :id');
+        $consulta = $this->db->prepare('UPDATE contratos_comunes SET codigo = :codigo, descripcion = :descripcion WHERE id = :id');
 
-        return $consulta->execute(['id' => $id, 'descripcion' => $descripcion]);
+        return $consulta->execute(['id' => $id, 'codigo' => $codigo, 'descripcion' => $descripcion]);
+    }
+
+    public function eliminar(int $id): bool
+    {
+        $consulta = $this->db->prepare('DELETE FROM contratos_comunes WHERE id = :id');
+
+        return $consulta->execute(['id' => $id]);
     }
 
     /**
@@ -98,7 +114,7 @@ class ContratoComun
                 $cambio = false;
 
                 if ($existente['descripcion'] !== $descripcion) {
-                    $this->actualizarDescripcion((int) $existente['id'], $descripcion);
+                    $this->actualizar((int) $existente['id'], $codigo, $descripcion);
                     $cambio = true;
                 }
 

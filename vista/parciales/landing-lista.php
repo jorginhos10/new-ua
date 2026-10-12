@@ -39,9 +39,48 @@ foreach ($columnas as $columna) {
         break;
     }
 }
+
+/** Columna angosta (código corto, NIT, Estado, Creado, conteos) = se ajusta a su contenido en vez
+ * de repartirse el ancho por igual con Nombre/Descripción, que sí deben poder crecer. 'calculado'
+ * siempre es angosta; para 'texto' lo decide explícitamente cada módulo con 'angosta' => true en
+ * su config — el largo máximo (maxlength) NO es buen indicador: el código de Rubros permite hasta
+ * 20 caracteres pero en la práctica mide 16 ("2.01.01.01.01.01"), mientras que el de Sedes permite
+ * lo mismo y en la práctica mide 2 ("BA") — solo el propio módulo sabe cuál es cuál. */
+$esColumnaAngosta = static function (array $columna): bool {
+    $tipo = $columna['tipo'] ?? 'texto';
+
+    return $tipo === 'calculado' || !empty($columna['angosta']);
+};
+
+// Los 10 catálogos del botón "Listas" de Configuraciones (ya no tienen landing de botones propio,
+// el botón entra directo al primero). Sidebar en vez de pestañas horizontales a propósito: una
+// fila más no rompe el layout ni obliga a scroll horizontal cuando se agreguen más listas.
+$pestanasListas = [
+    'lineas' => 'Líneas',
+    'motores' => 'Motores',
+    'proyectos' => 'Proyectos',
+    'estamentos' => 'Estamentos',
+    'rubros' => 'Rubros',
+    'sedes' => 'Sedes',
+    'contratos-comunes' => 'Contratos comunes',
+    'lineas-inversion' => 'Líneas de inversión',
+    'sublineas-inversion' => 'Sublíneas de inversión',
+    'fuentes-financiacion' => 'Fuentes de financiación',
+];
 ?>
 
-    <div class="tarjeta">
+    <div class="listas-layout">
+        <aside class="listas-sidebar">
+            <a href="index.php?ruta=configuraciones" class="listas-volver">&larr; Configuraciones</a>
+            <div class="listas-sidebar-titulo">Listas</div>
+            <nav class="listas-sidebar-nav">
+                <?php foreach ($pestanasListas as $rutaPestana => $etiquetaPestana): ?>
+                <a href="index.php?ruta=<?= htmlspecialchars($rutaPestana) ?>" class="<?= $rutaPestana === $ruta ? 'activo' : '' ?>"><?= htmlspecialchars($etiquetaPestana) ?></a>
+                <?php endforeach; ?>
+            </nav>
+        </aside>
+
+    <div class="tarjeta listas-contenido">
         <div class="tarjeta-encabezado">
             <h1><?= htmlspecialchars($landing['titulo']) ?></h1>
             <?php if ($tieneCsv): $csvRuta = $ruta; $csvEtiqueta = $landing['titulo']; require __DIR__ . '/csv-configuracion.php'; ?>
@@ -94,17 +133,17 @@ foreach ($columnas as $columna) {
                 <thead>
                     <tr>
                         <?php foreach ($columnas as $columna): ?>
-                        <th><?= htmlspecialchars($columna['etiqueta']) ?></th>
+                        <th class="<?= $esColumnaAngosta($columna) ? 'col-angosta' : '' ?>"><?= htmlspecialchars($columna['etiqueta']) ?></th>
                         <?php endforeach; ?>
-                        <?php if ($tieneEstado): ?><th>Estado</th><?php endif; ?>
-                        <th></th>
+                        <?php if ($tieneEstado): ?><th class="col-angosta">Estado</th><?php endif; ?>
+                        <th class="col-angosta"></th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($filas as $fila): $idFormulario = 'form-' . $ruta . '-' . (int) $fila['id']; ?>
                     <tr>
                         <?php foreach ($columnas as $columna): $valor = $fila[$columna['clave']] ?? null; $tipo = $columna['tipo'] ?? 'texto'; ?>
-                        <td>
+                        <td class="<?= $esColumnaAngosta($columna) ? 'col-angosta' : '' ?>">
                             <?php if ($tipo === 'calculado' || empty($columna['editable'])): ?>
                                 <?= htmlspecialchars((string) $valor) ?>
                             <?php elseif ($tipo === 'fk'): ?>
@@ -130,7 +169,7 @@ foreach ($columnas as $columna) {
                         <?php endforeach; ?>
 
                         <?php if ($tieneEstado): ?>
-                        <td>
+                        <td class="col-angosta">
                             <form method="POST" action="index.php?ruta=<?= htmlspecialchars($ruta) ?>" class="form-toggle">
                                 <input type="hidden" name="accion" value="cambiar_estado">
                                 <input type="hidden" name="id" value="<?= (int) $fila['id'] ?>">
@@ -142,7 +181,7 @@ foreach ($columnas as $columna) {
                         </td>
                         <?php endif; ?>
 
-                        <td class="celda-acciones">
+                        <td class="celda-acciones col-angosta">
                             <div class="acciones-fila">
                                 <form method="POST" action="index.php?ruta=<?= htmlspecialchars($ruta) ?>" id="<?= $idFormulario ?>">
                                     <input type="hidden" name="accion" value="actualizar">
@@ -168,6 +207,7 @@ foreach ($columnas as $columna) {
                 </tbody>
             </table>
         </div>
+    </div>
     </div>
 
 <?php require __DIR__ . '/pie.php'; ?>
