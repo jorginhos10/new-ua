@@ -171,8 +171,8 @@ class FuenteDatosAnalisis
     }
 
     /**
-     * Gastos de los 3 módulos de autogestión (Extensión/Postgrado/Unisalud — Sin Excedentes
-     * descontinuado, fuera) para un año, ya combinados en una sola lista — usado por
+     * Gastos de los 3 módulos de autogestión (Extensión/Postgrado/Unisalud)
+     * para un año, ya combinados en una sola lista — usado por
      * Articulación PDI para sumarlos junto a gasto_principal en el total de cada proyecto (antes
      * de este método, ese total solo incluía gasto_principal). Respeta tiempo_real/repositorio/
      * usuario igual que obtenerGastosPorAnio().

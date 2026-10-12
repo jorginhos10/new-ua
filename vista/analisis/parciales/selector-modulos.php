@@ -2,8 +2,7 @@
 /**
  * Selector de módulo de la pestaña "Análisis de distribución": tarjeta propia a la izquierda de
  * la tabla (ver vista/analisis/index.php), con una mini-tarjeta por cada origen con techo (Gasto,
- * Extensión, Postgrado, Unisalud, Monitores, ARL — Sin Excedentes excluido a propósito, ver plan
- * el-techo-no-deberia-kind-candle: ese módulo está descontinuado). Clic en una mini-tarjeta
+ * Extensión, Postgrado, Unisalud, Monitores, ARL). Clic en una mini-tarjeta
  * recarga la pestaña con ese origen activo.
  *
  * Cada tarjeta muestra el total (sin decimales; el valor exacto va en el title), arriba a la

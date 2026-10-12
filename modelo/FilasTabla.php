@@ -2,7 +2,7 @@
 
 /**
  * Filas de las tablas de Análisis y de Peticiones (detalle por tipo) como datos, para que
- * publico/js/tabla-real.js dibuje solo las visibles. Antes el servidor escribía cada <tr> en el HTML
+ * publico/js/tabla-real/tabla.js dibuje solo las visibles. Antes el servidor escribía cada <tr> en el HTML
  * (miles de nodos); ahora entrega un JSON con el mismo contenido: cada celda es el texto que se
  * mostraba, sin HTML (las celdas nunca tuvieron markup).
  */

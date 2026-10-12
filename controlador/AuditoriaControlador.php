@@ -9,7 +9,7 @@ require_once __DIR__ . '/../modelo/Dependencia.php';
  * cae en el árbol de dependencias del superadmin, sin exigir que cada ítem esté dirigido
  * exactamente a él (rol+dependencia+usuario). Ver $_SESSION['modo_auditoria'], leído por
  * GastoControlador/ExtensionControlador/PostgradoControlador/UnisaludControlador/
- * SinExcedentesControlador/PerfilProyectosControlador/SolicitudControlador/PeticionesControlador.
+ * PerfilProyectosControlador/SolicitudControlador/PeticionesControlador.
  */
 class AuditoriaControlador
 {

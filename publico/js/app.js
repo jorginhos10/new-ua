@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var campoObjetoProyecto = document.getElementById('objeto_proyecto_paa');
     var campoActividad = document.getElementById('actividad');
     var formularioGasto = campoProyectoId ? campoProyectoId.closest('form') : null;
-    var rutasConRecordado = ['gastos', 'extension', 'sin-excedentes', 'unisalud', 'postgrado'];
+    var rutasConRecordado = ['gastos', 'extension', 'unisalud', 'postgrado'];
     var ruta = new URLSearchParams(window.location.search).get('ruta') || '';
 
     if (formularioGasto && rutasConRecordado.indexOf(ruta) !== -1) {
@@ -660,7 +660,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
-['extension', 'postgrado', 'sin-excedentes', 'unisalud', 'perfil-proyectos'].forEach(function (moduloAutogestion) {
+['extension', 'postgrado', 'unisalud', 'perfil-proyectos'].forEach(function (moduloAutogestion) {
     document.addEventListener('DOMContentLoaded', function () {
         var modal = document.getElementById('modal-enviar-todo-' + moduloAutogestion);
         var botonAbrir = document.getElementById('boton-abrir-modal-enviar-todo-' + moduloAutogestion);
@@ -698,7 +698,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
-['extension', 'postgrado', 'unisalud', 'sin-excedentes', 'gastos'].forEach(function (moduloAutogestion) {
+['extension', 'postgrado', 'unisalud', 'gastos'].forEach(function (moduloAutogestion) {
     document.addEventListener('DOMContentLoaded', function () {
         var botonImportar = document.getElementById('boton-importar-' + moduloAutogestion);
         var inputArchivo = document.getElementById('input-importar-' + moduloAutogestion);
@@ -3556,7 +3556,7 @@ document.addEventListener('DOMContentLoaded', function () {
 // Filtro de texto simple para las tarjetas agrupadas de Archivados/Enviadas: cada fila ya trae su
 // propio data-texto-filtro (tipo+dependencia+remitente[+estado], en minúsculas); escribir en el
 // campo de búsqueda oculta las filas que no lo contengan. No reemplaza el motor pesado de
-// tabla-real.js (pensado para una grilla plana de cientos de filas) — esto es solo para las pocas
+// publico/js/tabla-real/ (pensado para una grilla plana de cientos de filas) — esto es solo para las pocas
 // tarjetas ya agrupadas de estas dos pestañas.
 document.addEventListener('DOMContentLoaded', function () {
     [

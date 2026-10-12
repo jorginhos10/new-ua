@@ -9,11 +9,9 @@ require_once __DIR__ . '/../modelo/CategoriaGasto.php';
 require_once __DIR__ . '/../modelo/GastoExtension.php';
 require_once __DIR__ . '/../modelo/GastoPostgrado.php';
 require_once __DIR__ . '/../modelo/GastoUnisalud.php';
-require_once __DIR__ . '/../modelo/GastoSinExcedentes.php';
 require_once __DIR__ . '/../modelo/IngresoExtension.php';
 require_once __DIR__ . '/../modelo/IngresoPostgrado.php';
 require_once __DIR__ . '/../modelo/IngresoUnisalud.php';
-require_once __DIR__ . '/../modelo/IngresoSinExcedentes.php';
 require_once __DIR__ . '/../modelo/Necesidad.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/PeticionArchivada.php';
@@ -44,11 +42,9 @@ class PeticionesControlador
     private GastoExtension $modeloGastoExtension;
     private GastoPostgrado $modeloGastoPostgrado;
     private GastoUnisalud $modeloGastoUnisalud;
-    private GastoSinExcedentes $modeloGastoSinExcedentes;
     private IngresoExtension $modeloIngresoExtension;
     private IngresoPostgrado $modeloIngresoPostgrado;
     private IngresoUnisalud $modeloIngresoUnisalud;
-    private IngresoSinExcedentes $modeloIngresoSinExcedentes;
     private Necesidad $modeloNecesidad;
     private AnioPresupuestal $modeloAnio;
     private PeticionArchivada $modeloArchivada;
@@ -86,13 +82,13 @@ class PeticionesControlador
 
     private const VISTAS = ['pendientes', 'consolidado', 'archivar', 'enviadas'];
 
-    private const ORIGENES_GASTO = ['gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes'];
+    private const ORIGENES_GASTO = ['gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud'];
 
-    private const ORIGENES_AUTOGESTION = ['gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes', 'necesidad'];
+    private const ORIGENES_AUTOGESTION = ['gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'necesidad'];
 
     /**
-     * Pares gasto/ingreso de un mismo módulo de Autogestión (Extensión/Postgrado/Unisalud/
-     * Convenios) — el landing de "Ver" (tipoDetalle()) los muestra en pestañas Egresos/Ingresos
+     * Pares gasto/ingreso de un mismo módulo de Autogestión (Extensión/Postgrado/Unisalud)
+     * — el landing de "Ver" (tipoDetalle()) los muestra en pestañas Egresos/Ingresos
      * dentro de una sola página, igual que ya hace el módulo real (ej. index.php?ruta=extension&
      * tab=egresos|ingresos), en vez de ser dos orígenes sin relación entre sí.
      */
@@ -100,7 +96,6 @@ class PeticionesControlador
         'gasto_extension' => 'ingreso_extension',
         'gasto_postgrado' => 'ingreso_postgrado',
         'gasto_unisalud' => 'ingreso_unisalud',
-        'gasto_sin_excedentes' => 'ingreso_sin_excedentes',
     ];
 
     private const TABLAS_ORIGEN = [
@@ -113,18 +108,15 @@ class PeticionesControlador
         'gasto_extension' => 'gastos_extension',
         'gasto_postgrado' => 'gastos_postgrado',
         'gasto_unisalud' => 'gastos_unisalud',
-        'gasto_sin_excedentes' => 'gastos_sin_excedentes',
         'ingreso_extension' => 'ingresos_extension',
         'ingreso_postgrado' => 'ingresos_postgrado',
         'ingreso_unisalud' => 'ingresos_unisalud',
-        'ingreso_sin_excedentes' => 'ingresos_sin_excedentes',
     ];
 
     private const TABLAS_CONCEPTOS_ORIGEN = [
         'ingreso_extension' => ['ingresos_extension_conceptos', 'ingreso_id'],
         'ingreso_postgrado' => ['ingresos_postgrado_conceptos', 'ingreso_id'],
         'ingreso_unisalud' => ['ingresos_unisalud_conceptos', 'ingreso_id'],
-        'ingreso_sin_excedentes' => ['ingresos_sin_excedentes_conceptos', 'ingreso_id'],
     ];
 
     public function __construct()
@@ -138,11 +130,9 @@ class PeticionesControlador
         $this->modeloGastoExtension = new GastoExtension();
         $this->modeloGastoPostgrado = new GastoPostgrado();
         $this->modeloGastoUnisalud = new GastoUnisalud();
-        $this->modeloGastoSinExcedentes = new GastoSinExcedentes();
         $this->modeloIngresoExtension = new IngresoExtension();
         $this->modeloIngresoPostgrado = new IngresoPostgrado();
         $this->modeloIngresoUnisalud = new IngresoUnisalud();
-        $this->modeloIngresoSinExcedentes = new IngresoSinExcedentes();
         $this->modeloNecesidad = new Necesidad();
         $this->modeloAnio = new AnioPresupuestal();
         $this->modeloArchivada = new PeticionArchivada();
@@ -452,11 +442,9 @@ class PeticionesControlador
             'gasto_extension' => $this->modeloGastoExtension,
             'gasto_postgrado' => $this->modeloGastoPostgrado,
             'gasto_unisalud' => $this->modeloGastoUnisalud,
-            'gasto_sin_excedentes' => $this->modeloGastoSinExcedentes,
             'ingreso_extension' => $this->modeloIngresoExtension,
             'ingreso_postgrado' => $this->modeloIngresoPostgrado,
             'ingreso_unisalud' => $this->modeloIngresoUnisalud,
-            'ingreso_sin_excedentes' => $this->modeloIngresoSinExcedentes,
             default => null,
         };
     }
@@ -650,9 +638,9 @@ class PeticionesControlador
         $etiquetasOrigen = [
             'arl' => 'ARL', 'monitores' => 'Monitores', 'ops' => 'OPS', 'otros' => 'Petición',
             'necesidad' => 'Perfil de proyectos', 'gasto_principal' => 'Gasto', 'gasto_extension' => 'Extensión',
-            'gasto_postgrado' => 'Postgrado', 'gasto_unisalud' => 'Unisalud', 'gasto_sin_excedentes' => 'Convenios',
+            'gasto_postgrado' => 'Postgrado', 'gasto_unisalud' => 'Unisalud',
             'ingreso_extension' => 'Ingreso Extensión', 'ingreso_postgrado' => 'Ingreso Postgrado',
-            'ingreso_unisalud' => 'Ingreso Unisalud', 'ingreso_sin_excedentes' => 'Ingreso Convenios',
+            'ingreso_unisalud' => 'Ingreso Unisalud',
         ];
         $tituloPagina = ($filasCompletas[0]['tipo'] ?? $etiquetasOrigen[$origen] ?? $origen) . ' — ' . ($etiquetasEstado[$estado] ?? $estado);
         if ($dependenciaFiltro !== '') {
@@ -731,7 +719,7 @@ class PeticionesControlador
 
             // Gasto principal: la categoría de gasto (36 subcategorías de actividad) es su propia
             // columna, con nombre distinto a la "Categoría" de Autogestión (Costos/Inversión/
-            // Excedentes). tabla-real.js la usa como dimensión de la gráfica.
+            // Excedentes). tabla-real/graficos.js la usa como dimensión de la gráfica.
             if ($origen === 'gasto_principal') {
                 $columnas[] = 'Categoría de gasto';
                 $claves[] = 'categoria_gasto';
@@ -774,7 +762,7 @@ class PeticionesControlador
                 'puede_editar' => $this->esPropietarioActualDeItem($item) || $this->esSuperAdminRaiz(),
             ];
 
-            if (in_array($origen, ['ingreso_extension', 'ingreso_postgrado', 'ingreso_unisalud', 'ingreso_sin_excedentes'], true)) {
+            if (in_array($origen, ['ingreso_extension', 'ingreso_postgrado', 'ingreso_unisalud'], true)) {
                 $fila['dependencia'] = $registro['dependencia'] ?? '—';
                 $fila['concepto_adicional'] = $registro['concepto_adicional'] !== '' ? ($registro['concepto_adicional'] ?? '—') : '—';
                 $fila['valor_adicional'] = isset($registro['valor_adicional']) ? (float) $registro['valor_adicional'] : null;
@@ -846,7 +834,7 @@ class PeticionesControlador
             ],
             'monitores' => [
                 // "N° de monitores" (no "Total" a secas): un "Total" junto a "Valor" hacía que
-                // tabla-real.js (obtenerIndiceValorTdt(), que prioriza cualquier columna llamada
+                // tabla-real/graficos.js (obtenerIndiceValorTdt(), que prioriza cualquier columna llamada
                 // exactamente "Total") tomara la CANTIDAD de monitores como si fuera dinero, y
                 // "Valor" (el monto real) nunca se usaba en las gráficas.
                 'columnas' => ['Dependencia', 'Tipo', 'Semestre I', 'Semestre II', 'N° de monitores', 'Valor'],
@@ -866,7 +854,7 @@ class PeticionesControlador
             ],
         ];
 
-        $familia = in_array($origen, ['ingreso_extension', 'ingreso_postgrado', 'ingreso_unisalud', 'ingreso_sin_excedentes'], true) ? 'ingreso' : $origen;
+        $familia = in_array($origen, ['ingreso_extension', 'ingreso_postgrado', 'ingreso_unisalud'], true) ? 'ingreso' : $origen;
         $definicion = $definiciones[$familia] ?? ['columnas' => [], 'claves' => []];
 
         return [
@@ -914,7 +902,7 @@ class PeticionesControlador
 
     /**
      * Landing aparte (para cualquier dependencia, no solo el superadmin) con lo aceptado en
-     * autogestión (Extensión, Postgrado, Unisalud, Convenios) y Perfil de proyectos, dentro
+     * autogestión (Extensión, Postgrado, Unisalud) y Perfil de proyectos, dentro
      * de la propia jerarquía del usuario (él mismo + hijas + nietas + demás descendientes) — sin el
      * nivel de consolidación institucional que tiene el administrador (no agrupa por tipo, no
      * permite aprobar/redireccionar, solo muestra cómo quedó distribuido lo aceptado).
@@ -1168,11 +1156,9 @@ class PeticionesControlador
             'gasto_extension' => [$this->modeloGastoExtension, 'dependencia'],
             'gasto_postgrado' => [$this->modeloGastoPostgrado, 'dependencia'],
             'gasto_unisalud' => [$this->modeloGastoUnisalud, 'dependencia'],
-            'gasto_sin_excedentes' => [$this->modeloGastoSinExcedentes, 'dependencia'],
             'ingreso_extension' => [$this->modeloIngresoExtension, 'dependencia'],
             'ingreso_postgrado' => [$this->modeloIngresoPostgrado, 'dependencia'],
             'ingreso_unisalud' => [$this->modeloIngresoUnisalud, 'dependencia'],
-            'ingreso_sin_excedentes' => [$this->modeloIngresoSinExcedentes, 'dependencia'],
             'necesidad' => [$this->modeloNecesidad, 'dependencia'],
             'arl' => [$this->modeloSolicitud, 'facultad'],
             'monitores' => [$this->modeloMonitor, 'dependencia'],
@@ -1407,7 +1393,6 @@ class PeticionesControlador
             ['modelo' => $this->modeloGastoExtension, 'origen' => 'gasto_extension', 'tipo' => 'Extensión', 'ruta' => 'index.php?ruta=extension', 'metodo' => 'obtenerPorAnio'],
             ['modelo' => $this->modeloGastoPostgrado, 'origen' => 'gasto_postgrado', 'tipo' => 'Postgrado', 'ruta' => 'index.php?ruta=postgrado', 'metodo' => 'obtenerPorAnio'],
             ['modelo' => $this->modeloGastoUnisalud, 'origen' => 'gasto_unisalud', 'tipo' => 'Unisalud', 'ruta' => 'index.php?ruta=unisalud', 'metodo' => 'obtenerPorAnio'],
-            ['modelo' => $this->modeloGastoSinExcedentes, 'origen' => 'gasto_sin_excedentes', 'tipo' => 'Convenios', 'ruta' => 'index.php?ruta=sin-excedentes', 'metodo' => 'obtenerPorAnio'],
         ];
 
         foreach ($mapaGastos as $fuente) {
@@ -1433,7 +1418,6 @@ class PeticionesControlador
             ['modelo' => $this->modeloIngresoExtension, 'origen' => 'ingreso_extension', 'tipo' => 'Ingreso Extensión', 'ruta' => 'index.php?ruta=extension'],
             ['modelo' => $this->modeloIngresoPostgrado, 'origen' => 'ingreso_postgrado', 'tipo' => 'Ingreso Postgrado', 'ruta' => 'index.php?ruta=postgrado'],
             ['modelo' => $this->modeloIngresoUnisalud, 'origen' => 'ingreso_unisalud', 'tipo' => 'Ingreso Unisalud', 'ruta' => 'index.php?ruta=unisalud'],
-            ['modelo' => $this->modeloIngresoSinExcedentes, 'origen' => 'ingreso_sin_excedentes', 'tipo' => 'Ingreso Convenios', 'ruta' => 'index.php?ruta=sin-excedentes'],
         ];
 
         foreach ($mapaIngresos as $fuente) {
@@ -1473,7 +1457,6 @@ class PeticionesControlador
             'gasto_extension' => $this->modeloGastoExtension,
             'gasto_postgrado' => $this->modeloGastoPostgrado,
             'gasto_unisalud' => $this->modeloGastoUnisalud,
-            'gasto_sin_excedentes' => $this->modeloGastoSinExcedentes,
         ];
 
         $filas = [];
@@ -1667,11 +1650,9 @@ class PeticionesControlador
             'gasto_extension' => $this->modeloGastoExtension,
             'gasto_postgrado' => $this->modeloGastoPostgrado,
             'gasto_unisalud' => $this->modeloGastoUnisalud,
-            'gasto_sin_excedentes' => $this->modeloGastoSinExcedentes,
             'ingreso_extension' => $this->modeloIngresoExtension,
             'ingreso_postgrado' => $this->modeloIngresoPostgrado,
             'ingreso_unisalud' => $this->modeloIngresoUnisalud,
-            'ingreso_sin_excedentes' => $this->modeloIngresoSinExcedentes,
         ];
 
         $modelo = $modelosPorOrigen[$origen] ?? null;
@@ -1701,11 +1682,9 @@ class PeticionesControlador
             'gasto_extension' => 'dependencia_destino',
             'gasto_postgrado' => 'dependencia_destino',
             'gasto_unisalud' => 'dependencia_destino',
-            'gasto_sin_excedentes' => 'dependencia_destino',
             'ingreso_extension' => 'dependencia_destino',
             'ingreso_postgrado' => 'dependencia_destino',
             'ingreso_unisalud' => 'dependencia_destino',
-            'ingreso_sin_excedentes' => 'dependencia_destino',
         ];
 
         if (!isset($camposDependenciaPorOrigen[$item['origen']])) {
@@ -1860,8 +1839,8 @@ class PeticionesControlador
      * quedan visibles).
      */
     private const ORIGENES_CON_DEPENDENCIA_DESTINO = [
-        'gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes',
-        'ingreso_extension', 'ingreso_postgrado', 'ingreso_unisalud', 'ingreso_sin_excedentes', 'necesidad',
+        'gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud',
+        'ingreso_extension', 'ingreso_postgrado', 'ingreso_unisalud', 'necesidad',
     ];
 
     /**
@@ -2741,11 +2720,9 @@ class PeticionesControlador
             'gasto_extension' => 'index.php?ruta=extension',
             'gasto_postgrado' => 'index.php?ruta=postgrado',
             'gasto_unisalud' => 'index.php?ruta=unisalud',
-            'gasto_sin_excedentes' => 'index.php?ruta=sin-excedentes',
             'ingreso_extension' => 'index.php?ruta=extension',
             'ingreso_postgrado' => 'index.php?ruta=postgrado',
             'ingreso_unisalud' => 'index.php?ruta=unisalud',
-            'ingreso_sin_excedentes' => 'index.php?ruta=sin-excedentes',
         ];
 
         return $mapa[$origen] ?? 'index.php?ruta=peticiones';
@@ -2753,7 +2730,7 @@ class PeticionesControlador
 
     /**
      * URL al formulario de edición REAL del módulo dueño de este origen (mismo `?editar_id=` que
-     * ya usa cada controlador real: Gasto, Extensión, Postgrado, Unisalud, Convenios, Solicitudes,
+     * ya usa cada controlador real: Gasto, Extensión, Postgrado, Unisalud, Solicitudes,
      * Perfil de proyectos) — no una edición in-place de celdas. `$rutaVolver` deja el botón "Volver"
      * de ese formulario apuntando de regreso a este mismo landing (tipo-detalle), no al índice
      * plano del módulo.
@@ -2770,8 +2747,6 @@ class PeticionesControlador
             'ingreso_postgrado' => 'index.php?ruta=postgrado&editar_id=' . $origenId . '&tab=ingresos' . $volver,
             'gasto_unisalud' => 'index.php?ruta=unisalud&editar_id=' . $origenId . '&tab=egresos' . $volver,
             'ingreso_unisalud' => 'index.php?ruta=unisalud&editar_id=' . $origenId . '&tab=ingresos' . $volver,
-            'gasto_sin_excedentes' => 'index.php?ruta=sin-excedentes&editar_id=' . $origenId . '&tab=egresos' . $volver,
-            'ingreso_sin_excedentes' => 'index.php?ruta=sin-excedentes&editar_id=' . $origenId . '&tab=ingresos' . $volver,
             'arl' => 'index.php?ruta=solicitudes&editar_id=' . $origenId . '&tipo_solicitud=arl&tab=arl' . $volver,
             'monitores' => 'index.php?ruta=solicitudes&editar_id=' . $origenId . '&tipo_solicitud=monitores&tab=monitores' . $volver,
             'ops' => 'index.php?ruta=solicitudes&editar_id=' . $origenId . '&tipo_solicitud=ops&tab=ops' . $volver,
@@ -2860,11 +2835,9 @@ class PeticionesControlador
             'gasto_extension' => $this->modeloGastoExtension->eliminar($origenId),
             'gasto_postgrado' => $this->modeloGastoPostgrado->eliminar($origenId),
             'gasto_unisalud' => $this->modeloGastoUnisalud->eliminar($origenId),
-            'gasto_sin_excedentes' => $this->modeloGastoSinExcedentes->eliminar($origenId),
             'ingreso_extension' => $this->modeloIngresoExtension->eliminar($origenId),
             'ingreso_postgrado' => $this->modeloIngresoPostgrado->eliminar($origenId),
             'ingreso_unisalud' => $this->modeloIngresoUnisalud->eliminar($origenId),
-            'ingreso_sin_excedentes' => $this->modeloIngresoSinExcedentes->eliminar($origenId),
             'necesidad' => $this->modeloNecesidad->eliminar($origenId),
             default => false,
         };
@@ -2935,11 +2908,9 @@ class PeticionesControlador
             'gasto_extension' => $this->modeloGastoExtension->devolverABorrador($origenId),
             'gasto_postgrado' => $this->modeloGastoPostgrado->devolverABorrador($origenId),
             'gasto_unisalud' => $this->modeloGastoUnisalud->devolverABorrador($origenId),
-            'gasto_sin_excedentes' => $this->modeloGastoSinExcedentes->devolverABorrador($origenId),
             'ingreso_extension' => $this->modeloIngresoExtension->devolverABorrador($origenId),
             'ingreso_postgrado' => $this->modeloIngresoPostgrado->devolverABorrador($origenId),
             'ingreso_unisalud' => $this->modeloIngresoUnisalud->devolverABorrador($origenId),
-            'ingreso_sin_excedentes' => $this->modeloIngresoSinExcedentes->devolverABorrador($origenId),
             'necesidad' => $this->modeloNecesidad->devolverABorrador($origenId),
             default => false,
         };
@@ -3309,13 +3280,6 @@ class PeticionesControlador
             }
         }
 
-        foreach ($this->modeloGastoSinExcedentes->obtenerPorAnio($anioPresupuestalId) as $fila) {
-            $filaGasto = $this->filaGasto('gasto_sin_excedentes', $fila, 'Convenios', 'index.php?ruta=sin-excedentes', $this->construirRutaVer('gasto_sin_excedentes', (int) $fila['id'], 'pendiente') . $volver);
-            if ($filaGasto !== null) {
-                $pendientesGasto[] = $filaGasto;
-            }
-        }
-
         foreach ($this->modeloIngresoExtension->obtenerPorAnio($anioPresupuestalId) as $fila) {
             $tipo = !empty($fila['autogestion_nombre']) ? ucfirst($fila['autogestion_nombre']) . ' (ingreso)' : 'Ingreso Extensión';
             $filaIngreso = $this->filaIngreso('ingreso_extension', $fila, $tipo, 'index.php?ruta=extension', $this->construirRutaVer('ingreso_extension', (int) $fila['id'], 'pendiente') . $volver);
@@ -3333,13 +3297,6 @@ class PeticionesControlador
 
         foreach ($this->modeloIngresoUnisalud->obtenerPorAnio($anioPresupuestalId) as $fila) {
             $filaIngreso = $this->filaIngreso('ingreso_unisalud', $fila, 'Ingreso Unisalud', 'index.php?ruta=unisalud', $this->construirRutaVer('ingreso_unisalud', (int) $fila['id'], 'pendiente') . $volver);
-            if ($filaIngreso !== null) {
-                $pendientesGasto[] = $filaIngreso;
-            }
-        }
-
-        foreach ($this->modeloIngresoSinExcedentes->obtenerPorAnio($anioPresupuestalId) as $fila) {
-            $filaIngreso = $this->filaIngreso('ingreso_sin_excedentes', $fila, 'Ingreso Convenios', 'index.php?ruta=sin-excedentes', $this->construirRutaVer('ingreso_sin_excedentes', (int) $fila['id'], 'pendiente') . $volver);
             if ($filaIngreso !== null) {
                 $pendientesGasto[] = $filaIngreso;
             }
@@ -3596,11 +3553,9 @@ class PeticionesControlador
             ['modelo' => $this->modeloGastoExtension, 'origen' => 'gasto_extension', 'tipo' => 'Extensión', 'metodo' => 'obtenerPorAnio'],
             ['modelo' => $this->modeloGastoPostgrado, 'origen' => 'gasto_postgrado', 'tipo' => 'Postgrado', 'metodo' => 'obtenerPorAnio'],
             ['modelo' => $this->modeloGastoUnisalud, 'origen' => 'gasto_unisalud', 'tipo' => 'Unisalud', 'metodo' => 'obtenerPorAnio'],
-            ['modelo' => $this->modeloGastoSinExcedentes, 'origen' => 'gasto_sin_excedentes', 'tipo' => 'Convenios', 'metodo' => 'obtenerPorAnio'],
             ['modelo' => $this->modeloIngresoExtension, 'origen' => 'ingreso_extension', 'tipo' => 'Ingreso Extensión', 'metodo' => 'obtenerPorAnio'],
             ['modelo' => $this->modeloIngresoPostgrado, 'origen' => 'ingreso_postgrado', 'tipo' => 'Ingreso Postgrado', 'metodo' => 'obtenerPorAnio'],
             ['modelo' => $this->modeloIngresoUnisalud, 'origen' => 'ingreso_unisalud', 'tipo' => 'Ingreso Unisalud', 'metodo' => 'obtenerPorAnio'],
-            ['modelo' => $this->modeloIngresoSinExcedentes, 'origen' => 'ingreso_sin_excedentes', 'tipo' => 'Ingreso Convenios', 'metodo' => 'obtenerPorAnio'],
         ];
 
         foreach ($mapaGasto as $fuente) {

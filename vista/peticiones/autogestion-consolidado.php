@@ -13,11 +13,11 @@ require __DIR__ . '/../parciales/encabezado.php';
             <div>
                 <h1>
                     Autogestión y perfil de proyectos
-                    <?php /* Lo ya aceptado en Extensión, Postgrado, Unisalud, Convenios y Perfil de
+                    <?php /* Lo ya aceptado en Extensión, Postgrado, Unisalud y Perfil de
                              proyectos dentro de la propia dependencia y todas las que reportan a
                              ella (hijas, nietas y demás niveles) — sin el nivel de consolidación
                              institucional que tiene el administrador. */ ?>
-                    <span class="icono-info" tabindex="0" title="Lo ya aceptado en Extensión, Postgrado, Unisalud, Convenios y Perfil de proyectos dentro de tu propia dependencia y todas las que reportan a ella (hijas, nietas y demás niveles) — sin el nivel de consolidación institucional que tiene el administrador.">
+                    <span class="icono-info" tabindex="0" title="Lo ya aceptado en Extensión, Postgrado, Unisalud y Perfil de proyectos dentro de tu propia dependencia y todas las que reportan a ella (hijas, nietas y demás niveles) — sin el nivel de consolidación institucional que tiene el administrador.">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                     </span>
                 </h1>

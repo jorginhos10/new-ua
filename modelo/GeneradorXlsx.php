@@ -772,7 +772,7 @@ class GeneradorXlsx
      *        % de Excedentes/Gastos/Inversiones) y se agrega un desplegable ($C$1, en ambas hojas
      *        visibles) para elegir el ítem cuyo % se valida — el bloque de validación usa
      *        INDEX/MATCH sobre esa tabla y SUMIF/SUMIFS filtrando por ese ítem. Si es null (Unisalud,
-     *        Convenios/SinExcedentes, donde el % es único por módulo), se mantiene el comportamiento
+     *        donde el % es único por módulo), se mantiene el comportamiento
      *        anterior: una sola fila por categoría, sin desplegable ni filtro por ítem.
      */
     public static function descargarPlantillaAutogestion(

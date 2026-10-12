@@ -314,3 +314,19 @@ ALTER TABLE motores ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT
 ALTER TABLE proyectos ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER motor_id;
 ALTER TABLE estamentos ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER nombre;
 ALTER TABLE sedes ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER nombre;
+
+-- 11) Eliminar el módulo "Sin excedentes" (Convenios): el código ya no lo usa (sin rutas, menú,
+--    Peticiones, lotes ni Presupuesto final). IRREVERSIBLE: borra sus gastos/ingresos y todo
+--    rastro en menús, porcentajes, historial, archivadas y lotes. Unisalud no se toca.
+DELETE FROM envios_lote WHERE origen IN ('gasto_sin_excedentes', 'ingreso_sin_excedentes');
+DELETE FROM peticiones_archivadas WHERE origen IN ('gasto_sin_excedentes', 'ingreso_sin_excedentes');
+DELETE FROM peticiones_historial WHERE origen IN ('gasto_sin_excedentes', 'ingreso_sin_excedentes');
+DELETE FROM autogestion_porcentajes WHERE modulo = 'sin-excedentes';
+DELETE FROM autogestion_automatico_definiciones WHERE modulo = 'sin-excedentes';
+DELETE FROM autogestion_automatico_permisos WHERE modulo = 'sin-excedentes';
+DELETE FROM autogestion_items WHERE modulo = 'sin-excedentes';
+DELETE FROM tipo_dependencia_menu WHERE menu_key = 'sin-excedentes';
+DELETE FROM usuario_menu WHERE menu_key = 'sin-excedentes';
+DROP TABLE IF EXISTS gastos_sin_excedentes;
+DROP TABLE IF EXISTS ingresos_sin_excedentes_conceptos;
+DROP TABLE IF EXISTS ingresos_sin_excedentes;

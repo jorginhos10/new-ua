@@ -1,497 +1,25 @@
-// Landing único de "Ver" en Peticiones (peticiones-tipo-detalle): mecánica portada literalmente
-// del prototipo "Dev > Tabla" (vista/dev/pruebas/tabla.php) — buscar, filtrar por columna, ordenar,
-// ocultar/redimensionar columnas, vista de gráfica — generalizada para cualquier origen/estado, con
-// Editar/Eliminar reales (POST al mismo controlador) en vez del demo en memoria del prototipo.
-document.addEventListener('DOMContentLoaded', function () {
-    var tabla = document.querySelector('.tabla-dev-datos[data-origen]');
+// Vista Gráficos de la tabla real: paneles de barras,
+// torta y línea (PAC), indicadores, paginador de tarjetas y filtro por clic en una barra. Filas,
+// filtros y conmutador de vistas viven en nucleo.js; la tabla en tabla.js.
+TablaReal.registrarVista('grafica', function (ctx) {
+    var tabla = ctx.tabla;
+    var tdtColumnas = ctx.columnas;
+    var namespace = ctx.namespace;
+    var parseNumeroCeldaTdt = ctx.parseNumeroCeldaTdt;
+    var formatoMonedaTdt = ctx.formatoMonedaTdt;
+    var indiceColumnaTdt = ctx.indiceColumnaTdt;
+    var columnaVisibleTdt = ctx.columnaVisibleTdt;
+    var filasVisiblesParaGrafica = ctx.filasVisiblesParaGrafica;
 
-    if (!tabla) {
-        return;
+    function vistaGraficaActiva() {
+        return ctx.vistaActiva() === 'grafica';
     }
-
-    var namespace = (typeof tdtNamespace !== 'undefined' && tdtNamespace) ? tdtNamespace : 'default';
-    var claveAnchos = 'peticiones_tabla_anchos_' + namespace;
-    var claveOcultas = 'peticiones_tabla_ocultas_' + namespace;
-
-    var cuerpo = tabla.querySelector('tbody');
-    var contenedorScroll = tabla.closest('.tabla-scroll');
-    var numeroColumnas = tabla.querySelectorAll('thead tr.fila-encabezados th').length || 1;
-
-    // --- Filas: llegan como JSON (#tdt-filas) y cada <tr> se crea fuera del DOM. Solo se adjuntan al
-    // <tbody> las filas de la ventana visible (renderizarVentana()). Filtros, orden, selección y totales
-    // trabajan con el arreglo completo, así que siguen viendo todas las filas. ---
-    var filasOriginales = construirFilasDesdeDatos();
-    var filasEnOrden = filasOriginales.slice();
-    var ALTURA_FILA = 36;
-    var ALTURA_MEDIDA = false;
-    var MARGEN_FILAS = 15;
-    var pendienteRender = false;
-
-    function construirFilasDesdeDatos() {
-        var islaDatos = document.getElementById('tdt-filas');
-        var datos = [];
-        if (islaDatos) {
-            try { datos = JSON.parse(islaDatos.textContent || '[]'); } catch (e) { datos = []; }
-        }
-
-        return datos.map(function (dato) {
-            var fila = document.createElement('tr');
-            fila.dataset.origenId = dato.id;
-            fila.dataset.rutaEditar = dato.editar;
-            fila.dataset.puedeEditar = dato.puede ? '1' : '0';
-            if (dato.resaltada) { fila.classList.add('fila-resaltada'); }
-
-            var celdaSeleccion = document.createElement('td');
-            celdaSeleccion.className = 'col-seleccion';
-            var casilla = document.createElement('input');
-            casilla.type = 'checkbox';
-            casilla.className = 'tabla-seleccion-fila';
-            celdaSeleccion.appendChild(casilla);
-            fila.appendChild(celdaSeleccion);
-
-            dato.celdas.forEach(function (texto) {
-                var celda = document.createElement('td');
-                celda.textContent = texto;
-                fila.appendChild(celda);
-            });
-
-            return fila;
-        });
-    }
-
-    function filasVisibles() {
-        return filasEnOrden.filter(function (fila) { return !fila.classList.contains('fila-oculta-filtro'); });
-    }
-
-    function crearEspaciador(alto) {
-        var espaciador = document.createElement('tr');
-        espaciador.className = 'fila-espaciadora';
-        espaciador.setAttribute('aria-hidden', 'true');
-        var celda = document.createElement('td');
-        celda.colSpan = numeroColumnas;
-        celda.style.height = alto + 'px';
-        celda.style.padding = '0';
-        celda.style.border = '0';
-        espaciador.appendChild(celda);
-        return espaciador;
-    }
-
-    // Adjunta al <tbody> solo las filas que caen en la ventana (con margen), y espaciadores para que
-    // la barra de desplazamiento tenga el alto de todas las filas visibles.
-    function renderizarVentana() {
-        var visibles = filasVisibles();
-        var total = visibles.length;
-        var posicionScroll = contenedorScroll ? contenedorScroll.scrollTop : 0;
-        var altoVentana = contenedorScroll ? contenedorScroll.clientHeight : 600;
-        var inicio = Math.max(0, Math.floor(posicionScroll / ALTURA_FILA) - MARGEN_FILAS);
-        var fin = Math.min(total, inicio + Math.ceil(altoVentana / ALTURA_FILA) + 2 * MARGEN_FILAS);
-
-        var nodos = [];
-        if (inicio > 0) { nodos.push(crearEspaciador(inicio * ALTURA_FILA)); }
-        for (var i = inicio; i < fin; i++) { nodos.push(visibles[i]); }
-        if (fin < total) { nodos.push(crearEspaciador((total - fin) * ALTURA_FILA)); }
-
-        cuerpo.replaceChildren.apply(cuerpo, nodos);
-
-        if (!ALTURA_MEDIDA && fin > inicio) {
-            var alturaReal = visibles[inicio].getBoundingClientRect().height;
-            if (alturaReal > 0) {
-                ALTURA_FILA = alturaReal;
-                ALTURA_MEDIDA = true;
-            }
-        }
-    }
-
-    function programarRender() {
-        if (pendienteRender) { return; }
-        pendienteRender = true;
-        requestAnimationFrame(function () {
-            pendienteRender = false;
-            renderizarVentana();
-        });
-    }
-
-    if (contenedorScroll) {
-        contenedorScroll.addEventListener('scroll', programarRender);
-    }
-
-    // --- Combobox propio (buscar/filtrar) ---
-    function crearCombobox(envoltorio, valores, desplegable) {
-        var input = envoltorio.querySelector('.combo-input');
-        var fantasma = envoltorio.querySelector('.combo-fantasma');
-        var tarjeta = envoltorio.querySelector('.combo-tarjeta');
-        var tecleado = document.createElement('span');
-        var sugerenciaSpan = document.createElement('span');
-        tecleado.className = 'combo-fantasma-tecleado';
-        sugerenciaSpan.className = 'combo-fantasma-sugerencia';
-        fantasma.appendChild(tecleado);
-        fantasma.appendChild(sugerenciaSpan);
-
-        function sugerenciaPara(texto) {
-            if (texto === '') {
-                return '';
-            }
-            var textoMin = texto.toLowerCase();
-            var encontrado = valores.find(function (v) {
-                return v.length > texto.length && v.toLowerCase().indexOf(textoMin) === 0;
-            });
-            return encontrado ? encontrado.slice(texto.length) : '';
-        }
-
-        function actualizarFantasma() {
-            tecleado.textContent = input.value;
-            sugerenciaSpan.textContent = sugerenciaPara(input.value);
-        }
-
-        function cerrarTarjeta() {
-            if (tarjeta) {
-                tarjeta.classList.remove('abierta');
-            }
-        }
-
-        function renderTarjeta() {
-            if (!tarjeta) {
-                return;
-            }
-
-            var textoMin = input.value.toLowerCase();
-            var coincidencias = valores.filter(function (v) { return v.toLowerCase().indexOf(textoMin) !== -1; });
-
-            tarjeta.innerHTML = '';
-
-            if (coincidencias.length === 0) {
-                var vacio = document.createElement('div');
-                vacio.className = 'combo-tarjeta-vacio';
-                vacio.textContent = 'Sin coincidencias';
-                tarjeta.appendChild(vacio);
-                return;
-            }
-
-            coincidencias.slice(0, 50).forEach(function (valor) {
-                var item = document.createElement('button');
-                item.type = 'button';
-                item.className = 'combo-tarjeta-item';
-                item.textContent = valor;
-                item.addEventListener('mousedown', function (evento) {
-                    evento.preventDefault();
-                    input.value = valor;
-                    actualizarFantasma();
-                    cerrarTarjeta();
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
-                });
-                tarjeta.appendChild(item);
-            });
-        }
-
-        input.addEventListener('input', function () {
-            actualizarFantasma();
-            if (desplegable && tarjeta) {
-                tarjeta.classList.add('abierta');
-                renderTarjeta();
-            }
-        });
-
-        input.addEventListener('keydown', function (evento) {
-            var sugerencia = sugerenciaSpan.textContent;
-            if (sugerencia && (evento.key === 'Tab' || evento.key === 'ArrowRight') && input.selectionStart === input.value.length) {
-                evento.preventDefault();
-                input.value += sugerencia;
-                actualizarFantasma();
-                input.dispatchEvent(new Event('input', { bubbles: true }));
-            } else if (evento.key === 'Escape') {
-                cerrarTarjeta();
-            }
-        });
-
-        if (desplegable && tarjeta) {
-            input.addEventListener('click', function () { renderTarjeta(); tarjeta.classList.add('abierta'); });
-            input.addEventListener('focus', function () { renderTarjeta(); tarjeta.classList.add('abierta'); });
-            document.addEventListener('click', function (evento) {
-                if (!envoltorio.contains(evento.target)) {
-                    cerrarTarjeta();
-                }
-            });
-        }
-
-        envoltorio.actualizarFantasmaCombo = actualizarFantasma;
-        actualizarFantasma();
-    }
-
-    function valoresUnicosColumna(indice) {
-        var valores = {};
-        filasOriginales.forEach(function (fila) {
-            var celda = fila.children[indice + 1];
-            if (celda && celda.textContent.trim() !== '') {
-                valores[celda.textContent.trim()] = true;
-            }
-        });
-        return Object.keys(valores).sort(function (a, b) { return a.localeCompare(b, 'es'); });
-    }
-
-    tabla.querySelectorAll('.combo-filtro-columna').forEach(function (envoltorio) {
-        crearCombobox(envoltorio, valoresUnicosColumna(parseInt(envoltorio.dataset.indice, 10)), true);
-    });
-
-    var comboBuscar = document.getElementById('tdt-combo-buscar');
-    if (comboBuscar) {
-        var valoresTodos = {};
-        (tdtColumnas || []).forEach(function (c, i) { valoresUnicosColumna(i).forEach(function (v) { valoresTodos[v] = true; }); });
-        crearCombobox(comboBuscar, Object.keys(valoresTodos), false);
-    }
-
-    // --- Redimensionar columnas (ancho persistido por tabla/origen/estado) ---
-    function leerAnchosGuardados() {
-        try { return JSON.parse(localStorage.getItem(claveAnchos) || '{}'); } catch (e) { return {}; }
-    }
-    function guardarAncho(indice, ancho) {
-        try {
-            var anchos = leerAnchosGuardados();
-            anchos[indice] = ancho;
-            localStorage.setItem(claveAnchos, JSON.stringify(anchos));
-        } catch (e) { /* localStorage no disponible */ }
-    }
-
-    function celdasDeColumna(indice) {
-        var celdas = [];
-        var encabezado = tabla.querySelector('.encabezado-columna[data-indice="' + indice + '"]');
-        var filtro = tabla.querySelector('.combo-filtro-columna[data-indice="' + indice + '"]');
-        if (encabezado) { celdas.push(encabezado.closest('th')); }
-        if (filtro) { celdas.push(filtro.closest('th')); }
-        filasOriginales.forEach(function (fila) { celdas.push(fila.children[parseInt(indice, 10) + 1]); });
-        return celdas;
-    }
-
-    function fijarAnchoColumna(indice, anchoPx) {
-        var col = document.getElementById('tdt-col-' + indice);
-        if (col) { col.style.width = anchoPx + 'px'; }
-        celdasDeColumna(indice).forEach(function (celda) {
-            celda.style.width = anchoPx + 'px';
-            celda.style.maxWidth = anchoPx + 'px';
-        });
-    }
-
-    var anchosGuardados = leerAnchosGuardados();
-    Object.keys(anchosGuardados).forEach(function (indice) {
-        fijarAnchoColumna(indice, anchosGuardados[indice]);
-    });
-
-    // --- Ancho de la tabla: si las columnas visibles no llenan el contenedor, reparte el espacio
-    // sobrante entre ellas (proporcional a su ancho) para no dejar zona muerta a la derecha; si no
-    // caben, no toca nada y aparece el scroll horizontal normal de .tabla-scroll. "anchosBase"
-    // guarda el ancho de cada columna ANTES de repartir (el guardado/por defecto), para no ir
-    // agrandándolas de más cada vez que se recalcula (el CSS 'width: 100%' no sirve para esto:
-    // con table-layout fixed los navegadores no liberan el espacio de una columna oculta con
-    // visibility: collapse). ---
-    var anchosBase = {};
-    tabla.querySelectorAll('colgroup col[id^="tdt-col-"]').forEach(function (col) {
-        var indice = col.id.replace('tdt-col-', '');
-        anchosBase[indice] = parseInt(anchosGuardados[indice], 10) || parseInt(col.style.width, 10) || 90;
-    });
-    var anchoColSeleccion = 34;
-
-    function ajustarAnchoTabla() {
-        if (!contenedorScroll) { return; }
-        var indicesVisibles = Object.keys(anchosBase).filter(function (indice) {
-            var col = document.getElementById('tdt-col-' + indice);
-            return col && col.style.visibility !== 'collapse';
-        });
-        var sumaBase = indicesVisibles.reduce(function (total, indice) { return total + anchosBase[indice]; }, 0);
-        if (sumaBase === 0) { return; }
-        var disponible = contenedorScroll.clientWidth - anchoColSeleccion;
-        var factor = disponible > sumaBase ? disponible / sumaBase : 1;
-        indicesVisibles.forEach(function (indice) {
-            fijarAnchoColumna(indice, Math.round(anchosBase[indice] * factor));
-        });
-    }
-    window.addEventListener('resize', ajustarAnchoTabla);
-
-    tabla.querySelectorAll('.redimensionador-columna').forEach(function (manija) {
-        var col = document.getElementById('tdt-col-' + manija.dataset.indice);
-        if (!col) { return; }
-
-        manija.addEventListener('mousedown', function (evento) {
-            evento.preventDefault();
-            var xInicial = evento.clientX;
-            var anchoInicial = col.getBoundingClientRect().width;
-            manija.classList.add('redimensionando');
-            document.body.classList.add('tabla-redimensionando-cursor');
-            var anchoFinal = anchoInicial;
-
-            function mover(eventoMover) {
-                anchoFinal = Math.max(40, Math.round(anchoInicial + (eventoMover.clientX - xInicial)));
-                fijarAnchoColumna(manija.dataset.indice, anchoFinal);
-            }
-            function soltar() {
-                manija.classList.remove('redimensionando');
-                document.body.classList.remove('tabla-redimensionando-cursor');
-                document.removeEventListener('mousemove', mover);
-                document.removeEventListener('mouseup', soltar);
-                guardarAncho(manija.dataset.indice, anchoFinal);
-                anchosBase[manija.dataset.indice] = anchoFinal;
-                ajustarAnchoTabla();
-            }
-            document.addEventListener('mousemove', mover);
-            document.addEventListener('mouseup', soltar);
-        });
-    });
-
-    // --- Ocultar/mostrar columnas ---
-    function leerOcultasGuardadas() {
-        try { return JSON.parse(localStorage.getItem(claveOcultas) || '[]'); } catch (e) { return []; }
-    }
-    function guardarOcultas(indices) {
-        try { localStorage.setItem(claveOcultas, JSON.stringify(indices)); } catch (e) { /* no disponible */ }
-    }
-
-    var botonColumnas = document.getElementById('tdt-boton-columnas');
-    var tarjetaColumnas = document.getElementById('tdt-columnas-tarjeta');
-
-    if (botonColumnas && tarjetaColumnas) {
-        var casillasColumnas = tarjetaColumnas.querySelectorAll('.columnas-checkbox');
-
-        function aplicarVisibilidadColumna(indice, visible) {
-            var col = document.getElementById('tdt-col-' + indice);
-            if (col) { col.style.visibility = visible ? '' : 'collapse'; }
-        }
-        function indicesOcultosActuales() {
-            return Array.prototype.filter.call(casillasColumnas, function (c) { return !c.checked; }).map(function (c) { return c.dataset.indice; });
-        }
-
-        leerOcultasGuardadas().forEach(function (indice) {
-            aplicarVisibilidadColumna(indice, false);
-            var casilla = tarjetaColumnas.querySelector('.columnas-checkbox[data-indice="' + indice + '"]');
-            if (casilla) { casilla.checked = false; }
-        });
-
-        casillasColumnas.forEach(function (casilla) {
-            casilla.addEventListener('change', function () {
-                aplicarVisibilidadColumna(casilla.dataset.indice, casilla.checked);
-                guardarOcultas(indicesOcultosActuales());
-                ajustarAnchoTabla();
-                actualizarGrafica();
-            });
-        });
-
-        botonColumnas.addEventListener('click', function (evento) {
-            evento.stopPropagation();
-            tarjetaColumnas.classList.toggle('abierta');
-        });
-        document.addEventListener('click', function (evento) {
-            if (!botonColumnas.contains(evento.target) && !tarjetaColumnas.contains(evento.target)) {
-                tarjetaColumnas.classList.remove('abierta');
-            }
-        });
-    }
-
-    // Recién aquí quedó aplicado el estado inicial completo de columnas ocultas (por defecto desde
-    // el servidor y las guardadas en localStorage), así que el primer reparto de ancho se hace acá.
-    ajustarAnchoTabla();
-
-    // --- Filtros por columna (ocultos hasta pulsar "Filtrar") ---
-    var filaEncabezados = tabla.querySelector('tr.fila-encabezados');
-    var filaFiltros = tabla.querySelector('tr.fila-filtros');
-    if (filaEncabezados && filaFiltros) {
-        var altura = filaEncabezados.getBoundingClientRect().height;
-        Array.prototype.forEach.call(filaFiltros.querySelectorAll('th'), function (celda) { celda.style.top = altura + 'px'; });
-    }
-
-    var botonFiltrar = document.getElementById('tdt-boton-filtrar');
-    if (botonFiltrar && filaFiltros) {
-        botonFiltrar.addEventListener('click', function () {
-            var mostrar = !filaFiltros.classList.contains('visible');
-            filaFiltros.classList.toggle('visible', mostrar);
-            botonFiltrar.classList.toggle('activo', mostrar);
-            if (!mostrar) {
-                filaFiltros.querySelectorAll('.combo-filtro-columna').forEach(function (envoltorioFiltro) {
-                    var campo = envoltorioFiltro.querySelector('.combo-input');
-                    campo.value = '';
-                    if (envoltorioFiltro.actualizarFantasmaCombo) { envoltorioFiltro.actualizarFantasmaCombo(); }
-                });
-                aplicarFiltros();
-            }
-        });
-    }
-
-    var botonBuscar = document.getElementById('tdt-boton-buscar');
-    var envoltorioBuscar = document.querySelector('.buscar-envoltorio');
-    var campoBuscar = document.getElementById('tdt-campo-buscar');
-
-    if (botonBuscar && envoltorioBuscar && campoBuscar) {
-        botonBuscar.addEventListener('click', function () {
-            var desplegar = !envoltorioBuscar.classList.contains('desplegado');
-            envoltorioBuscar.classList.toggle('desplegado', desplegar);
-            botonBuscar.classList.toggle('activo', desplegar);
-            if (desplegar) {
-                campoBuscar.focus();
-            } else {
-                campoBuscar.value = '';
-                if (comboBuscar && comboBuscar.actualizarFantasmaCombo) { comboBuscar.actualizarFantasmaCombo(); }
-                aplicarFiltros();
-            }
-        });
-        campoBuscar.addEventListener('input', aplicarFiltros);
-    }
-
-    var filtros = tabla.querySelectorAll('.filtro-columna');
-
-    function aplicarFiltros() {
-        var activos = Array.prototype.map.call(filtros, function (campo) {
-            return { indice: parseInt(campo.dataset.indice, 10), valor: campo.value.trim().toLowerCase() };
-        }).filter(function (f) { return f.valor !== ''; });
-
-        var busqueda = campoBuscar ? campoBuscar.value.trim().toLowerCase() : '';
-
-        filasOriginales.forEach(function (fila) {
-            var cumpleColumnas = activos.every(function (filtro) {
-                var texto = fila.children[filtro.indice + 1].textContent.toLowerCase();
-                return texto.indexOf(filtro.valor) !== -1;
-            });
-            var cumpleBusqueda = busqueda === '' || fila.textContent.toLowerCase().indexOf(busqueda) !== -1;
-            var cumpleGrafica = !filtroGrafica || filtroGrafica.cumple(fila);
-            fila.classList.toggle('fila-oculta-filtro', !(cumpleColumnas && cumpleBusqueda && cumpleGrafica));
-        });
-
-        renderizarVentana();
-        actualizarGrafica();
-        construirFilaTotales();
-    }
-
-    filtros.forEach(function (campo) { campo.addEventListener('input', aplicarFiltros); });
-
-    // --- Orden ---
-    tabla.querySelectorAll('.encabezado-columna').forEach(function (encabezado) {
-        encabezado.addEventListener('click', function () {
-            var indice = parseInt(encabezado.dataset.indice, 10);
-            var ascendente = !encabezado.classList.contains('orden-asc');
-
-            tabla.querySelectorAll('.encabezado-columna').forEach(function (otro) { otro.classList.remove('orden-asc', 'orden-desc'); });
-            encabezado.classList.add(ascendente ? 'orden-asc' : 'orden-desc');
-
-            var filas = filasEnOrden.slice();
-            filas.sort(function (filaA, filaB) {
-                var textoA = filaA.children[indice + 1].textContent.trim();
-                var textoB = filaB.children[indice + 1].textContent.trim();
-                var numeroA = parseFloat(textoA.replace(/[^0-9,.-]/g, '').replace(/\./g, '').replace(',', '.'));
-                var numeroB = parseFloat(textoB.replace(/[^0-9,.-]/g, '').replace(/\./g, '').replace(',', '.'));
-                var comparacion;
-                if (!isNaN(numeroA) && !isNaN(numeroB) && textoA !== '' && textoB !== '') {
-                    comparacion = numeroA - numeroB;
-                } else {
-                    comparacion = textoA.localeCompare(textoB, 'es');
-                }
-                return ascendente ? comparacion : -comparacion;
-            });
-            filasEnOrden = filas;
-            renderizarVentana();
-        });
-    });
 
     // --- Vista de gráfica: mismo dashboard de decisión del prototipo Dev (agrupar por cualquier
     // columna de texto y sumar la columna de valor), pero genérico — no asume las columnas de
     // Gasto: la columna de valor se detecta por nombre ("valor"/"total") y las dimensiones son
     // cualquier columna cuyo contenido no sea numérico (detectado por el propio dato, no por el
     // nombre de la columna), así sirve igual para ARL, Monitores, OPS, Otros o Necesidad. ---
-    var vistaGraficaActiva = false;
     // Filtro por clic en una barra (ver aplicarFiltroGrafica()): null o
     // { etiqueta, cumple(fila) -> bool, vistaAnterior: { grafica, panel, pagina } }.
     var filtroGrafica = null;
@@ -588,27 +116,6 @@ document.addEventListener('DOMContentLoaded', function () {
         try { localStorage.setItem(claveTipoGrafico, JSON.stringify(tipoGraficoPorDimension)); } catch (e) { /* no disponible */ }
     }
 
-    function parseNumeroCeldaTdt(texto) {
-        var limpio = String(texto).replace(/[^0-9,.-]/g, '').replace(/\./g, '').replace(',', '.');
-        var numero = parseFloat(limpio);
-        return isNaN(numero) ? 0 : numero;
-    }
-
-    function formatoMonedaTdt(valor) {
-        return '$' + Number(valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
-
-    function indiceColumnaTdt(nombre) {
-        return tdtColumnas.findIndex(function (c) { return c.toLowerCase() === nombre.toLowerCase(); });
-    }
-
-    // Una columna oculta con el visor de columnas tiene su <col> en visibility: collapse; sus
-    // gráficas también se ocultan (y no cuentan para la paginación).
-    function columnaVisibleTdt(indice) {
-        var col = document.getElementById('tdt-col-' + indice);
-        return !col || col.style.visibility !== 'collapse';
-    }
-
     function obtenerIndiceValorTdt() {
         var candidatos = tdtColumnas.map(function (c, i) { return { c: c.toLowerCase(), i: i }; });
         var exacto = candidatos.filter(function (x) { return x.c === 'valor total' || x.c === 'total' || x.c === 'total valor'; });
@@ -621,56 +128,13 @@ document.addEventListener('DOMContentLoaded', function () {
         return conValor.length ? conValor[0].i : -1;
     }
 
-    function filasVisiblesParaGrafica() {
-        return filasOriginales
-            .filter(function (fila) { return !fila.classList.contains('fila-oculta-filtro'); })
-            .map(function (fila) {
-                return Array.prototype.slice.call(fila.children, 1).map(function (td) { return td.textContent.trim(); });
-            });
-    }
-
     // Una columna sirve como dimensión de agrupación si sus valores NO son todos numéricos — se
     // decide mirando el contenido real de las filas visibles, nunca el nombre de la columna, para
     // que funcione igual sin importar qué origen esté cargado.
     function esDimensionCandidata(indice, filasDatos) {
         var textos = filasDatos.map(function (fila) { return (fila[indice] || '').trim(); }).filter(function (t) { return t !== '' && t !== '—'; });
         if (textos.length === 0) { return false; }
-        return !textos.every(function (t) { return /^[\d.,\s$%-]+$/.test(t); });
-    }
-
-    // --- Fila fija de totales (pie de la tabla, no de la gráfica): suma cada columna numérica
-    // (valores Y cantidades, cualquiera que tenga solo texto numérico en sus filas visibles —
-    // mismo criterio que esDimensionCandidata, invertido) sobre las filas que el filtro deje
-    // visibles. Una columna se muestra en pesos solo si sus celdas ya vienen formateadas como tal
-    // (terminan en ",NN" — así las guarda PHP con number_format() para cualquier valor float);
-    // una columna de enteros simples (cantidades) se suma y se muestra sin símbolo de moneda, para
-    // no confundir "2 monitores" con "$2".
-    function construirFilaTotales() {
-        var filaTotales = tabla.querySelector('tfoot .fila-totales-tdt');
-        if (!filaTotales) {
-            return;
-        }
-
-        var filasDatos = filasVisiblesParaGrafica();
-
-        for (var indice = 0; indice < tdtColumnas.length; indice++) {
-            var celda = filaTotales.children[indice + 1];
-            if (!celda) {
-                continue;
-            }
-
-            var textos = filasDatos.map(function (fila) { return (fila[indice] || '').trim(); }).filter(function (t) { return t !== '' && t !== '—'; });
-            var esNumerica = textos.length > 0 && textos.every(function (t) { return /^[\d.,\s$%-]+$/.test(t); });
-
-            if (!esNumerica) {
-                celda.textContent = '';
-                continue;
-            }
-
-            var suma = textos.reduce(function (acumulado, t) { return acumulado + parseNumeroCeldaTdt(t); }, 0);
-            var esMoneda = textos.some(function (t) { return /,\d{2}$/.test(t); });
-            celda.textContent = esMoneda ? formatoMonedaTdt(suma) : Math.round(suma).toLocaleString('es-CO');
-        }
+        return !textos.every(ctx.esTextoNumerico);
     }
 
     function agruparYSumar(filasDatos, indiceDimension, indiceValor) {
@@ -1232,7 +696,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (indiceTarjetaGrafica >= totalPaginas) { indiceTarjetaGrafica = totalPaginas - 1; }
         if (indiceTarjetaGrafica < 0) { indiceTarjetaGrafica = 0; }
 
-        // Es una celda más de la fila de indicadores (ver tabla-real.js: tarjetasKpi), junto a las
+        // Es una celda más de la fila de indicadores (ver tarjetasKpi en actualizarGrafica()), junto a las
         // cifras, para que botones y número de página ocupen la misma fila.
         if (!barra) {
             barra = document.createElement('div');
@@ -1279,7 +743,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     window.addEventListener('resize', function () {
-        if (vistaGraficaActiva) { ajustarAlturaGrafica(); }
+        if (vistaGraficaActiva()) { ajustarAlturaGrafica(); }
     });
 
     function ajustarAlturaGrafica() {
@@ -1292,7 +756,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function actualizarGrafica() {
-        if (!vistaGraficaActiva) { return; }
+        if (!vistaGraficaActiva()) { return; }
 
         var contenedorKpis = document.getElementById('tdt-grafica-kpis');
         var contenedorPaneles = document.getElementById('tdt-grafica-paneles');
@@ -1308,7 +772,7 @@ document.addEventListener('DOMContentLoaded', function () {
         // columnas de texto candidatas — antes, en cuanto una sola dimensión preferida coincidía
         // (ej. "Dependencia"), nunca se revisaban las demás columnas reales de la tabla (ej. "Tipo"
         // en Monitores, "Perfil" en OPS), aunque existieran.
-        var ORIGENES_ESTRUCTURA_FIJA = ['gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud', 'gasto_sin_excedentes'];
+        var ORIGENES_ESTRUCTURA_FIJA = ['gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud'];
         var DIMENSIONES_PREFERIDAS = ['Dependencia', 'Categoría de gasto', 'Rubro', 'Proyecto PDI', 'Sede', 'Actividad'];
         if (indiceColumnaTdt('Categoría') !== -1) { DIMENSIONES_PREFERIDAS = DIMENSIONES_PREFERIDAS.concat('Categoría'); }
 
@@ -1436,33 +900,6 @@ document.addEventListener('DOMContentLoaded', function () {
         ajustarAlturaGrafica();
     }
 
-    var botonVistaTabla = document.getElementById('tdt-boton-vista-tabla');
-    var botonVistaGrafica = document.getElementById('tdt-boton-vista-grafica');
-
-    function activarVistaTabla() {
-        vistaGraficaActiva = false;
-        tabla.classList.remove('modo-grafica');
-        panelExpandidoNombre = null;
-        if (botonVistaTabla) { botonVistaTabla.classList.add('activo'); botonVistaTabla.setAttribute('aria-pressed', 'true'); }
-        if (botonVistaGrafica) { botonVistaGrafica.classList.remove('activo'); botonVistaGrafica.setAttribute('aria-pressed', 'false'); }
-    }
-
-    function activarVistaGrafica() {
-        vistaGraficaActiva = true;
-        tabla.classList.add('modo-grafica');
-        if (botonVistaGrafica) { botonVistaGrafica.classList.add('activo'); botonVistaGrafica.setAttribute('aria-pressed', 'true'); }
-        if (botonVistaTabla) { botonVistaTabla.classList.remove('activo'); botonVistaTabla.setAttribute('aria-pressed', 'false'); }
-
-        // La gráfica se filtra con los mismos combos por columna que la tabla (aplicarFiltros()
-        // ya llama a actualizarGrafica()); acá solo forzamos que la fila arranque visible al
-        // entrar a este modo — el botón "Filtrar" sigue habilitado para poder ocultarla igual
-        // que en modo tabla.
-        if (filaFiltros) { filaFiltros.classList.add('visible'); }
-        if (botonFiltrar) { botonFiltrar.classList.add('activo'); }
-
-        actualizarGrafica();
-    }
-
     // --- Barras como filtro: clic en una barra → tabla con solo esas filas, y junto al nombre de
     // la tabla un botón para volver a la vista de donde se vino (gráfica, o gráfica ampliada en
     // el mismo panel y página). Dimensión normal: filas cuya celda de esa columna es exactamente
@@ -1492,16 +929,18 @@ document.addEventListener('DOMContentLoaded', function () {
         filtroGrafica = {
             etiqueta: (dimension.titulo || dimension.nombre) + ': ' + categoria,
             cumple: cumple,
-            vistaAnterior: { grafica: vistaGraficaActiva, panel: panelExpandidoNombre, pagina: indiceTarjetaGrafica },
+            vistaAnterior: { grafica: vistaGraficaActiva(), panel: panelExpandidoNombre, pagina: indiceTarjetaGrafica },
         };
+        ctx.fijarFiltroExtra('grafica', cumple);
 
-        activarVistaTabla();
-        aplicarFiltros();
+        ctx.activarVista('tabla');
+        ctx.aplicarFiltros();
         mostrarBotonVolverFiltro();
     }
 
     function limpiarFiltroGrafica() {
         filtroGrafica = null;
+        ctx.fijarFiltroExtra('grafica', null);
         if (envoltorioFiltroGrafica) {
             envoltorioFiltroGrafica.remove();
             envoltorioFiltroGrafica = null;
@@ -1512,13 +951,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!filtroGrafica) { return; }
         var anterior = filtroGrafica.vistaAnterior;
         limpiarFiltroGrafica();
-        aplicarFiltros();
+        ctx.aplicarFiltros();
         if (anterior.grafica) {
             panelExpandidoNombre = anterior.panel;
             indiceTarjetaGrafica = anterior.pagina;
-            activarVistaGrafica();
+            ctx.activarVista('grafica');
         } else {
-            activarVistaTabla();
+            ctx.activarVista('tabla');
         }
     }
 
@@ -1550,102 +989,21 @@ document.addEventListener('DOMContentLoaded', function () {
         nombreTabla.insertAdjacentElement('afterend', envoltorioFiltroGrafica);
     }
 
-    // Cambiar de vista a mano descarta el filtro de la barra (si no, la gráfica saldría recortada
-    // a una sola categoría sin aviso).
-    if (botonVistaTabla) {
-        botonVistaTabla.addEventListener('click', function () {
-            if (filtroGrafica) { limpiarFiltroGrafica(); aplicarFiltros(); }
-            activarVistaTabla();
-        });
-    }
-    if (botonVistaGrafica) {
-        botonVistaGrafica.addEventListener('click', function () {
-            if (filtroGrafica) { limpiarFiltroGrafica(); aplicarFiltros(); }
-            activarVistaGrafica();
-        });
-    }
+    // --- Avisos del núcleo ---
+    ctx.on('filtros', actualizarGrafica);
+    ctx.on('columnas', actualizarGrafica);
 
-    // --- Selección de fila + Editar (navega al formulario real) / Eliminar (real) ---
-    var casillaSeleccionarTodo = document.getElementById('tdt-seleccionar-todo');
-    var botonEditar = document.getElementById('tdt-boton-editar');
-    var botonEliminar = document.getElementById('tdt-boton-eliminar');
-    var formAccion = document.getElementById('tdt-form-accion');
-    var formAccionValor = document.getElementById('tdt-form-accion-valor');
-    var formOrigenId = document.getElementById('tdt-form-origen-id');
-
-    function filaSeleccionadaUnica() {
-        var seleccionadas = filasOriginales.filter(function (fila) {
-            return fila.querySelector('.tabla-seleccion-fila:checked') !== null;
-        });
-        return seleccionadas.length === 1 ? seleccionadas[0] : null;
-    }
-
-    function actualizarBotonesSeleccion() {
-        var fila = filaSeleccionadaUnica();
-        var puedeEditar = fila && fila.dataset.puedeEditar === '1' && fila.dataset.rutaEditar;
-        if (botonEditar) { botonEditar.disabled = !puedeEditar; }
-        if (botonEliminar) { botonEliminar.disabled = !fila; }
-        filasOriginales.forEach(function (tr) {
-            tr.classList.toggle('fila-seleccionada', tr.querySelector('.tabla-seleccion-fila:checked') !== null);
-        });
-    }
-
-    filasOriginales.forEach(function (fila) {
-        var casilla = fila.querySelector('.tabla-seleccion-fila');
-        casilla.addEventListener('change', function () {
-            if (casilla.checked) {
-                filasOriginales.forEach(function (otraFila) {
-                    var otra = otraFila.querySelector('.tabla-seleccion-fila');
-                    if (otra !== casilla) { otra.checked = false; }
-                });
-            }
-            actualizarBotonesSeleccion();
-        });
+    ctx.on('vista', function (vista) {
+        if (vista === 'grafica') {
+            actualizarGrafica();
+        } else {
+            panelExpandidoNombre = null;
+        }
     });
 
-    if (casillaSeleccionarTodo) {
-        casillaSeleccionarTodo.addEventListener('change', function () {
-            // Editar/Eliminar exigen exactamente 1 fila: "seleccionar todo" solo sirve para acciones
-            // masivas que no existen en este landing, así que se deja sin marcar todas.
-            casillaSeleccionarTodo.checked = false;
-        });
-    }
-
-    if (botonEditar) {
-        botonEditar.addEventListener('click', function () {
-            var fila = filaSeleccionadaUnica();
-            if (!fila || botonEditar.disabled) { return; }
-
-            window.location.href = fila.dataset.rutaEditar;
-        });
-    }
-
-    if (botonEliminar) {
-        botonEliminar.addEventListener('click', function () {
-            var fila = filaSeleccionadaUnica();
-            if (!fila || botonEliminar.disabled) { return; }
-
-            if (!window.confirm('¿Eliminar este ítem? No se puede deshacer.')) {
-                return;
-            }
-
-            formAccionValor.value = 'eliminar_celda';
-            formOrigenId.value = fila.dataset.origenId;
-            formAccion.submit();
-        });
-    }
-
-    // Primer render: mide la altura real de la fila. Luego, "Ver" centra la fila resaltada.
-    renderizarVentana();
-    var filaResaltada = filasOriginales.filter(function (fila) { return fila.classList.contains('fila-resaltada'); })[0];
-    if (filaResaltada && contenedorScroll) {
-        var posicionResaltada = filasVisibles().indexOf(filaResaltada);
-        if (posicionResaltada >= 0) {
-            contenedorScroll.scrollTop = Math.max(0, posicionResaltada * ALTURA_FILA - contenedorScroll.clientHeight / 2);
-            renderizarVentana();
-        }
-    }
-
-    actualizarBotonesSeleccion();
-    construirFilaTotales();
+    // Cambiar de vista a mano descarta el filtro de la barra (si no, la gráfica saldría recortada
+    // a una sola categoría sin aviso).
+    ctx.on('antes-cambio-manual', function () {
+        if (filtroGrafica) { limpiarFiltroGrafica(); ctx.aplicarFiltros(); }
+    });
 });

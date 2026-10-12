@@ -1213,7 +1213,7 @@ class PostgradoControlador
             return ['El egreso que intentas editar no existe.', ''];
         }
 
-        // Sin restricción de estado (igual que Extensión/Unisalud/SinExcedentes): una fila
+        // Sin restricción de estado (igual que Extensión/Unisalud): una fila
         // automática ya enviada sigue siendo editable por quien tiene el permiso, para poder
         // corregirla desde "Ver en Peticiones" → "Editar" incluso después de que se envió junto
         // con el resto del lote de su dependencia.

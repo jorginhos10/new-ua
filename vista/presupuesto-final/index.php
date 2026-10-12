@@ -2,7 +2,7 @@
 
     <div class="tarjeta">
         <h1>Exportar presupuesto final</h1>
-        <p class="texto-atenuado">Gastos enviados de gastos principales y de autogestión (Extensión, Postgrado, Unidad de Salud y Sin Excedentes), por rubro, centro de costo y proyecto.</p>
+        <p class="texto-atenuado">Gastos enviados de gastos principales y de autogestión (Extensión, Postgrado y Unidad de Salud), por rubro, centro de costo y proyecto.</p>
 
         <?php if ($anioSeleccionado === null): ?>
         <p class="mensaje-error">No hay años presupuestales activos.</p>

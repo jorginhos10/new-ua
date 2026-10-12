@@ -2701,7 +2701,7 @@ a.barra-progreso:hover {
 
 /* Leyenda de la barra de Gastos (propio/heredado/reasignado + techo total): tarjetitas con ícono
    y fondo suave, en vez del punto de color plano que usa .progreso-presupuesto-leyenda (esa clase
-   la siguen usando tal cual Extensión/Postgrado/Unisalud/Convenios para su propia leyenda de
+   la siguen usando tal cual Extensión/Postgrado/Unisalud para su propia leyenda de
    costos/inversión/excedentes — no se toca, para no afectarlas). */
 .chips-gasto {
     display: flex;
@@ -5257,7 +5257,7 @@ a.barra-progreso:hover {
    Landing único de "Ver" en Peticiones (peticiones-tipo-detalle): puerto real, no una
    reinterpretación, de vista/dev/pruebas/tabla.php ("Dev > Tabla") — mismo topbar de íconos en
    píldora, buscador/filtro por combobox, ordenar, ocultar/redimensionar columnas y vista de
-   gráfica. Ver publico/js/tabla-real.js para la mecánica correspondiente.
+   gráfica. Ver publico/js/tabla-real/ para la mecánica correspondiente.
    ============================================================================================ */
 
 .tarjeta-tabla {
@@ -5297,7 +5297,7 @@ a.barra-progreso:hover {
     border-color: var(--color-borde-hover);
 }
 
-/* Filtro aplicado desde una barra de la gráfica (tabla-real.js): botón volver + etiqueta. */
+/* Filtro aplicado desde una barra de la gráfica (tabla-real/graficos.js): botón volver + etiqueta. */
 .tabla-filtro-grafica {
     display: inline-flex;
     align-items: center;
@@ -5683,7 +5683,7 @@ body.tabla-redimensionando-cursor * {
 
 /* Fila fija de totales, pegada abajo del área con scroll (mismo mecanismo sticky que ya usa el
    encabezado arriba, ver .tabla-dev-datos thead th) — construida y actualizada por
-   construirFilaTotales() en tabla-real.js, no por PHP. */
+   construirFilaTotales() en tabla-real/tabla.js, no por PHP. */
 .tabla-dev-datos tfoot td {
     position: sticky;
     bottom: 0;
@@ -6011,7 +6011,7 @@ body.tabla-redimensionando-cursor * {
     cursor: pointer;
     display: grid;
     /* --grafica-ancho-etiqueta: lo fija el usuario arrastrando el borde de las descripciones
-       (ver tabla-real.js); sin él, el ancho de siempre. */
+       (ver tabla-real/graficos.js); sin él, el ancho de siempre. */
     grid-template-columns: var(--grafica-ancho-etiqueta, var(--grafica-ancho-etiqueta-defecto)) minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.6rem;
