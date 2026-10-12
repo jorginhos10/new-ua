@@ -26,6 +26,8 @@ require_once __DIR__ . '/../modelo/IngresoUnisalud.php';
 require_once __DIR__ . '/../modelo/Acta.php';
 require_once __DIR__ . '/../modelo/AnalisisPresentacion.php';
 require_once __DIR__ . '/../modelo/MensajeGlobal.php';
+require_once __DIR__ . '/../modelo/VersionTechos.php';
+require_once __DIR__ . '/../modelo/VersionDocumentos.php';
 require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
 require_once __DIR__ . '/PeticionesControlador.php';
@@ -710,40 +712,71 @@ class AnalisisControlador
     }
 
     /**
-     * Pestaña "Techos y Metas": Tiempo real o Usuario (Repositorio no aplica — no hay versiones de
-     * techos). Un bloque a la vez: gasto principal (techo vs asignación) o un módulo de
-     * autogestión (tope vs ingresos).
+     * Pestaña "Techos y Metas": Tiempo real, Usuario o Repositorio (versiones congeladas vía
+     * VersionTechos, con filtro por dependencia también en Repositorio). Un bloque a la vez: gasto
+     * principal (techo vs asignación) o un módulo de autogestión (tope vs ingresos).
      */
     private function renderizarTechosMetas(string $vista, array $dependenciasTodas): void
     {
-        $vista = $vista === 'usuario' ? 'usuario' : 'tiempo_real';
+        $vista = in_array($vista, ['usuario', 'repositorio'], true) ? $vista : 'tiempo_real';
         $bloque = in_array($_GET['bloque'] ?? '', TechosMetas::BLOQUES, true) ? (string) $_GET['bloque'] : 'gastos';
 
         $dependenciaFiltroActual = null;
-        if ($vista === 'usuario') {
+        if ($vista === 'usuario' || $vista === 'repositorio') {
             $dependenciaFiltroActual = trim((string) ($_GET['dependencia'] ?? ''));
             if ($dependenciaFiltroActual === '' && !empty($dependenciasTodas)) {
                 $dependenciaFiltroActual = $dependenciasTodas[0]['nombre'];
             }
         }
 
-        $modeloAnio = new AnioPresupuestal();
-        $aniosTodos = $modeloAnio->obtenerTodos();
-        $aniosActivos = $modeloAnio->obtenerActivos();
-        $anioVigenteRegistro = $aniosActivos[0] ?? ($aniosTodos[0] ?? null);
-        $anioVigenteNumero = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['anio'] : (int) date('Y');
-        $anioVigenteId = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['id'] : 0;
+        $versiones = [];
+        $versionIdActual = null;
+        $sinDatosRepositorio = false;
+        $modeloVersionTechos = new VersionTechos();
 
-        $idPorAnio = [];
-        foreach ($aniosTodos as $filaAnio) {
-            $idPorAnio[(int) $filaAnio['anio']] = (int) $filaAnio['id'];
-        }
-        $aniosVentana = [];
-        for ($anio = $anioVigenteNumero - 4; $anio <= $anioVigenteNumero; $anio++) {
-            $aniosVentana[$anio] = $idPorAnio[$anio] ?? null;
+        if ($vista === 'repositorio') {
+            $versiones = $modeloVersionTechos->obtenerTodos();
+            $versionSolicitada = (int) ($_GET['version_id'] ?? 0);
+
+            // Solo el superadmin elige la versión; los demás ven la que él dejó activa — mismo
+            // mecanismo que renderizarArbol() para Árbol PDI/Programación/Proyectos.
+            if ($versionSolicitada > 0 && AccesoAnalisis::actual()['clase'] === 'superadmin') {
+                $modeloVersionTechos->marcarActiva($versionSolicitada);
+                $versionIdActual = $versionSolicitada;
+            } else {
+                $versionActiva = $modeloVersionTechos->obtenerActiva();
+                $versionIdActual = $versionActiva !== null ? (int) $versionActiva['id'] : 0;
+            }
+
+            if ($versionIdActual <= 0) {
+                $versionIdActual = null;
+                $sinDatosRepositorio = true;
+            }
         }
 
-        $datos = (new TechosMetas())->construirDatos($bloque, $dependenciaFiltroActual, $anioVigenteId, $aniosVentana);
+        if ($sinDatosRepositorio) {
+            $datos = ['nodos' => [], 'totales' => [], 'serie' => []];
+        } elseif ($vista === 'repositorio') {
+            $datos = $modeloVersionTechos->obtenerBloqueDeVersion($versionIdActual, $bloque, $dependenciaFiltroActual) ?? ['nodos' => [], 'totales' => [], 'serie' => []];
+        } else {
+            $modeloAnio = new AnioPresupuestal();
+            $aniosTodos = $modeloAnio->obtenerTodos();
+            $aniosActivos = $modeloAnio->obtenerActivos();
+            $anioVigenteRegistro = $aniosActivos[0] ?? ($aniosTodos[0] ?? null);
+            $anioVigenteNumero = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['anio'] : (int) date('Y');
+            $anioVigenteId = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['id'] : 0;
+
+            $idPorAnio = [];
+            foreach ($aniosTodos as $filaAnio) {
+                $idPorAnio[(int) $filaAnio['anio']] = (int) $filaAnio['id'];
+            }
+            $aniosVentana = [];
+            for ($anio = $anioVigenteNumero - 4; $anio <= $anioVigenteNumero; $anio++) {
+                $aniosVentana[$anio] = $idPorAnio[$anio] ?? null;
+            }
+
+            $datos = (new TechosMetas())->construirDatos($bloque, $dependenciaFiltroActual, $anioVigenteId, $aniosVentana);
+        }
 
         $tab = 'techos';
         $error = '';
@@ -793,12 +826,58 @@ class AnalisisControlador
     /** Pestaña Documentos (antes "Presentación"): lista de enlaces de OneDrive/SharePoint. Solo el superadmin la administra. */
     private function renderizarPresentacion(string $vista, array $acceso): void
     {
-        $enlacesPresentacion = (new AnalisisPresentacion())->obtenerTodos();
+        $vista = in_array($vista, ['usuario', 'repositorio'], true) ? $vista : 'tiempo_real';
+
+        // Actas ya no es una pestaña aparte: su tarjeta vive sembrada como una fila más de esta
+        // misma tabla (ver AnalisisPresentacion::URL_ACTAS), así se puede mover ▲▼ junto con los
+        // documentos — pero solo para quien todavía tiene permiso de esa pestaña.
+        $muestraBotonActas = in_array('actas', AccesoAnalisis::actual()['pestanas'], true);
+
+        $versiones = [];
+        $versionIdActual = null;
+        $sinDatosRepositorio = false;
+        $modeloVersionDocumentos = new VersionDocumentos();
+
+        if ($vista === 'repositorio') {
+            $versiones = $modeloVersionDocumentos->obtenerTodos();
+            $versionSolicitada = (int) ($_GET['version_id'] ?? 0);
+
+            if ($versionSolicitada > 0 && $acceso['clase'] === 'superadmin') {
+                $modeloVersionDocumentos->marcarActiva($versionSolicitada);
+                $versionIdActual = $versionSolicitada;
+            } else {
+                $versionActiva = $modeloVersionDocumentos->obtenerActiva();
+                $versionIdActual = $versionActiva !== null ? (int) $versionActiva['id'] : 0;
+            }
+
+            if ($versionIdActual <= 0) {
+                $versionIdActual = null;
+                $sinDatosRepositorio = true;
+            }
+
+            $enlacesPresentacion = $sinDatosRepositorio ? [] : $modeloVersionDocumentos->obtenerDocumentosDeVersion($versionIdActual);
+        } else {
+            $enlacesPresentacion = (new AnalisisPresentacion())->obtenerTodos();
+        }
+
+        if (!$muestraBotonActas) {
+            $enlacesPresentacion = array_values(array_filter(
+                $enlacesPresentacion,
+                static fn (array $enlace): bool => !AnalisisPresentacion::esActas($enlace)
+            ));
+        }
+        $totalDocumentos = 0;
         foreach ($enlacesPresentacion as &$enlace) {
+            if (AnalisisPresentacion::esActas($enlace)) {
+                continue;
+            }
             $enlace['url_incrustada'] = AnalisisPresentacion::urlIncrustada($enlace['url']);
+            $enlace['url_descarga'] = AnalisisPresentacion::urlDescarga($enlace['url']);
+            $enlace['tipo_documento'] = AnalisisPresentacion::tipoDocumento($enlace['url']);
+            $totalDocumentos++;
         }
         unset($enlace);
-        // "Usuario" es una vista previa de lo que ve cualquier otro usuario: sin controles de edición.
+        // "Usuario"/"Repositorio" son de solo lectura: sin controles de edición.
         $puedeEditarPresentacion = $acceso['clase'] === 'superadmin' && $vista === 'tiempo_real';
         // El mensaje que explica la sección: misma estructura que Mensajes globales (Configuraciones),
         // con su propia audiencia — se edita desde ahí, acá solo se muestra.
@@ -828,16 +907,35 @@ class AnalisisControlador
             return 'Pega un enlace de OneDrive válido (https://1drv.ms/..., https://onedrive.live.com/... o de SharePoint), o el código "Insertar" de OneDrive.';
         }
 
+        // Miniatura: opcional, una imagen puesta a mano en vez del ícono por tipo — se muestra tal
+        // cual en el navegador de quien la ve (sin tocar el servidor), por eso solo valida que sea
+        // una URL https bien formada, no que el host esté en una lista como el enlace del documento.
+        $miniaturaTexto = trim((string) ($_POST['miniatura_enlace'] ?? ''));
+        $miniaturaUrl = null;
+        if ($miniaturaTexto !== '') {
+            $partesMiniatura = parse_url($miniaturaTexto);
+            if (!$partesMiniatura || ($partesMiniatura['scheme'] ?? '') !== 'https' || empty($partesMiniatura['host'])) {
+                return 'La URL de la miniatura debe ser una dirección https:// válida.';
+            }
+            $miniaturaUrl = $miniaturaTexto;
+        }
+
         $modelo = new AnalisisPresentacion();
 
         if ($id > 0) {
-            if ($modelo->obtenerPorId($id) === null) {
+            $existente = $modelo->obtenerPorId($id);
+            if ($existente === null) {
                 return 'El enlace que intentas editar ya no existe.';
             }
+            // Defensa en profundidad: la vista no le dibuja campos editables a la tarjeta de Actas,
+            // pero por si acaso llega un POST armado a mano.
+            if (AnalisisPresentacion::esActas($existente)) {
+                return 'La tarjeta de Actas no se edita desde aquí.';
+            }
 
-            $modelo->actualizar($id, $nombre, $url, (int) $_SESSION['usuario_id']);
+            $modelo->actualizar($id, $nombre, $url, $miniaturaUrl, (int) $_SESSION['usuario_id']);
         } else {
-            $modelo->crear($nombre, $url, (int) $_SESSION['usuario_id']);
+            $modelo->crear($nombre, $url, $miniaturaUrl, (int) $_SESSION['usuario_id']);
         }
 
         return '';
@@ -847,9 +945,13 @@ class AnalisisControlador
     {
         $id = (int) ($_POST['id'] ?? 0);
         $modelo = new AnalisisPresentacion();
+        $existente = $id > 0 ? $modelo->obtenerPorId($id) : null;
 
-        if ($id <= 0 || $modelo->obtenerPorId($id) === null) {
+        if ($existente === null) {
             return 'El enlace que intentas eliminar ya no existe.';
+        }
+        if (AnalisisPresentacion::esActas($existente)) {
+            return 'La tarjeta de Actas no se puede eliminar.';
         }
 
         $modelo->eliminar($id);
@@ -1206,9 +1308,19 @@ class AnalisisControlador
         $dependenciaFiltro = null;
 
         if ($vista === 'repositorio') {
-            // Solo el superadmin elige el snapshot; los demás ven el más reciente.
-            $snapshotSolicitado = AccesoAnalisis::actual()['clase'] === 'superadmin' ? ($_GET['snapshot_id'] ?? null) : null;
-            $snapshotId = (int) ($snapshotSolicitado ?? ($snapshots[0]['id'] ?? 0));
+            $snapshotSolicitado = (int) ($_GET['snapshot_id'] ?? 0);
+
+            // Solo el superadmin elige el snapshot; los demás ven el que él dejó marcado como
+            // activo (o el más reciente, si todavía no ha marcado ninguno) — mismo mecanismo que
+            // las versiones de Programación presupuestal/Proyectos/Articulación PDI.
+            if ($snapshotSolicitado > 0 && AccesoAnalisis::actual()['clase'] === 'superadmin') {
+                (new Snapshot())->marcarActiva($snapshotSolicitado);
+                $snapshotId = $snapshotSolicitado;
+            } else {
+                $snapshotActivo = (new Snapshot())->obtenerActiva();
+                $snapshotId = $snapshotActivo !== null ? (int) $snapshotActivo['id'] : 0;
+            }
+
             if ($snapshotId <= 0) {
                 $snapshotId = null;
             }

@@ -232,12 +232,18 @@ ALTER TABLE gastos
     ADD KEY idx_gastos_categoria_gasto (categoria_gasto_id),
     ADD CONSTRAINT fk_gastos_categoria_gasto FOREIGN KEY (categoria_gasto_id) REFERENCES categorias_gasto (id);
 
--- 6) Pestaña "Presentación" de Análisis: lista de enlaces de OneDrive/SharePoint (presentación,
---    Word, Excel o PDF) con nombre y orden propio — ya no es un solo enlace sin nombre.
+-- 6) Pestaña "Documentos" (antes "Presentación") de Análisis: lista de enlaces de OneDrive/SharePoint
+--    (Word, Excel, PowerPoint o PDF) con nombre y orden propio — ya no es un solo enlace sin nombre.
+--    La fila "Actas" (url reservada 'actas:interno', ver AnalisisPresentacion::URL_ACTAS) es la
+--    tarjeta que manda a la pestaña Actas: vive en esta misma tabla para poder moverla ▲▼ junto con
+--    los documentos — al final (orden más alto) por defecto. miniatura_url es opcional: una imagen
+--    puesta a mano para la tarjeta (si no, ícono por tipo de archivo) — se muestra tal cual, hecho
+--    en el frontend, nunca se descarga ni se redimensiona en el servidor.
 CREATE TABLE IF NOT EXISTS analisis_presentacion (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(150) NOT NULL,
     url VARCHAR(2000) NOT NULL,
+    miniatura_url VARCHAR(2000) NULL,
     orden INT NOT NULL DEFAULT 0,
     actualizado_por INT NULL,
     creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -246,8 +252,55 @@ CREATE TABLE IF NOT EXISTS analisis_presentacion (
     CONSTRAINT fk_analisis_presentacion_usuario FOREIGN KEY (actualizado_por) REFERENCES usuarios(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+INSERT INTO analisis_presentacion (nombre, url, orden, actualizado_por)
+SELECT 'Actas', 'actas:interno', (SELECT COALESCE(MAX(orden), 0) + 1 FROM analisis_presentacion), NULL
+FROM DUAL
+WHERE NOT EXISTS (
+    SELECT 1 FROM analisis_presentacion WHERE url = 'actas:interno'
+);
+
 -- 7) Indexación por línea de Programación presupuestal (solo hojas): el criterio con el que se
 --    proyecta esa línea (ej. "IPC", "SMMLV", "ICES"), diligenciado desde la plantilla Excel y
 --    mostrado como un punto de color (con el texto como tooltip) junto al valor del año vigente.
 ALTER TABLE presupuesto_institucional_lineas
     ADD COLUMN indexacion VARCHAR(50) NULL AFTER descripcion;
+
+-- 8) Snapshot activo (Análisis de distribución, modo Repositorio): igual que las versiones de
+--    Programación presupuestal/Proyectos/Articulación PDI, para que el admin pueda marcar cuál ve
+--    Consejo Superior en vez de que siempre sea el más reciente por fecha (ver Snapshot::marcarActiva()).
+ALTER TABLE snapshots
+    ADD COLUMN activa TINYINT(1) NOT NULL DEFAULT 0 AFTER nombre;
+
+-- 9) Versiones/snapshot de "Techos y Metas" y "Documentos" (Análisis) — mismo mecanismo que
+--    arbol_versiones, independiente para cada pestaña (ver VersionTechos.php/VersionDocumentos.php).
+CREATE TABLE IF NOT EXISTS techos_versiones (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    activa TINYINT(1) NOT NULL DEFAULT 0,
+    creado_por INT DEFAULT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS techos_versiones_datos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    version_id INT NOT NULL,
+    bloque VARCHAR(20) NOT NULL,
+    datos LONGTEXT NOT NULL,
+    KEY idx_techos_version_bloque (version_id, bloque),
+    CONSTRAINT fk_techos_versiones_datos_version FOREIGN KEY (version_id) REFERENCES techos_versiones(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS documentos_versiones (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    activa TINYINT(1) NOT NULL DEFAULT 0,
+    creado_por INT DEFAULT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS documentos_versiones_datos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    version_id INT NOT NULL,
+    datos LONGTEXT NOT NULL,
+    CONSTRAINT fk_documentos_versiones_datos_version FOREIGN KEY (version_id) REFERENCES documentos_versiones(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

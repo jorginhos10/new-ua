@@ -91,7 +91,9 @@ body:not(.pagina-auth)::after {
     content: "";
     position: fixed;
     inset: 0;
-    background: linear-gradient(180deg, rgba(245, 245, 247, 0) 0%, rgba(245, 245, 247, 0.25) 40%, rgba(245, 245, 247, 0.7) 70%, var(--color-fondo) 100%);
+    /* Llega a sólido bastante antes del final del viewport (no al 100%) para que páginas cortas
+       de contenido (pocas tarjetas) no dejen la foto borrosa de fondo expuesta muy abajo. */
+    background: linear-gradient(180deg, rgba(245, 245, 247, 0) 0%, rgba(245, 245, 247, 0.35) 20%, rgba(245, 245, 247, 0.85) 38%, var(--color-fondo) 55%);
     z-index: -1;
 }
 
@@ -3769,6 +3771,66 @@ a.barra-progreso:hover {
 
 .texto-atenuado {
     color: var(--color-texto-tenue);
+}
+
+/* ?ruta=repositorios: tabla resumen (7 columnas, siempre visible) + secciones <details> colapsables */
+
+.repo-detalle summary {
+    cursor: pointer;
+    font-size: 1.3rem;
+    font-weight: 700;
+    list-style: none;
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.repo-detalle summary::-webkit-details-marker {
+    display: none;
+}
+
+.repo-detalle summary::before {
+    content: '▸';
+    display: inline-block;
+    font-size: 1rem;
+    color: var(--color-texto-tenue);
+    transition: transform var(--transicion);
+}
+
+.repo-detalle[open] summary::before {
+    transform: rotate(90deg);
+}
+
+.repo-detalle summary .repo-detalle-activa {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--color-texto-tenue);
+}
+
+.repo-detalle > *:not(summary) {
+    margin-top: 1rem;
+}
+
+.repo-resumen-tabla th:first-child,
+.repo-resumen-tabla td:first-child {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.repo-resumen-tabla th {
+    white-space: nowrap;
+}
+
+.repo-resumen-cambiar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    min-width: 180px;
+}
+
+.repo-resumen-cambiar select {
+    width: 100%;
 }
 
 /* Cabecera de módulo con acción (ej. + Agregar gasto) */

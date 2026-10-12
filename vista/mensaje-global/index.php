@@ -27,7 +27,12 @@ $esCarrusel = $audiencia !== 'analisis_presentacion';
     <div class="tarjeta">
         <div class="mensaje-global-cabecera">
             <h1>Mensajes globales</h1>
-            <button type="button" id="boton-nuevo-mensaje">Nuevo mensaje</button>
+            <div class="mensaje-global-acciones">
+                <?php if ($audiencia === 'analisis_presentacion'): ?>
+                <a href="index.php?ruta=analisis&amp;tab=presentacion" class="boton-accion boton-accion-ver">&larr; Volver a Documentos</a>
+                <?php endif; ?>
+                <button type="button" id="boton-nuevo-mensaje">Nuevo mensaje</button>
+            </div>
         </div>
         <p class="texto-atenuado">
             <?php if ($esCarrusel): ?>

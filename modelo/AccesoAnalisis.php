@@ -27,8 +27,8 @@ class AccesoAnalisis
         'programacion' => 'analisis_programacion',
         'proyectos' => 'analisis_proyectos',
         'pdi' => 'analisis_pdi',
-        'analisis' => 'analisis_distribucion',
         'techos' => 'analisis_techos',
+        'analisis' => 'analisis_distribucion',
         'actas' => 'analisis_actas',
     ];
 

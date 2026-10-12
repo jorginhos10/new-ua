@@ -238,11 +238,11 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php if (in_array('pdi', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('pdi', $vista)) ?>" class="<?= $tab === 'pdi' ? 'activa' : '' ?>">Articulación PDI</a>
         <?php endif; ?>
-        <?php if (in_array('analisis', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('analisis', $vista)) ?>" class="<?= $tab === 'analisis' ? 'activa' : '' ?>">Análisis de distribución</a>
-        <?php endif; ?>
         <?php if (in_array('techos', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('techos', $vista === 'usuario' ? 'usuario' : 'tiempo_real')) ?>" class="<?= $tab === 'techos' ? 'activa' : '' ?>">Techos y Metas</a>
+        <?php endif; ?>
+        <?php if (in_array('analisis', $pestanasPermitidas, true)): ?>
+        <a href="<?= htmlspecialchars(analisisUrl('analisis', $vista)) ?>" class="<?= $tab === 'analisis' ? 'activa' : '' ?>">Análisis de distribución</a>
         <?php endif; ?>
     </nav>
 
@@ -325,21 +325,26 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php if (AccesoAnalisis::actual()['clase'] === 'superadmin' && !in_array($tab, ['actas'], true)): ?>
         <div class="analisis-toggle">
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'tiempo_real', $paramsTab)) ?>" class="<?= $vista === 'tiempo_real' ? 'activo' : '' ?>">Tiempo real</a>
-            <?php if (!in_array($tab, ['techos', 'presentacion'], true)): ?>
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'repositorio', $paramsTab)) ?>" class="<?= $vista === 'repositorio' ? 'activo' : '' ?>">Repositorio</a>
-            <?php endif; ?>
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'usuario', $paramsTab)) ?>" class="<?= $vista === 'usuario' ? 'activo' : '' ?>">Usuario</a>
         </div>
         <?php endif; ?>
 
         <?php $esSuperadminAnalisis = AccesoAnalisis::actual()['clase'] === 'superadmin'; ?>
-        <?php if ($esSuperadminAnalisis && $vista === 'repositorio' && in_array($tab, ['pdi', 'programacion', 'proyectos'], true)): ?>
+        <?php if ($esSuperadminAnalisis && $vista === 'repositorio' && in_array($tab, ['pdi', 'programacion', 'proyectos', 'techos', 'presentacion'], true)): ?>
         <select class="analisis-selector-modo" onchange="if(this.value){window.location.href=this.value;}">
             <?php if (empty($versiones)): ?>
             <option value="">Sin versiones guardadas</option>
             <?php endif; ?>
+            <?php
+            $extraSelectorVersion = match ($tab) {
+                'programacion' => ['lado' => $lado],
+                'techos' => ['bloque' => $bloque] + ($dependenciaFiltroActual !== null ? ['dependencia' => $dependenciaFiltroActual] : []),
+                default => [],
+            };
+            ?>
             <?php foreach ($versiones as $version): ?>
-            <option value="<?= htmlspecialchars(analisisUrl($tab, 'repositorio', ['version_id' => $version['id']] + ($tab === 'programacion' ? ['lado' => $lado] : []))) ?>" <?= (int) $version['id'] === (int) $versionIdActual ? 'selected' : '' ?>>
+            <option value="<?= htmlspecialchars(analisisUrl($tab, 'repositorio', ['version_id' => $version['id']] + $extraSelectorVersion)) ?>" <?= (int) $version['id'] === (int) $versionIdActual ? 'selected' : '' ?>>
                 <?= htmlspecialchars($version['nombre']) ?> — <?= htmlspecialchars(date('d/m/Y H:i', strtotime($version['creado_en']))) ?>
             </option>
             <?php endforeach; ?>
@@ -355,10 +360,10 @@ require __DIR__ . '/../parciales/encabezado.php';
             </option>
             <?php endforeach; ?>
         </select>
-        <?php elseif ($vista === 'usuario' && !in_array($tab, ['actas', 'presentacion'], true)): ?>
+        <?php elseif (($vista === 'usuario' && !in_array($tab, ['actas', 'presentacion'], true)) || ($vista === 'repositorio' && $tab === 'techos')): ?>
         <select class="analisis-selector-modo" onchange="if(this.value){window.location.href=this.value;}">
             <?php foreach (AccesoAnalisis::dependenciasSelector($dependenciasTodas) as $dependenciaOpcion): ?>
-            <option value="<?= htmlspecialchars(analisisUrl($tab, 'usuario', ['dependencia' => $dependenciaOpcion['nombre']] + $paramsTab + (isset($origenActivo) ? ['origen' => $origenActivo] : []))) ?>" <?= $dependenciaOpcion['nombre'] === $dependenciaFiltroActual ? 'selected' : '' ?>>
+            <option value="<?= htmlspecialchars(analisisUrl($tab, $vista, ['dependencia' => $dependenciaOpcion['nombre']] + $paramsTab + (isset($origenActivo) ? ['origen' => $origenActivo] : []))) ?>" <?= $dependenciaOpcion['nombre'] === $dependenciaFiltroActual ? 'selected' : '' ?>>
                 <?= htmlspecialchars(Dependencia::nombreVisible($dependenciaOpcion['nombre'])) ?>
             </option>
             <?php endforeach; ?>
