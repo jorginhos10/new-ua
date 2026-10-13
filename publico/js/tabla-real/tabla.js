@@ -300,72 +300,78 @@ TablaReal.registrarVista('tabla', function (ctx) {
         construirFilaTotales();
     });
 
-    // --- Selección de fila + Editar (navega al formulario real) / Eliminar (real) ---
+    // --- Selección de fila(s) + Editar (navega al formulario real, exige exactamente 1) /
+    // Eliminar (real, admite varias a la vez — ver AnalisisControlador::procesarEliminarModulo()
+    // y PeticionesControlador::procesarAccionCeldaTipoDetalle(), ambas ya aceptan un lote). ---
     var casillaSeleccionarTodo = document.getElementById('tdt-seleccionar-todo');
     var botonEditar = document.getElementById('tdt-boton-editar');
     var botonEliminar = document.getElementById('tdt-boton-eliminar');
     var formAccion = document.getElementById('tdt-form-accion');
     var formAccionValor = document.getElementById('tdt-form-accion-valor');
-    var formOrigenId = document.getElementById('tdt-form-origen-id');
+    var formOrigenIdsJson = document.getElementById('tdt-form-origen-ids-json');
 
-    function filaSeleccionadaUnica() {
-        var seleccionadas = filasOriginales.filter(function (fila) {
+    function filasSeleccionadas() {
+        return filasOriginales.filter(function (fila) {
             return fila.querySelector('.tabla-seleccion-fila:checked') !== null;
         });
-        return seleccionadas.length === 1 ? seleccionadas[0] : null;
     }
 
     function actualizarBotonesSeleccion() {
-        var fila = filaSeleccionadaUnica();
-        var puedeEditar = fila && fila.dataset.puedeEditar === '1' && fila.dataset.rutaEditar;
+        var seleccionadas = filasSeleccionadas();
+        var unica = seleccionadas.length === 1 ? seleccionadas[0] : null;
+        var puedeEditar = unica && unica.dataset.puedeEditar === '1' && unica.dataset.rutaEditar;
         if (botonEditar) { botonEditar.disabled = !puedeEditar; }
-        if (botonEliminar) { botonEliminar.disabled = !fila; }
+        if (botonEliminar) { botonEliminar.disabled = seleccionadas.length === 0; }
         filasOriginales.forEach(function (tr) {
             tr.classList.toggle('fila-seleccionada', tr.querySelector('.tabla-seleccion-fila:checked') !== null);
         });
+        if (casillaSeleccionarTodo) {
+            var total = filasOriginales.length;
+            casillaSeleccionarTodo.checked = total > 0 && seleccionadas.length === total;
+            casillaSeleccionarTodo.indeterminate = seleccionadas.length > 0 && seleccionadas.length < total;
+        }
     }
 
     filasOriginales.forEach(function (fila) {
         var casilla = fila.querySelector('.tabla-seleccion-fila');
-        casilla.addEventListener('change', function () {
-            if (casilla.checked) {
-                filasOriginales.forEach(function (otraFila) {
-                    var otra = otraFila.querySelector('.tabla-seleccion-fila');
-                    if (otra !== casilla) { otra.checked = false; }
-                });
-            }
-            actualizarBotonesSeleccion();
-        });
+        casilla.addEventListener('change', actualizarBotonesSeleccion);
     });
 
     if (casillaSeleccionarTodo) {
         casillaSeleccionarTodo.addEventListener('change', function () {
-            // Editar/Eliminar exigen exactamente 1 fila: "seleccionar todo" solo sirve para acciones
-            // masivas que no existen en este landing, así que se deja sin marcar todas.
-            casillaSeleccionarTodo.checked = false;
+            var marcar = casillaSeleccionarTodo.checked;
+            filasOriginales.forEach(function (fila) {
+                var casilla = fila.querySelector('.tabla-seleccion-fila');
+                if (casilla) { casilla.checked = marcar; }
+            });
+            actualizarBotonesSeleccion();
         });
     }
 
     if (botonEditar) {
         botonEditar.addEventListener('click', function () {
-            var fila = filaSeleccionadaUnica();
-            if (!fila || botonEditar.disabled) { return; }
+            var seleccionadas = filasSeleccionadas();
+            if (seleccionadas.length !== 1 || botonEditar.disabled) { return; }
 
-            window.location.href = fila.dataset.rutaEditar;
+            window.location.href = seleccionadas[0].dataset.rutaEditar;
         });
     }
 
     if (botonEliminar) {
         botonEliminar.addEventListener('click', function () {
-            var fila = filaSeleccionadaUnica();
-            if (!fila || botonEliminar.disabled) { return; }
+            var seleccionadas = filasSeleccionadas();
+            if (seleccionadas.length === 0 || botonEliminar.disabled) { return; }
 
-            if (!window.confirm('¿Eliminar este ítem? No se puede deshacer.')) {
+            var mensaje = seleccionadas.length === 1
+                ? '¿Eliminar este ítem? No se puede deshacer.'
+                : '¿Eliminar estos ' + seleccionadas.length + ' ítems? No se puede deshacer.';
+            if (!window.confirm(mensaje)) {
                 return;
             }
 
+            var ids = seleccionadas.map(function (fila) { return parseInt(fila.dataset.origenId, 10); });
+            formOrigenIdsJson.value = JSON.stringify(ids);
             formAccionValor.value = 'eliminar_celda';
-            formOrigenId.value = fila.dataset.origenId;
             formAccion.submit();
         });
     }

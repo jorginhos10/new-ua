@@ -445,10 +445,15 @@ class GastoControlador
             9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dic',
         ];
 
+        // Mismo orden que exportarPlantilla() (Sede/Dependencia/Proyecto PDI/Contratos
+        // comunes/Actividad/Rubro/Insumo/Cantidad/Costo unitario/Valor total/Meses) — Línea
+        // estratégica y Motor de desarrollo van al final: se derivan del Proyecto PDI elegido
+        // (no son datos que se llenen aparte), así que no tienen un lugar propio en la plantilla
+        // de importación y se agregan aquí solo como referencia extra, sin desplazar al resto.
         $encabezados = [
-            'Sede', 'Dependencia', 'Línea estratégica', 'Motor de desarrollo', 'Proyecto PDI',
-            'Contratos comunes', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario',
-            'Valor total', 'Meses',
+            'Sede', 'Dependencia', 'Proyecto PDI', 'Contratos comunes', 'Actividad', 'Rubro',
+            'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Meses',
+            'Línea estratégica', 'Motor de desarrollo',
         ];
 
         $filaDatos = static function (array $gasto) use ($nombresMeses): array {
@@ -459,8 +464,6 @@ class GastoControlador
             return [
                 $gasto['sede_codigo'] . ' - ' . $gasto['sede_nombre'],
                 $gasto['dependencia'],
-                $gasto['linea_codigo'] . ' - ' . $gasto['linea_nombre'],
-                $gasto['motor_codigo'] . ' - ' . $gasto['motor_nombre'],
                 $gasto['proyecto_codigo'] . ' - ' . $gasto['proyecto_nombre'],
                 (string) ($gasto['objeto_proyecto_paa'] ?? ''),
                 $gasto['actividad'],
@@ -470,6 +473,8 @@ class GastoControlador
                 number_format((float) $gasto['costo_unitario'], 2, ',', '.'),
                 number_format((float) $gasto['valor_total'], 2, ',', '.'),
                 implode(', ', $mesesGasto),
+                $gasto['linea_codigo'] . ' - ' . $gasto['linea_nombre'],
+                $gasto['motor_codigo'] . ' - ' . $gasto['motor_nombre'],
             ];
         };
 

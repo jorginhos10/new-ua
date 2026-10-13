@@ -580,7 +580,7 @@ class PeticionesControlador
             : $this->obtenerDependenciasPermitidas();
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $error = $this->procesarAccionCeldaTipoDetalle($origen);
+            [$error, $exitoAccion] = $this->procesarAccionCeldaTipoDetalle($origen);
             $destino = 'index.php?ruta=peticiones-tipo-detalle&estado=' . urlencode($estado) . '&origen=' . urlencode($origen)
                 . '&anio_id=' . $anioSeleccionadoId . '&resaltar_id=' . $resaltarId;
             if ($dependenciaFiltro !== '') {
@@ -588,13 +588,16 @@ class PeticionesControlador
             }
             if ($error !== '') {
                 $_SESSION['peticiones_flash_error'] = $error;
+            } elseif ($exitoAccion !== '') {
+                $_SESSION['peticiones_flash_exito'] = $exitoAccion;
             }
             header('Location: ' . $destino);
             exit;
         }
 
         $error = $_SESSION['peticiones_flash_error'] ?? '';
-        unset($_SESSION['peticiones_flash_error']);
+        $exito = $_SESSION['peticiones_flash_exito'] ?? '';
+        unset($_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']);
 
         $itemsCrudos = $this->obtenerItemsCrudosPorEstado($estado, $origen, $anioSeleccionadoId, $dependenciasPermitidas);
 
@@ -865,39 +868,78 @@ class PeticionesControlador
     }
 
     /**
-     * Elimina, de verdad, el ítem seleccionado en el landing de "Ver" — solo si quien actúa es su
-     * propio dueño (mismo criterio que ya usa Perfil de proyectos: usuario_id de la sesión igual al
-     * usuario_id del registro), o el superadministrador. Reutiliza el modelo real de cada origen
-     * (Gasto::eliminar(), Necesidad::eliminar(), etc.), nunca reescribe esa lógica. La edición ya no
-     * es in-place aquí: "Editar" navega al formulario real del módulo dueño (ver construirRutaEditar()).
+     * Elimina, de verdad, los ítems seleccionados en el landing de "Ver" (uno o varios — ver
+     * publico/js/tabla-real/tabla.js) — por cada uno, solo si quien actúa es su propio dueño
+     * (mismo criterio que ya usa Perfil de proyectos: usuario_id de la sesión igual al usuario_id
+     * del registro), o el superadministrador; los que no califican se omiten en vez de abortar el
+     * lote completo. Reutiliza el modelo real de cada origen (Gasto::eliminar(),
+     * Necesidad::eliminar(), etc.), nunca reescribe esa lógica. La edición ya no es in-place aquí:
+     * "Editar" navega al formulario real del módulo dueño (ver construirRutaEditar()).
+     *
+     * @return array{0: string, 1: string} [error, exito]
      */
-    private function procesarAccionCeldaTipoDetalle(string $origen): string
+    private function procesarAccionCeldaTipoDetalle(string $origen): array
     {
-        $id = (int) ($_POST['origen_id'] ?? 0);
         $modelo = $this->obtenerModeloPorOrigen($origen);
-
-        if ($id <= 0 || $modelo === null || !method_exists($modelo, 'obtenerPorId')) {
-            return 'Ítem inválido.';
+        if ($modelo === null || !method_exists($modelo, 'obtenerPorId') || !method_exists($modelo, 'eliminar')) {
+            return ['Este origen no admite eliminar desde aquí.', ''];
         }
 
-        $registro = $modelo->obtenerPorId($id);
-
-        if ($registro === null) {
-            return 'El ítem ya no existe.';
+        $ids = $this->leerIdsSeleccionadosTablaReal();
+        if (empty($ids)) {
+            return ['No seleccionaste ningún ítem para eliminar.', ''];
         }
 
-        $esDueno = isset($registro['usuario_id']) && (int) $registro['usuario_id'] === (int) $_SESSION['usuario_id'];
-        if (!$esDueno && empty($_SESSION['usuario_super_admin'])) {
-            return 'No tienes permiso para modificar este ítem.';
+        $eliminados = 0;
+        $omitidos = 0;
+
+        foreach ($ids as $id) {
+            $registro = $modelo->obtenerPorId($id);
+            if ($registro === null) {
+                $omitidos++;
+                continue;
+            }
+
+            $esDueno = isset($registro['usuario_id']) && (int) $registro['usuario_id'] === (int) $_SESSION['usuario_id'];
+            if (!$esDueno && empty($_SESSION['usuario_super_admin'])) {
+                $omitidos++;
+                continue;
+            }
+
+            $modelo->eliminar($id);
+            $eliminados++;
         }
 
-        if (!method_exists($modelo, 'eliminar')) {
-            return 'Este origen no admite eliminar desde aquí.';
+        if ($eliminados === 0) {
+            return ['No tienes permiso para eliminar ningún ítem seleccionado.', ''];
         }
 
-        $modelo->eliminar($id);
+        $exito = $eliminados === 1 ? 'Ítem eliminado.' : $eliminados . ' ítems eliminados.';
+        if ($omitidos > 0) {
+            $exito .= ' ' . $omitidos . ' se omitieron por no ser tuyos.';
+        }
 
-        return '';
+        return ['', $exito];
+    }
+
+    /**
+     * IDs seleccionados en la tabla real (checkboxes, ver publico/js/tabla-real/tabla.js) — un
+     * solo campo JSON en vez de origen_id[] paralelos, para no toparse con max_input_vars cuando
+     * se selecciona "todo" en una tabla grande (mismo criterio que leerItemsJson()).
+     */
+    private function leerIdsSeleccionadosTablaReal(): array
+    {
+        $json = $_POST['origen_ids_json'] ?? '';
+        $decodificado = is_string($json) && $json !== '' ? json_decode($json, true) : null;
+
+        if (!is_array($decodificado)) {
+            return [];
+        }
+
+        $ids = array_map('intval', $decodificado);
+        $ids = array_filter($ids, static fn (int $id): bool => $id > 0);
+
+        return array_values(array_unique($ids));
     }
 
     /**

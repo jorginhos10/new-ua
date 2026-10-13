@@ -494,31 +494,65 @@ class UnisaludControlador
         $gastos = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : [];
         $gastos = $this->filtrarPorPropietarioODestinatario($gastos, $usuarioActual, $dependenciasPermitidas);
 
-        $filaIngreso = static function (array $ingreso): array {
-            return [
-                $ingreso['dependencia'],
-                (string) ($ingreso['concepto_adicional'] ?? ''),
-                number_format((float) $ingreso['valor_adicional'], 2, ',', '.'),
-                number_format((float) $ingreso['valor_total'], 2, ',', '.'),
-                $ingreso['estado'],
-            ];
+        // Mismo orden que exportarPlantilla() (Dependencia/Concepto/Cantidad/Valor unitario/Valor
+        // total), con "Estado" al final (dato de la fila existente, no aplica a Plantilla). La
+        // plantilla importa un registro POR CONCEPTO (tabla ingresos_unisalud_conceptos,
+        // uno-a-muchos) — antes Exportar solo sacaba el resumen de cabecera (concepto_adicional/
+        // valor_adicional), perdiendo el desglose; ahora saca una fila por concepto. Un ingreso
+        // viejo sin conceptos propios (solo cabecera) se exporta igual, con una sola fila usando
+        // esa cabecera como si fuera su único concepto.
+        $filasIngreso = static function (array $ingreso): array {
+            $conceptos = $ingreso['conceptos'] ?? [];
+
+            if (empty($conceptos)) {
+                $conceptos = [[
+                    'concepto' => (string) ($ingreso['concepto_adicional'] ?? ''),
+                    'cantidad' => 1,
+                    'valor' => (float) $ingreso['valor_adicional'],
+                ]];
+            }
+
+            return array_map(static function (array $concepto) use ($ingreso): array {
+                $cantidad = (float) $concepto['cantidad'];
+                $valorUnitario = (float) $concepto['valor'];
+
+                return [
+                    $ingreso['dependencia'],
+                    (string) $concepto['concepto'],
+                    (string) (int) $cantidad,
+                    number_format($valorUnitario, 2, ',', '.'),
+                    number_format($cantidad * $valorUnitario, 2, ',', '.'),
+                    $ingreso['estado'],
+                ];
+            }, $conceptos);
         };
 
+        // Mismo orden que exportarPlantilla() (Sede/Dependencia/Proyecto PDI/Contratos comunes/
+        // Categoría/Actividad/Rubro/Insumo/Cantidad/Costo unitario/Valor total/Meses), con
+        // "Estado" al final.
         $filaGasto = static function (array $gasto): array {
             return [
+                $gasto['sede_codigo'] . ' - ' . $gasto['sede_nombre'],
                 $gasto['dependencia'],
+                $gasto['proyecto_codigo'] . ' - ' . $gasto['proyecto_nombre'],
+                (string) ($gasto['objeto_proyecto_paa'] ?? ''),
                 $gasto['categoria'],
+                $gasto['actividad'],
+                $gasto['rubro_id'] !== null ? $gasto['rubro_codigo'] . ' - ' . $gasto['rubro_descripcion'] : ($gasto['rubro_texto'] ?? '—'),
                 $gasto['insumo'],
                 (string) (int) $gasto['cantidad'],
                 number_format((float) $gasto['costo_unitario'], 2, ',', '.'),
                 number_format((float) $gasto['valor_total'], 2, ',', '.'),
+                (string) ($gasto['meses'] ?? ''),
                 $gasto['estado'],
             ];
         };
 
+        $filasIngresoAplanadas = array_merge([], ...array_map($filasIngreso, $ingresos));
+
         $hojas = [
-            ['nombre' => 'Ingresos', 'encabezados' => ['Dependencia', 'Concepto adicional', 'Valor adicional', 'Valor total', 'Estado'], 'filas' => array_map($filaIngreso, $ingresos)],
-            ['nombre' => 'Gastos', 'encabezados' => ['Dependencia', 'Categoría', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Estado'], 'filas' => array_map($filaGasto, $gastos)],
+            ['nombre' => 'Ingresos', 'encabezados' => ['Dependencia', 'Concepto', 'Cantidad', 'Valor unitario', 'Valor total', 'Estado'], 'filas' => $filasIngresoAplanadas],
+            ['nombre' => 'Gastos', 'encabezados' => ['Sede', 'Dependencia', 'Proyecto PDI', 'Contratos comunes', 'Categoría', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Meses', 'Estado'], 'filas' => array_map($filaGasto, $gastos)],
         ];
 
         // Una pestaña por lote enviado (foto congelada).

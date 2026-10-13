@@ -30,6 +30,7 @@ require_once __DIR__ . '/../modelo/VersionTechos.php';
 require_once __DIR__ . '/../modelo/VersionDocumentos.php';
 require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
+require_once __DIR__ . '/../modelo/PeticionArchivada.php';
 require_once __DIR__ . '/PeticionesControlador.php';
 
 /**
@@ -89,6 +90,10 @@ class AnalisisControlador
 
     /** Riesgos ARL 1-5: sin una sola columna 'valor_total', se suman aquí para pills/gráficas. */
     private const CLAVES_RIESGO_ARL = ['riesgo1_valor', 'riesgo2_valor', 'riesgo3_valor', 'riesgo4_valor', 'riesgo5_valor'];
+
+    /** Cache de una sola petición HTTP (ver obtenerIdsArchivadosOExpediente()) — evita repetir la
+     * misma consulta a peticiones_archivadas por cada uno de los 6 módulos del selector. */
+    private ?array $cacheAccionesPorClave = null;
 
     public function index(): void
     {
@@ -277,7 +282,7 @@ class AnalisisControlador
         $exito = '';
 
         if ($tab === 'analisis' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'eliminar_celda') {
-            $error = $this->procesarEliminarModulo((string) ($_GET['origen'] ?? ''));
+            [$error, $exito] = $this->procesarEliminarModulo((string) ($_GET['origen'] ?? ''));
         } elseif ($tab === 'programacion' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'importar_presupuesto') {
             $error = $this->importarPresupuestoInstitucional();
             $exito = $error === '' ? 'Presupuesto institucional importado correctamente.' : '';
@@ -313,15 +318,16 @@ class AnalisisControlador
         exit;
     }
 
-    private function procesarEliminarModulo(string $origen): string
+    /** @return array{0: string, 1: string} [error, exito] */
+    private function procesarEliminarModulo(string $origen): array
     {
         if (!in_array($origen, self::ORIGENES_ANALISIS, true)) {
-            return 'Origen inválido.';
+            return ['Origen inválido.', ''];
         }
 
-        $id = (int) ($_POST['origen_id'] ?? 0);
-        if ($id <= 0) {
-            return 'Ítem inválido.';
+        $ids = $this->leerIdsSeleccionadosTablaReal();
+        if (empty($ids)) {
+            return ['No seleccionaste ningún ítem para eliminar.', ''];
         }
 
         $modelo = $this->obtenerModeloModulo($origen);
@@ -330,13 +336,46 @@ class AnalisisControlador
         // (por ingreso_id) y LUEGO el ingreso — al revés, la FK ON DELETE SET NULL deja esos
         // gastos huérfanos para siempre.
         $origenGastoPar = array_search($origen, self::PARES_GASTO_INGRESO, true);
-        if ($origenGastoPar !== false) {
-            $this->obtenerModeloModulo($origenGastoPar)->eliminarAutomaticosPorIngreso($id);
+
+        $eliminados = 0;
+        foreach ($ids as $id) {
+            if (!method_exists($modelo, 'obtenerPorId') || $modelo->obtenerPorId($id) === null) {
+                continue;
+            }
+
+            if ($origenGastoPar !== false) {
+                $this->obtenerModeloModulo($origenGastoPar)->eliminarAutomaticosPorIngreso($id);
+            }
+            $modelo->eliminar($id);
+            $eliminados++;
         }
 
-        $modelo->eliminar($id);
+        if ($eliminados === 0) {
+            return ['Ningún ítem seleccionado existe ya.', ''];
+        }
 
-        return '';
+        return ['', $eliminados === 1 ? 'Ítem eliminado.' : $eliminados . ' ítems eliminados.'];
+    }
+
+    /**
+     * IDs seleccionados en la tabla real (checkboxes, ver publico/js/tabla-real/tabla.js) — un
+     * solo campo JSON en vez de origen_id[] paralelos, para no toparse con max_input_vars cuando
+     * se selecciona "todo" en una tabla grande (mismo criterio que ya usa Peticiones para sus
+     * acciones masivas, ver PeticionesControlador::leerItemsJson()).
+     */
+    private function leerIdsSeleccionadosTablaReal(): array
+    {
+        $json = $_POST['origen_ids_json'] ?? '';
+        $decodificado = is_string($json) && $json !== '' ? json_decode($json, true) : null;
+
+        if (!is_array($decodificado)) {
+            return [];
+        }
+
+        $ids = array_map('intval', $decodificado);
+        $ids = array_filter($ids, static fn (int $id): bool => $id > 0);
+
+        return array_values(array_unique($ids));
     }
 
     /**
@@ -1148,7 +1187,8 @@ class AnalisisControlador
         [$snapshotIdActual, $dependenciaFiltroActual] = $this->resolverFiltrosAnalisis($vista, $snapshots, $dependenciasTodas);
 
         $error = $_SESSION['analisis_flash_error'] ?? '';
-        unset($_SESSION['analisis_flash_error']);
+        $exito = $_SESSION['analisis_flash_exito'] ?? '';
+        unset($_SESSION['analisis_flash_error'], $_SESSION['analisis_flash_exito']);
 
         $totalesPorModulo = [];
         foreach (self::ORIGENES_ANALISIS as $origenModulo) {
@@ -1504,7 +1544,9 @@ class AnalisisControlador
                 ));
             }
         } else {
-            $filas = $this->obtenerModeloModulo($origen)->obtenerPorAnio($anioPresupuestalId);
+            // Datos en vivo (Tiempo real/Usuario, nunca Repositorio — un snapshot congelado ya es
+            // su propia verdad histórica): ver filtrarSoloActivos().
+            $filas = $this->filtrarSoloActivos($origen, $this->obtenerModeloModulo($origen)->obtenerPorAnio($anioPresupuestalId));
         }
 
         if ($vista === 'usuario' && $dependenciaFiltro !== null) {
@@ -1516,6 +1558,61 @@ class AnalisisControlador
         }
 
         return $filas;
+    }
+
+    /**
+     * "Solo lo activo", el mismo criterio en todas las pestañas que leen Gasto/Autogestión en vivo
+     * (Análisis de distribución, Articulación PDI, Techos y Metas): nunca borrador (su dueño
+     * todavía lo puede cambiar, no es definitivo) ni lo que ya se archivó o se mandó a Expediente
+     * en Peticiones. $origen es una clave de PeticionesControlador::TABLAS_ORIGEN (ej.
+     * 'gasto_principal', 'gasto_extension') — null si las filas no pasan por Peticiones.
+     */
+    private function filtrarSoloActivos(?string $origen, array $filas): array
+    {
+        $filas = array_values(array_filter(
+            $filas,
+            static fn (array $fila): bool => ($fila['estado'] ?? null) !== 'borrador'
+        ));
+
+        if ($origen === null) {
+            return $filas;
+        }
+
+        $idsExcluidos = $this->obtenerIdsArchivadosOExpediente($origen);
+        if (empty($idsExcluidos)) {
+            return $filas;
+        }
+
+        return array_values(array_filter(
+            $filas,
+            static fn (array $fila): bool => !isset($idsExcluidos[(int) $fila['id']])
+        ));
+    }
+
+    /**
+     * IDs (origen_id) de un origen que ya están "archivada" o "expediente" en Peticiones — ver
+     * filtrarSoloActivos(). Una sola consulta por request (vía $this->cacheAccionesPorClave),
+     * reutilizada por todas las pestañas/módulos que la necesiten.
+     */
+    private function obtenerIdsArchivadosOExpediente(string $origen): array
+    {
+        if ($this->cacheAccionesPorClave === null) {
+            $this->cacheAccionesPorClave = (new PeticionArchivada())->obtenerAccionesPorClave();
+        }
+
+        $ids = [];
+        foreach ($this->cacheAccionesPorClave as $clave => $accion) {
+            if (!in_array($accion, ['archivada', 'expediente'], true)) {
+                continue;
+            }
+
+            [$claveOrigen, $claveId] = explode(':', $clave, 2);
+            if ($claveOrigen === $origen) {
+                $ids[(int) $claveId] = true;
+            }
+        }
+
+        return $ids;
     }
 
     /** Suma del valor de un módulo — usado por las pills del selector (sin joins). */

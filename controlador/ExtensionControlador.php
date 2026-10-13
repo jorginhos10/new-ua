@@ -568,33 +568,68 @@ class ExtensionControlador
             }
         }
 
-        $filaIngreso = static function (array $ingreso) use ($mapaItems): array {
-            return [
-                $mapaItems[(int) $ingreso['autogestion_id']] ?? '',
-                $ingreso['dependencia'],
-                (string) ($ingreso['concepto_adicional'] ?? ''),
-                number_format((float) $ingreso['valor_adicional'], 2, ',', '.'),
-                number_format((float) $ingreso['valor_total'], 2, ',', '.'),
-                $ingreso['estado'],
-            ];
+        // Mismo orden que exportarPlantilla() (Dependencia/Ítem de autogestión/Concepto/Cantidad/
+        // Valor unitario/Valor total), con "Estado" al final (dato de la fila existente, no
+        // aplica a Plantilla). La plantilla importa un registro POR CONCEPTO (tabla
+        // ingresos_extension_conceptos, uno-a-muchos) — antes Exportar solo sacaba el resumen de
+        // cabecera (concepto_adicional/valor_adicional), perdiendo el desglose; ahora saca una
+        // fila por concepto. Un ingreso viejo sin conceptos propios (solo cabecera) se exporta
+        // igual, con una sola fila usando esa cabecera como si fuera su único concepto.
+        $filasIngreso = static function (array $ingreso) use ($mapaItems): array {
+            $itemNombre = $mapaItems[(int) $ingreso['autogestion_id']] ?? '';
+            $conceptos = $ingreso['conceptos'] ?? [];
+
+            if (empty($conceptos)) {
+                $conceptos = [[
+                    'concepto' => (string) ($ingreso['concepto_adicional'] ?? ''),
+                    'cantidad' => 1,
+                    'valor' => (float) $ingreso['valor_adicional'],
+                ]];
+            }
+
+            return array_map(static function (array $concepto) use ($ingreso, $itemNombre): array {
+                $cantidad = (float) $concepto['cantidad'];
+                $valorUnitario = (float) $concepto['valor'];
+
+                return [
+                    $ingreso['dependencia'],
+                    $itemNombre,
+                    (string) $concepto['concepto'],
+                    (string) (int) $cantidad,
+                    number_format($valorUnitario, 2, ',', '.'),
+                    number_format($cantidad * $valorUnitario, 2, ',', '.'),
+                    $ingreso['estado'],
+                ];
+            }, $conceptos);
         };
 
+        // Mismo orden que exportarPlantilla() (Sede/Dependencia/Ítem de autogestión/Proyecto PDI/
+        // Contratos comunes/Categoría/Actividad/Rubro/Insumo/Cantidad/Costo unitario/Valor total/
+        // Meses), con "Estado" al final.
         $filaGasto = static function (array $gasto) use ($mapaItems): array {
             return [
-                $mapaItems[(int) $gasto['autogestion_id']] ?? '',
+                $gasto['sede_codigo'] . ' - ' . $gasto['sede_nombre'],
                 $gasto['dependencia'],
+                $mapaItems[(int) $gasto['autogestion_id']] ?? '',
+                $gasto['proyecto_codigo'] . ' - ' . $gasto['proyecto_nombre'],
+                (string) ($gasto['objeto_proyecto_paa'] ?? ''),
                 $gasto['categoria'],
+                $gasto['actividad'],
+                $gasto['rubro_id'] !== null ? $gasto['rubro_codigo'] . ' - ' . $gasto['rubro_descripcion'] : ($gasto['rubro_texto'] ?? '—'),
                 $gasto['insumo'],
                 (string) (int) $gasto['cantidad'],
                 number_format((float) $gasto['costo_unitario'], 2, ',', '.'),
                 number_format((float) $gasto['valor_total'], 2, ',', '.'),
+                (string) ($gasto['meses'] ?? ''),
                 $gasto['estado'],
             ];
         };
 
+        $filasIngresoAplanadas = array_merge([], ...array_map($filasIngreso, $ingresos));
+
         $hojas = [
-            ['nombre' => 'Ingresos', 'encabezados' => ['Ítem de autogestión', 'Dependencia', 'Concepto adicional', 'Valor adicional', 'Valor total', 'Estado'], 'filas' => array_map($filaIngreso, $ingresos)],
-            ['nombre' => 'Gastos', 'encabezados' => ['Ítem de autogestión', 'Dependencia', 'Categoría', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Estado'], 'filas' => array_map($filaGasto, $gastos)],
+            ['nombre' => 'Ingresos', 'encabezados' => ['Dependencia', 'Ítem de autogestión', 'Concepto', 'Cantidad', 'Valor unitario', 'Valor total', 'Estado'], 'filas' => $filasIngresoAplanadas],
+            ['nombre' => 'Gastos', 'encabezados' => ['Sede', 'Dependencia', 'Ítem de autogestión', 'Proyecto PDI', 'Contratos comunes', 'Categoría', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Meses', 'Estado'], 'filas' => array_map($filaGasto, $gastos)],
         ];
 
         // Una pestaña por lote enviado (foto congelada), de todos los ítems de autogestión a la vez

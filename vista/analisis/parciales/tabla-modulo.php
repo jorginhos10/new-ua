@@ -163,7 +163,7 @@ $idTabla = 'tabla-analisis-' . $origenActivo;
 <?php if ($vista === 'tiempo_real'): ?>
 <form method="POST" id="tdt-form-accion" action="<?= htmlspecialchars(analisisUrl('analisis', $vista, ['origen' => $origenActivo])) ?>" style="display:none;">
     <input type="hidden" name="accion" id="tdt-form-accion-valor" value="">
-    <input type="hidden" name="origen_id" id="tdt-form-origen-id" value="">
+    <input type="hidden" name="origen_ids_json" id="tdt-form-origen-ids-json" value="">
 </form>
 <?php endif; ?>
 

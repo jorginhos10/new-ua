@@ -120,6 +120,10 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
     <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
     <?php endif; ?>
 
+    <?php if (!empty($exito)): ?>
+    <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
+    <?php endif; ?>
+
     <?php if (empty($filasCompletas)): ?>
     <p class="texto-atenuado">No hay elementos para mostrar.</p>
     <?php else: ?>
@@ -183,7 +187,7 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
 
 <form method="POST" id="tdt-form-accion" action="index.php?ruta=peticiones-tipo-detalle&estado=<?= urlencode($estado) ?>&origen=<?= urlencode($origen) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&resaltar_id=<?= (int) $resaltarId ?><?= $dependenciaFiltro !== '' ? '&dependencia=' . urlencode($dependenciaFiltro) : '' ?>" style="display:none;">
     <input type="hidden" name="accion" id="tdt-form-accion-valor" value="">
-    <input type="hidden" name="origen_id" id="tdt-form-origen-id" value="">
+    <input type="hidden" name="origen_ids_json" id="tdt-form-origen-ids-json" value="">
 </form>
 
 <script>
