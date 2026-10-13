@@ -23,7 +23,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 </h1>
             </div>
             <div class="grupo-acciones-encabezado">
-                <a href="index.php?ruta=consolidado-autogestion&exportar=xlsx<?= $anioSeleccionadoId > 0 ? '&anio_id=' . (int) $anioSeleccionadoId : '' ?>" class="boton-accion boton-accion-enviar">Exportar Excel</a>
+                <a href="index.php?ruta=consolidado-autogestion&exportar=xlsx<?= $anioSeleccionadoId > 0 ? '&anio_id=' . (int) $anioSeleccionadoId : '' ?>" class="boton-icono-accion" data-tooltip="Exportar a Excel" title="Exportar a Excel"><svg class="svg-exportar" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg></a>
                 <a href="index.php?ruta=peticiones" class="boton-accion boton-accion-ver">&larr; Volver a Peticiones</a>
             </div>
         </div>

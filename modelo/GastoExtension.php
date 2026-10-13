@@ -460,4 +460,16 @@ class GastoExtension
 
         return $consulta->execute(['ingreso_id' => $ingresoId]);
     }
+
+    /**
+     * Para "Recalcular excedentes": además de las automáticas, borra las que se convirtieron a
+     * manuales (convertirAutomaticoAManual() deja tipo_automatico en NULL pero conserva
+     * ingreso_id) — si no, quedarían duplicadas junto a las recién recalculadas. Solo borradores.
+     */
+    public function eliminarDerivadosBorradorPorIngreso(int $ingresoId): bool
+    {
+        $consulta = $this->db->prepare("DELETE FROM gastos_extension WHERE ingreso_id = :ingreso_id AND estado = 'borrador'");
+
+        return $consulta->execute(['ingreso_id' => $ingresoId]);
+    }
 }

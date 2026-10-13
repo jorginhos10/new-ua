@@ -3153,6 +3153,48 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
+// Casillas marcadas; si no hay ninguna, todas las de filas visibles (respeta el filtro de tarjetas).
+function seleccionOTodoVisible(casillas) {
+    var marcadas = Array.prototype.filter.call(casillas, function (casilla) {
+        return casilla.checked;
+    });
+    if (marcadas.length > 0) {
+        return marcadas;
+    }
+    return Array.prototype.filter.call(casillas, function (casilla) {
+        var fila = casilla.closest('tr');
+        return !fila || fila.offsetParent !== null;
+    });
+}
+
+// Exportar a Excel (Consolidado por tipo / Archivados): un POST con items_json que el servidor
+// responde con el .xlsx directo (ver PeticionesControlador::exportarSeleccion()).
+function exportarSeleccionPeticiones(vista, anioId, items) {
+    if (items.length === 0) {
+        window.alert('No hay ítems para exportar.');
+        return;
+    }
+
+    var formulario = document.createElement('form');
+    formulario.method = 'POST';
+    formulario.action = 'index.php?ruta=peticiones';
+    formulario.style.display = 'none';
+
+    [['accion', 'exportar_seleccion'], ['vista', vista], ['anio_id', anioId || ''], ['items_json', JSON.stringify(items.map(function (item) {
+        return { origen: item.origen, origen_id: item.origen_id };
+    }))]].forEach(function (par) {
+        var campo = document.createElement('input');
+        campo.type = 'hidden';
+        campo.name = par[0];
+        campo.value = par[1];
+        formulario.appendChild(campo);
+    });
+
+    document.body.appendChild(formulario);
+    formulario.submit();
+    formulario.remove();
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     var checkboxes = document.querySelectorAll('.checkbox-consolidado');
     var checkboxTodos = document.getElementById('checkbox-consolidado-todos');
@@ -3541,6 +3583,15 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // ---- Exportar: descarga a Excel lo seleccionado, sin entrar a "Ver" (o todo lo visible si no
+    // hay nada seleccionado). ----
+    var botonExportarConsolidado = document.getElementById('boton-consolidado-exportar');
+    if (botonExportarConsolidado) {
+        botonExportarConsolidado.addEventListener('click', function () {
+            exportarSeleccionPeticiones('consolidado', anioIdConsolidado, itemsDeSeleccion(seleccionOTodoVisible(checkboxes)));
+        });
+    }
+
     document.addEventListener('keydown', function (evento) {
         if (evento.key !== 'Escape') {
             return;
@@ -3785,6 +3836,43 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             enviarFormularioArchivado('duplicar_archivado', seleccionados);
+        });
+    }
+
+    var botonArchivadoEliminar = document.getElementById('boton-archivado-eliminar');
+    var botonArchivadoExportar = document.getElementById('boton-archivado-exportar');
+
+    if (botonArchivadoEliminar) {
+        checkboxesArchivado.forEach(function (casilla) {
+            casilla.addEventListener('change', function () {
+                botonArchivadoEliminar.disabled = obtenerSeleccionadosArchivado().length === 0;
+            });
+        });
+        if (checkboxArchivadoTodos) {
+            checkboxArchivadoTodos.addEventListener('change', function () {
+                botonArchivadoEliminar.disabled = obtenerSeleccionadosArchivado().length === 0;
+            });
+        }
+
+        botonArchivadoEliminar.addEventListener('click', function () {
+            if (botonArchivadoEliminar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosArchivado();
+            var cantidad = itemsDeSeleccionArchivado(seleccionados).length;
+
+            if (!window.confirm('¿Eliminar permanentemente ' + cantidad + ' ítem(s) seleccionado(s)? Se borran también de su módulo de origen y no se puede deshacer.')) {
+                return;
+            }
+
+            enviarFormularioArchivado('eliminar_archivado_grupo', seleccionados);
+        });
+    }
+
+    if (botonArchivadoExportar) {
+        botonArchivadoExportar.addEventListener('click', function () {
+            exportarSeleccionPeticiones('archivar', anioIdArchivado, itemsDeSeleccionArchivado(seleccionOTodoVisible(checkboxesArchivado)));
         });
     }
 

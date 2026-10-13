@@ -257,6 +257,8 @@ class PostgradoControlador
 
             if ($accion === 'enviar_todo') {
                 [$error, $exito] = $this->enviarTodo();
+            } elseif ($accion === 'recalcular_excedentes') {
+                [$error, $exito] = $this->recalcularExcedentes();
             } elseif ($accion === 'ocultar_lote') {
                 [$error, $exito] = $this->ocultarLote();
             } elseif ($accion === 'eliminar_lote') {
@@ -391,16 +393,26 @@ class PostgradoControlador
         }
 
         $totalGastado = array_sum(array_map(static fn (array $g): float => (float) $g['valor_total'], $gastos));
-        $totalEjecutado = array_sum(array_map(static fn (array $g): float => (float) $g['valor_total'], $gastosEgresos));
-        $presupuestoAnio = array_sum(array_map(static fn (array $i): float => (float) $i['valor_total'], $ingresosTotal));
+        $sumarValores = static fn (array $filas): float => array_sum(array_map(static fn (array $f): float => (float) $f['valor_total'], $filas));
+        $esBorrador = static fn (array $f): bool => ($f['estado'] ?? '') === 'borrador';
+
+        // "Enviar todo" sigue usando los totales de todos los estados (la misma regla que valida
+        // enviarTodo() en el servidor).
+        $totalEgresosTodos = $sumarValores($gastosEgresos);
+        $totalIngresosTodos = $sumarValores($ingresosTotal);
+        $puedeEnviarTodo = $totalIngresosTodos > 0 && abs($totalIngresosTodos - $totalEgresosTodos) < 0.01;
+
+        // La barra de progreso solo refleja lo que sigue en borrador, para no mezclarlo con lo ya enviado.
+        $egresosBorrador = array_filter($gastosEgresos, $esBorrador);
+        $totalEjecutado = $sumarValores($egresosBorrador);
+        $presupuestoAnio = $sumarValores(array_filter($ingresosTotal, $esBorrador));
         $porcentajeGastado = $presupuestoAnio > 0 ? min(100, ($totalEjecutado / $presupuestoAnio) * 100) : 0.0;
-        $puedeEnviarTodo = $presupuestoAnio > 0 && abs($presupuestoAnio - $totalEjecutado) < 0.01;
 
         $totalCostos = 0.0;
         $totalInversion = 0.0;
         $totalExcedentes = 0.0;
 
-        foreach ($gastosEgresos as $gasto) {
+        foreach ($egresosBorrador as $gasto) {
             $valor = (float) $gasto['valor_total'];
             $categoria = $gasto['categoria'];
 
@@ -416,9 +428,6 @@ class PostgradoControlador
         $pctCostos = $presupuestoAnio > 0 ? min(100, ($totalCostos / $presupuestoAnio) * 100) : 0.0;
         $pctInversion = $presupuestoAnio > 0 ? min(100, ($totalInversion / $presupuestoAnio) * 100) : 0.0;
         $pctExcedentes = $presupuestoAnio > 0 ? min(100, ($totalExcedentes / $presupuestoAnio) * 100) : 0.0;
-
-        $diaActual = (int) date('z') + 1;
-        $totalDiasAnio = date('L') ? 366 : 365;
 
         $origenLote = $tab === 'ingresos' ? 'ingreso_postgrado' : 'gasto_postgrado';
         $lotesCrudos = $this->modeloEnvioLote->obtenerActivosPorFilas($origenLote, array_column($gastos, 'id'));
@@ -1769,6 +1778,69 @@ class PostgradoControlador
         }
 
         return ['', 'Se duplicaron ' . $duplicados . ' elemento(s).'];
+    }
+
+    /**
+     * "Recalcular excedentes" (botón de la barra): vuelve a generar las filas automáticas de cada
+     * ingreso en borrador visible para el usuario, con los % vigentes de la tabla de referencia de
+     * Configuraciones > Autogestión, para que cuadren con el ingreso. Descarta los ajustes manuales
+     * sobre esas filas y borra las automáticas huérfanas (sin ingreso). Lo ya enviado no se toca. No exige el permiso
+     * de automáticos: solo restablece los % oficiales sobre los ingresos que el usuario ya ve.
+     */
+    private function recalcularExcedentes(): array
+    {
+        $anioId = (int) ($_POST['anio_presupuestal_id'] ?? 0);
+        $autogestionId = (int) ($_POST['autogestion_id'] ?? 0);
+        if ($anioId <= 0 || $autogestionId <= 0) {
+            return ['Selecciona el año y el ítem de Autogestión.', ''];
+        }
+
+        [$usuarioActual, $dependencias] = $this->obtenerDependenciasVisiblesUsuarioActual();
+        $ingresos = $this->filtrarPorPropietarioODestinatario($this->modeloIngreso->obtenerPorAnioYAutogestion($anioId, $autogestionId), $usuarioActual, $dependencias);
+        $egresos = $this->filtrarPorPropietarioODestinatario($this->modeloGasto->obtenerPorAnioYAutogestion($anioId, $autogestionId), $usuarioActual, $dependencias);
+
+        // Un ingreso cuyas filas derivadas ya se enviaron no se recalcula: se descuadraría lo enviado.
+        $ingresosConDerivadosEnviados = [];
+        foreach ($egresos as $egreso) {
+            if ($egreso['ingreso_id'] !== null && $egreso['estado'] !== 'borrador') {
+                $ingresosConDerivadosEnviados[(int) $egreso['ingreso_id']] = true;
+            }
+        }
+
+        $huerfanas = 0;
+        foreach ($egresos as $egreso) {
+            if ($egreso['tipo_automatico'] !== null && $egreso['ingreso_id'] === null && $egreso['estado'] === 'borrador') {
+                $this->modeloGasto->eliminarForzado((int) $egreso['id']);
+                $huerfanas++;
+            }
+        }
+
+        $recalculados = 0;
+        $omitidos = 0;
+        foreach ($ingresos as $ingreso) {
+            if ($ingreso['estado'] !== 'borrador' || isset($ingresosConDerivadosEnviados[(int) $ingreso['id']])) {
+                $omitidos++;
+                continue;
+            }
+
+            $this->modeloGasto->eliminarDerivadosBorradorPorIngreso((int) $ingreso['id']);
+            $this->regenerarAutomaticosDeIngreso($ingreso);
+            $recalculados++;
+        }
+
+        if ($recalculados === 0 && $huerfanas === 0) {
+            return ['No hay ingresos en borrador para recalcular.', ''];
+        }
+
+        $mensaje = 'Excedentes recalculados para ' . $recalculados . ' ingreso(s) en borrador.';
+        if ($huerfanas > 0) {
+            $mensaje .= ' Se eliminaron ' . $huerfanas . ' fila(s) automática(s) sin ingreso asociado.';
+        }
+        if ($omitidos > 0) {
+            $mensaje .= ' ' . $omitidos . ' ingreso(s) ya enviado(s) no se modificaron.';
+        }
+
+        return ['', $mensaje];
     }
 
     /**

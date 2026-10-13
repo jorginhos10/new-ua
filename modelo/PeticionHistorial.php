@@ -47,6 +47,36 @@ class PeticionHistorial
     }
 
     /**
+     * Última acción (de entre $acciones) registrada para cada ítem, con la dependencia del usuario
+     * que la hizo — una sola consulta para todo Pendientes, en vez de una por ítem. Devuelve
+     * ['origen:origen_id' => ['accion' => ..., 'dependencia' => ...]]; gana la fila más reciente.
+     */
+    public function obtenerUltimaAccionPorClave(array $acciones): array
+    {
+        if (empty($acciones)) {
+            return [];
+        }
+
+        $marcadores = implode(', ', array_fill(0, count($acciones), '?'));
+        $consulta = $this->db->prepare(
+            "SELECT h.origen, h.origen_id, h.accion, d.nombre AS dependencia
+             FROM peticiones_historial h
+             LEFT JOIN usuarios u ON u.id = h.usuario_id
+             LEFT JOIN dependencias d ON d.id = u.dependencia_id
+             WHERE h.accion IN ($marcadores)
+             ORDER BY h.creado_en ASC, h.id ASC"
+        );
+        $consulta->execute(array_values($acciones));
+
+        $ultimas = [];
+        foreach ($consulta->fetchAll() as $fila) {
+            $ultimas[$fila['origen'] . ':' . $fila['origen_id']] = ['accion' => $fila['accion'], 'dependencia' => $fila['dependencia']];
+        }
+
+        return $ultimas;
+    }
+
+    /**
      * Un "lote" es el resumen de una sola acción masiva (aprobar/archivar/consolidar/duplicar/
      * enviar/restaurar N ítems a la vez de un mismo tipo) — evita que esa acción quede como N filas
      * de peticiones_historial casi idénticas y sin relación entre sí. Devuelve el id del lote creado,

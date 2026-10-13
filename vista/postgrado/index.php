@@ -51,7 +51,15 @@ require __DIR__ . '/../parciales/encabezado.php';
                     'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona uno o más elementos',
                 ],
             ],
-            'especifico' => [],
+            'especifico' => [
+                [
+                    'id' => 'boton-recalcular-excedentes-postgrado',
+                    'icono' => 'recalcular',
+                    'etiqueta' => 'Recalcular excedentes de los ingresos en borrador según la tabla de referencia de Autogestión',
+                    'disabled' => $modoEdicion || !$anioSeleccionado,
+                    'titulo_disabled' => $modoEdicion ? 'No disponible mientras editas' : 'Selecciona un año presupuestal',
+                ],
+            ],
             'datos' => [
                 [
                     'id' => 'boton-exportar-plantilla-postgrado',
@@ -101,6 +109,23 @@ require __DIR__ . '/../parciales/encabezado.php';
         $barraTextoVolver = ($modoEdicion && $volverEdicion !== '') ? 'Volver a Peticiones' : 'Volver a Postgrado';
         require __DIR__ . '/../parciales/barra-modulo.php';
         ?>
+        <?php if (!$modoEdicion && $anioSeleccionado): ?>
+        <form method="POST" action="index.php?ruta=postgrado&tab=<?= htmlspecialchars($tab) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>" id="form-recalcular-excedentes-postgrado" style="display: none;">
+            <input type="hidden" name="accion" value="recalcular_excedentes">
+            <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
+            <input type="hidden" name="anio_presupuestal_id" value="<?= (int) $anioSeleccionadoId ?>">
+            <input type="hidden" name="autogestion_id" value="<?= (int) $autogestionSeleccionadoId ?>">
+        </form>
+        <script>
+        document.getElementById('boton-recalcular-excedentes-postgrado').addEventListener('click', function () {
+            if (confirm('¿Recalcular los excedentes de todos los ingresos en borrador con los porcentajes vigentes de Autogestión?
+
+Se reemplazarán las filas automáticas (incluidos los ajustes manuales hechos sobre ellas). Lo ya enviado no se modifica.')) {
+                document.getElementById('form-recalcular-excedentes-postgrado').submit();
+            }
+        });
+        </script>
+        <?php endif; ?>
 
         <div class="pestanas">
             <a href="index.php?ruta=postgrado&tab=ingresos&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" class="pestana<?= $tab === 'ingresos' ? ' activa' : '' ?>">Ingresos</a>
@@ -178,13 +203,15 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <div class="progreso-presupuesto-info">
                     <span class="progreso-presupuesto-porcentaje">
                         <?php if ($presupuestoAnio > 0): ?>
-                            <?= number_format($porcentajeGastado, 1) ?>% de los ingresos <?= (int) $anioSeleccionado['anio'] ?> asignados
+                            En borrador: <?= number_format($porcentajeGastado, 1) ?>% de los ingresos <?= (int) $anioSeleccionado['anio'] ?> asignados
                             (<?= number_format($totalEjecutado, 2, ',', '.') ?> / <?= number_format($presupuestoAnio, 2, ',', '.') ?>)
+                        <?php elseif ($totalIngresosTodos > 0): ?>
+                            No hay ingresos en borrador: la barra solo refleja lo que aún no se ha enviado.
                         <?php else: ?>
                             Este ítem todavía no tiene ingresos registrados: no se pueden agregar egresos hasta que tenga.
                         <?php endif; ?>
                     </span>
-                    <span class="progreso-presupuesto-dias">Día <?= $diaActual ?>/<?= $totalDiasAnio ?></span>
+                    <span class="progreso-presupuesto-dias">Total egresos: <?= number_format($totalGastado, 2, ',', '.') ?></span>
                 </div>
                 <div class="barra-progreso">
                     <div class="barra-progreso-segmento costos" style="width: <?= number_format($pctCostos + $pctInversion, 2, '.', '') ?>%;"></div>
@@ -199,8 +226,10 @@ require __DIR__ . '/../parciales/encabezado.php';
             <div class="resumen-egresos">
                 <span class="resumen-egresos-titulo">
                     <?php if ($presupuestoAnio > 0): ?>
-                        <?= number_format($porcentajeGastado, 1) ?>% de los ingresos <?= (int) $anioSeleccionado['anio'] ?> asignados
+                        En borrador: <?= number_format($porcentajeGastado, 1) ?>% de los ingresos <?= (int) $anioSeleccionado['anio'] ?> asignados
                         (<?= number_format($totalEjecutado, 2, ',', '.') ?> / <?= number_format($presupuestoAnio, 2, ',', '.') ?>)
+                    <?php elseif ($totalIngresosTodos > 0): ?>
+                        No hay ingresos en borrador: la barra solo refleja lo que aún no se ha enviado.
                     <?php else: ?>
                         Este ítem todavía no tiene ingresos registrados.
                     <?php endif; ?>
@@ -505,7 +534,7 @@ require __DIR__ . '/../parciales/encabezado.php';
             </div>
 
             <?php if ($tab === 'egresos'): ?>
-            <form method="POST" action="index.php?ruta=postgrado&tab=egresos" class="form-necesidad">
+            <form method="POST" action="index.php?ruta=postgrado&tab=egresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>" class="form-necesidad">
                 <input type="hidden" name="tab" value="egresos">
                 <input type="hidden" name="autogestion_id" value="<?= $autogestionSeleccionadoId ?>">
                 <div class="campo">
@@ -627,7 +656,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <button type="submit" class="boton-enviar">Registrar egreso</button>
             </form>
             <?php else: ?>
-            <form method="POST" action="index.php?ruta=postgrado&tab=ingresos" class="form-necesidad">
+            <form method="POST" action="index.php?ruta=postgrado&tab=ingresos&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>" class="form-necesidad">
                 <input type="hidden" name="tab" value="ingresos">
                 <input type="hidden" name="autogestion_id" value="<?= $autogestionSeleccionadoId ?>">
                 <div class="campo">

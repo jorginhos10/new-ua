@@ -28,6 +28,7 @@ require_once __DIR__ . '/../modelo/Linea.php';
 require_once __DIR__ . '/../modelo/Motor.php';
 require_once __DIR__ . '/../modelo/Proyecto.php';
 require_once __DIR__ . '/../modelo/ExportadorExcel.php';
+require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/VistaLoteEnvio.php';
 require_once __DIR__ . '/../config/conexion.php';
 
@@ -165,6 +166,11 @@ class PeticionesControlador
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $accion = $_POST['accion'] ?? '';
 
+            // Exportar descarga el archivo en esta misma respuesta (sin redirigir).
+            if ($accion === 'exportar_seleccion') {
+                $this->exportarSeleccion();
+            }
+
             if (($accion === 'archivar' || $accion === 'aprobar') && ($_POST['origen'] ?? '') === 'necesidad_grupo') {
                 [$_SESSION['peticiones_flash_error'], $_SESSION['peticiones_flash_exito']] = $this->procesarGrupoNecesidades(
                     $accion === 'aprobar' ? 'aprobada' : 'archivada'
@@ -258,6 +264,10 @@ class PeticionesControlador
                 [$errorExpediente, $exitoExpediente] = $this->mandarExpedienteGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorExpediente;
                 $_SESSION['peticiones_flash_exito'] = $exitoExpediente;
+            } elseif ($accion === 'eliminar_archivado_grupo') {
+                [$errorEliminarArch, $exitoEliminarArch] = $this->eliminarArchivadoGrupo();
+                $_SESSION['peticiones_flash_error'] = $errorEliminarArch;
+                $_SESSION['peticiones_flash_exito'] = $exitoEliminarArch;
             } elseif ($accion === 'consolidar_enviado') {
                 [$errorConsolidarEnv, $exitoConsolidarEnv] = $this->consolidarEnviadoGrupo();
                 $_SESSION['peticiones_flash_error'] = $errorConsolidarEnv;
@@ -317,13 +327,18 @@ class PeticionesControlador
         }
 
         if (!$modoJerarquia) {
-            // Gasto y Perfil de proyectos (necesidad) son los orígenes con volumen suficiente para
-            // que verlos uno por uno inunde la tabla — se agrupan en una fila por dependencia de
-            // origen (ver agruparPendientesPorDependencia()), separados por dependencia Y por tipo
-            // (nunca se mezcla un Gasto con una Necesidad de la misma dependencia en un solo grupo).
-            // El resto de orígenes (Solicitudes, Ingresos, redirigidos) se queda siempre individual
-            // — no se mezclan entre sí hasta que se envían a Consolidado por tipo.
-            $origenesAgrupables = ['gasto_principal', 'necesidad'];
+            // Gasto, Perfil de proyectos (necesidad) y Autogestión (gasto + ingreso de Extensión/
+            // Postgrado/Unisalud) se agrupan en una tarjeta por tipo + dependencia que lo creó +
+            // dependencia que lo remite (ver agruparPendientesPorDependencia()) — así lo que vuelve
+            // de Desconsolidar o llega por Enviar se gestiona como un lote, no fila por fila. Las
+            // OPS también se agrupa (por la dependencia de la solicitud). El resto de Solicitudes
+            // (ARL, Monitores, Petición) se queda siempre individual.
+            $origenesAgrupables = array_merge(
+                ['gasto_principal', 'necesidad', 'ops'],
+                array_keys(self::PARES_GASTO_INGRESO),
+                array_values(self::PARES_GASTO_INGRESO)
+            );
+            $pendientes = $this->anotarDependenciaRemite($pendientes);
             $pendientesAgrupables = array_values(array_filter($pendientes, static fn (array $item): bool => in_array($item['origen'], $origenesAgrupables, true)));
             $pendientesResto = array_values(array_filter($pendientes, static fn (array $item): bool => !in_array($item['origen'], $origenesAgrupables, true)));
             $pendientes = array_merge(
@@ -1914,8 +1929,15 @@ class PeticionesControlador
                 continue;
             }
 
-            $this->modeloArchivada->eliminarPorOrigen($origen, $origenId);
-            $this->reasignarDestinatarioAUsuarioActual($origen, $origenId);
+            if ($origen === 'ops') {
+                // OPS no tiene columnas de destinatario propias que reasignar (su "dependencia" es
+                // la de la solicitud, no a quién va): en vez de borrar la fila, se redirige a quien
+                // desconsolida, para que igual vuelva a SU Pendientes (ver filaRedireccionada()).
+                $this->redirigirAUsuarioActual($aprobadosPorClave[$clave]);
+            } else {
+                $this->modeloArchivada->eliminarPorOrigen($origen, $origenId);
+                $this->reasignarDestinatarioAUsuarioActual($origen, $origenId);
+            }
 
             $itemsAfectados[] = ['origen' => $origen, 'origen_id' => $origenId, 'tipo' => $aprobadosPorClave[$clave]['tipo']];
         }
@@ -1929,6 +1951,36 @@ class PeticionesControlador
         $desconsolidados = count($itemsAfectados);
 
         return ['', 'Se desconsolidaron ' . $desconsolidados . ' ítem(s). Vuelven a tu bandeja de Pendientes.'];
+    }
+
+    /**
+     * Deja un ítem aprobado como redireccionado al usuario actual (su dependencia, rol y él mismo)
+     * — misma fila de peticiones_archivadas que usa "Enviar" (redireccionarDirecto()), así que
+     * reaparece en su Pendientes por filaRedireccionada().
+     */
+    private function redirigirAUsuarioActual(array $filaAprobada): void
+    {
+        $usuarioActual = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+        $dependenciaUsuario = !empty($usuarioActual['dependencia_id'])
+            ? $this->modeloDependencia->obtenerPorId((int) $usuarioActual['dependencia_id'])
+            : null;
+
+        if ($dependenciaUsuario === null || empty($usuarioActual['rol_id'])) {
+            $this->modeloArchivada->eliminarPorOrigen($filaAprobada['origen'], (int) $filaAprobada['origen_id']);
+
+            return;
+        }
+
+        $this->modeloArchivada->redireccionarDirecto([
+            'origen' => $filaAprobada['origen'],
+            'origen_id' => (int) $filaAprobada['origen_id'],
+            'tipo' => $filaAprobada['tipo'],
+            'detalle' => $filaAprobada['detalle'],
+            'cantidad' => $filaAprobada['cantidad'],
+            'valor' => $filaAprobada['valor'],
+            'ruta_ver' => $this->construirRutaVer($filaAprobada['origen'], (int) $filaAprobada['origen_id'], 'pendiente'),
+            'ruta_origen' => $filaAprobada['ruta_origen'] ?? null,
+        ], $dependenciaUsuario['nombre'], (int) $usuarioActual['rol_id'], (int) $usuarioActual['id']);
     }
 
     /**
@@ -2221,6 +2273,128 @@ class PeticionesControlador
         }
 
         return ['', $mensaje];
+    }
+
+    /**
+     * Elimina de verdad (registro real en su módulo + su fila en peticiones_archivadas) una
+     * selección de ítems de Archivados — mismo eliminarUnPendiente() que usa "Eliminar" en
+     * Pendientes. Solo actúa sobre ítems que de verdad están archivados o en expediente: lo que
+     * venga en la selección y ya no esté ahí se omite.
+     */
+    private function eliminarArchivadoGrupo(): array
+    {
+        $origenes = $_POST['item_origen'] ?? [];
+        $origenIds = $_POST['item_origen_id'] ?? [];
+
+        if (empty($origenes)) {
+            return ['No seleccionaste ningún ítem para eliminar.', ''];
+        }
+
+        $acciones = $this->modeloArchivada->obtenerAccionesPorClave();
+        $eliminados = 0;
+
+        foreach ($origenes as $indice => $origen) {
+            $origen = trim((string) $origen);
+            $origenId = (int) ($origenIds[$indice] ?? 0);
+
+            if (!in_array($acciones[$origen . ':' . $origenId] ?? null, ['archivada', 'expediente'], true)) {
+                continue;
+            }
+
+            if ($this->eliminarUnPendiente($origen, $origenId, 'Archivados')) {
+                $eliminados++;
+            }
+        }
+
+        if ($eliminados === 0) {
+            return ['No se pudo eliminar ningún ítem.', ''];
+        }
+
+        return ['', 'Se eliminaron ' . $eliminados . ' ítem(s).'];
+    }
+
+    /**
+     * Exporta a Excel, sin pasar por "Ver", los ítems de las tarjetas seleccionadas en Consolidado
+     * por tipo o Archivados (items_json) — una hoja por origen, con las mismas columnas de la tabla
+     * real (construirFilasPorOrigen()). Solo exporta ítems que de verdad están en ese estado y
+     * dentro de las dependencias que el usuario puede ver en esa pestaña.
+     */
+    private function exportarSeleccion(): void
+    {
+        $vista = ($_POST['vista'] ?? '') === 'archivar' ? 'archivar' : 'consolidado';
+        $anioSeleccionadoId = (int) ($_POST['anio_id'] ?? 0);
+        $estados = $vista === 'archivar' ? ['archivada', 'expediente'] : ['aprobada'];
+
+        $clavesSeleccionadas = [];
+        foreach ($this->leerItemsJson() as $item) {
+            $clavesSeleccionadas[$item['origen'] . ':' . (int) $item['origen_id']] = true;
+        }
+
+        $dependenciasPermitidas = ($vista === 'archivar' && $this->esSuperAdminRaiz() && empty($_SESSION['modo_auditoria']))
+            ? $this->obtenerDependenciaPropiaSolamente()
+            : $this->obtenerDependenciasPermitidas();
+
+        // [origen][estado] => ítems crudos de peticiones_archivadas
+        $porOrigen = [];
+        foreach ($estados as $estado) {
+            $filas = $this->modeloArchivada->obtenerPorAccion($estado);
+            // "En Expediente" es un registro centralizado del superadmin, sin filtro de dependencia
+            // (mismo criterio que obtenerItemsCrudosPorEstado()).
+            if ($estado !== 'expediente') {
+                $filas = $this->filtrarPorDependencia($filas, $dependenciasPermitidas);
+            } elseif (!$this->esSuperAdminRaiz()) {
+                continue;
+            }
+
+            foreach ($filas as $fila) {
+                if (isset($clavesSeleccionadas[$fila['origen'] . ':' . (int) $fila['origen_id']])) {
+                    $porOrigen[$fila['origen']][$estado][] = $fila;
+                }
+            }
+        }
+
+        if (empty($porOrigen)) {
+            $_SESSION['peticiones_flash_error'] = 'No hay ítems para exportar en la selección.';
+            header('Location: index.php?ruta=peticiones&vista=' . $vista . ($anioSeleccionadoId > 0 ? '&anio_id=' . $anioSeleccionadoId : ''));
+            exit;
+        }
+
+        $etiquetasOrigen = [
+            'arl' => 'ARL', 'monitores' => 'Monitores', 'ops' => 'OPS', 'otros' => 'Petición',
+            'necesidad' => 'Perfil de proyectos', 'gasto_principal' => 'Gasto', 'gasto_extension' => 'Extensión egresos',
+            'gasto_postgrado' => 'Postgrado egresos', 'gasto_unisalud' => 'Unisalud egresos',
+            'ingreso_extension' => 'Extensión ingresos', 'ingreso_postgrado' => 'Postgrado ingresos',
+            'ingreso_unisalud' => 'Unisalud ingresos',
+        ];
+
+        $hojas = [];
+        foreach ($porOrigen as $origen => $itemsPorEstado) {
+            $encabezados = [];
+            $filasHoja = [];
+
+            foreach ($itemsPorEstado as $estado => $itemsCrudos) {
+                $resultado = $this->construirFilasPorOrigen($origen, $itemsCrudos, $anioSeleccionadoId, $estado);
+                $encabezados = $resultado['columnas'];
+
+                foreach ($resultado['filas'] as $fila) {
+                    $filasHoja[] = array_map(static function (string $clave) use ($fila): string {
+                        $valor = $fila[$clave] ?? '—';
+
+                        return is_float($valor) ? number_format($valor, 2, ',', '.') : (string) $valor;
+                    }, $resultado['claves']);
+                }
+            }
+
+            $hojas[] = [
+                'nombre' => mb_substr($etiquetasOrigen[$origen] ?? $origen, 0, 31),
+                'encabezados' => $encabezados,
+                'filas' => $filasHoja,
+            ];
+        }
+
+        $nombreVista = $vista === 'archivar' ? 'archivados' : 'consolidado';
+        GeneradorXlsx::descargarHojas('peticiones-' . $nombreVista . '-' . date('Y-m-d') . '.xlsx', $hojas);
+        exit;
     }
 
     /**
@@ -2866,7 +3040,7 @@ class PeticionesControlador
         return ['', 'Se eliminaron ' . $eliminados . ' ítem(s).'];
     }
 
-    private function eliminarUnPendiente(string $origen, int $origenId): bool
+    private function eliminarUnPendiente(string $origen, int $origenId, string $desde = 'Pendientes'): bool
     {
         $eliminado = match ($origen) {
             'arl' => $this->modeloSolicitud->eliminar($origenId),
@@ -2888,7 +3062,7 @@ class PeticionesControlador
             return false;
         }
 
-        $this->modeloHistorial->registrar($origen, $origenId, 'eliminada', 'Eliminado permanentemente desde Pendientes');
+        $this->modeloHistorial->registrar($origen, $origenId, 'eliminada', 'Eliminado permanentemente desde ' . $desde);
         $this->modeloArchivada->eliminarPorOrigen($origen, $origenId);
 
         return true;
@@ -3352,49 +3526,105 @@ class PeticionesControlador
     }
 
     /**
-     * Agrupa en una sola fila los ítems pendientes que comparten dependencia (columna "Origen") —
-     * hoy solo para la bandeja "Gastos", donde una misma dependencia suele enviar muchos gastos
-     * sueltos a la vez y verlos uno por uno hace la lista muy larga. Cada fila resultante conserva
-     * los ítems originales en 'items' para que Aprobar/Archivar/Eliminar actúen sobre todos a la vez
-     * (mismo patrón de "seleccionar todo" ya usado en Consolidado por tipo), y "Ver" lleva a una
-     * página aparte con el detalle (actividad/insumo) de cada uno.
+     * Anota en cada ítem pendiente la dependencia que se lo REMITIÓ a quien lo está viendo: si su
+     * última acción en el historial es un redireccionamiento (Enviar desde Pendientes/Archivados/
+     * Enviadas), la dependencia de quien lo redireccionó; si no (envío directo desde su módulo, o
+     * vuelve de Desconsolidar), la misma dependencia que lo creó. Una sola consulta para todo el
+     * lote (ver PeticionHistorial::obtenerUltimaAccionPorClave()).
+     */
+    private function anotarDependenciaRemite(array $pendientes): array
+    {
+        $ultimas = $this->modeloHistorial->obtenerUltimaAccionPorClave(['redireccionada', 'desconsolidada']);
+
+        foreach ($pendientes as &$item) {
+            $ultima = $ultimas[$item['origen'] . ':' . $item['origen_id']] ?? null;
+            $item['remite'] = ($ultima !== null && $ultima['accion'] === 'redireccionada' && !empty($ultima['dependencia']))
+                ? $ultima['dependencia']
+                : ($item['dependencia_origen'] ?? null);
+        }
+        unset($item);
+
+        return $pendientes;
+    }
+
+    /**
+     * Agrupa en una sola tarjeta los ítems pendientes que comparten tipo + dependencia que los
+     * creó (columna "Origen") + dependencia que los remite — una misma dependencia suele enviar
+     * muchos ítems sueltos a la vez, y lo que vuelve de Desconsolidar o llega por Enviar debe
+     * seguir viéndose como el lote que es. Cada tarjeta conserva los ítems originales en 'items'
+     * para que Aceptar/Archivar/Enviar/Eliminar actúen sobre todos a la vez, y "Ver" lleva a la
+     * tabla real filtrada a esa dependencia. El gasto y el ingreso de un mismo módulo de
+     * Autogestión (PARES_GASTO_INGRESO) caen en la MISMA tarjeta, pero sin sumarse: se llevan
+     * aparte como Egresos/Ingresos (igual que las pestañas de tipoDetalle()).
      */
     private function agruparPendientesPorDependencia(array $pendientes): array
     {
+        $origenesIngreso = array_flip(self::PARES_GASTO_INGRESO);
         $grupos = [];
 
         foreach ($pendientes as $item) {
-            // Se agrupa por la dependencia de ORIGEN (dependencia_origen si el origen la trae, ej.
-            // Gasto/Ingreso; si no, "detalle" — la dependencia/facultad remitente en Solicitudes),
-            // no por la dependencia DESTINO a la que se envió: varios ítems de programas distintos
-            // (ej. "INGENIERÍA QUÍMICA", "INGENIERÍA MECÁNICA") pueden llegar al mismo destinatario
-            // en un solo envío, y deben verse como grupos separados, no fusionados en uno solo. La
-            // clave incluye el origen para no mezclar, por ejemplo, un Gasto y un ARL de la misma
-            // dependencia en un solo grupo.
+            // Se agrupa por la dependencia de ORIGEN (dependencia_origen si el origen la trae; si
+            // no, "detalle"), no por la dependencia DESTINO a la que se envió: varios ítems de
+            // programas distintos pueden llegar al mismo destinatario en un solo envío, y deben
+            // verse como tarjetas separadas.
             $nombreDependencia = $item['dependencia_origen'] ?? $item['detalle'];
-            $clave = $item['origen'] . '|' . $nombreDependencia;
+            $remite = $item['remite'] ?? $nombreDependencia;
+            $esIngreso = isset($origenesIngreso[$item['origen']]);
+            $origenGasto = $esIngreso ? $origenesIngreso[$item['origen']] : $item['origen'];
+            $esAutogestion = isset(self::PARES_GASTO_INGRESO[$origenGasto]);
+
+            // "Educación continua (ingreso)" -> "Educación continua", "Ingreso Postgrado" ->
+            // "Postgrado": el lado ingreso cae en la misma tarjeta que su gasto hermano.
+            $tipo = $esIngreso
+                ? preg_replace(['/\s*\(ingreso\)\s*$/u', '/^Ingreso\s+/u'], '', $item['tipo'])
+                : $item['tipo'];
+
+            // El origen (lado gasto) entra en la clave para no mezclar, por ejemplo, un Gasto
+            // principal con un Perfil de proyectos de la misma dependencia.
+            $clave = $origenGasto . '|' . $tipo . '|' . $nombreDependencia . '|' . $remite;
 
             if (!isset($grupos[$clave])) {
                 $grupos[$clave] = [
-                    'origen' => $item['origen'],
+                    'origen' => $origenGasto,
                     'origen_id' => 0,
-                    'tipo' => $item['tipo'],
+                    'tipo' => $tipo,
                     'detalle' => $nombreDependencia,
+                    'remite' => $remite,
                     'cantidad' => 0,
-                    'valor' => 0.0,
+                    'valor' => $esAutogestion ? null : 0.0,
                     'accion_aprobar' => $item['accion_aprobar'],
                     'accion_rechazar' => $item['accion_rechazar'],
                     'ruta_origen' => $item['ruta_origen'],
-                    'ruta_ver' => $this->construirRutaVer($item['origen'], 0, 'pendiente') . '&dependencia=' . urlencode($nombreDependencia),
+                    'ruta_ver' => $this->construirRutaVer($origenGasto, 0, 'pendiente') . '&dependencia=' . urlencode($nombreDependencia),
                     'redireccionado' => false,
                     'semaforo' => null,
                     'puede_actuar' => true,
                     'items' => [],
                 ];
+
+                if ($esAutogestion) {
+                    $grupos[$clave]['egresos_cantidad'] = 0;
+                    $grupos[$clave]['egresos_valor'] = 0.0;
+                    $grupos[$clave]['ingresos_cantidad'] = 0;
+                    $grupos[$clave]['ingresos_valor'] = 0.0;
+                }
             }
 
+            $valorItem = $item['valor'] !== null ? (float) $item['valor'] : 0.0;
             $grupos[$clave]['cantidad']++;
-            $grupos[$clave]['valor'] += $item['valor'] !== null ? (float) $item['valor'] : 0.0;
+
+            if ($esAutogestion) {
+                $lado = $esIngreso ? 'ingresos' : 'egresos';
+                $grupos[$clave][$lado . '_cantidad']++;
+                $grupos[$clave][$lado . '_valor'] += $valorItem;
+            } else {
+                $grupos[$clave]['valor'] += $valorItem;
+            }
+
+            if (!empty($item['redireccionado'])) {
+                $grupos[$clave]['redireccionado'] = true;
+            }
+
             $grupos[$clave]['items'][] = $item;
         }
 
@@ -3699,7 +3929,11 @@ class PeticionesControlador
             return null;
         }
 
-        return $this->fila($origen, (int) $fila['id'], $tipo, $dependenciaDestino, null, (float) $fila['valor_total'], 'gasto', $rutaOrigen, $rutaVer);
+        $item = $this->fila($origen, (int) $fila['id'], $tipo, $dependenciaDestino, null, (float) $fila['valor_total'], 'gasto', $rutaOrigen, $rutaVer);
+        // Igual que filaGasto(): dependencia que CREÓ el ingreso, para agrupar con su gasto hermano.
+        $item['dependencia_origen'] = $fila['dependencia'];
+
+        return $item;
     }
 
     /**
@@ -3752,9 +3986,9 @@ class PeticionesControlador
         // para que Pendientes de Gastos agrupe por dependencia de ORIGEN (y no fusione en un solo
         // grupo ítems de varios programas distintos redireccionados juntos desde Consolidado por
         // tipo — ver agruparPendientesPorDependencia()) se recupera la dependencia real del gasto.
-        if ($redirigida['origen'] === 'gasto_principal') {
-            $gastoOriginal = $this->modeloGasto->obtenerPorId((int) $redirigida['origen_id']);
-            $item['dependencia_origen'] = $gastoOriginal['dependencia'] ?? $dependenciaDestino;
+        if (in_array($redirigida['origen'], ['gasto_principal', 'ops'], true) || isset(self::PARES_GASTO_INGRESO[$redirigida['origen']]) || in_array($redirigida['origen'], self::PARES_GASTO_INGRESO, true)) {
+            $registroOriginal = $this->obtenerRegistroPorOrigenCacheado($redirigida['origen'], (int) $redirigida['origen_id']);
+            $item['dependencia_origen'] = $registroOriginal['dependencia'] ?? $dependenciaDestino;
         }
 
         return $item;

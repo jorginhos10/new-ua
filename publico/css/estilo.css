@@ -19,6 +19,10 @@
     --color-error-texto: #d70015;
     --color-gris-fondo: #f0f0f2;
     --color-gris-texto: #6e6e73;
+    /* Estándar de toda la app: Importar = flecha hacia arriba azul oscuro, Exportar = flecha
+       hacia abajo naranja (ver .svg-importar / .svg-exportar). */
+    --color-importar: #0a3d7a;
+    --color-exportar: #f08000;
     --color-naranja-fondo: #fff2e0;
     --color-naranja-texto: #c96500;
     --color-costos: #0071e3;
@@ -4043,6 +4047,24 @@ a.barra-progreso:hover {
     background: var(--color-primario-suave);
     color: var(--color-primario-oscuro);
     outline: none;
+}
+
+/* Iconos estándar de Importar (flecha arriba, azul oscuro) y Exportar (flecha abajo, naranja):
+   el color va en el propio <svg>, así se respeta en cualquier botón (icono, barra, menú, texto)
+   sin importar el color que el botón le dé al hover. */
+svg.svg-importar {
+    color: var(--color-importar);
+}
+
+svg.svg-exportar {
+    color: var(--color-exportar);
+}
+
+/* Acción destructiva (Eliminar): mismo botón redondo, pero se tiñe de rojo al pasar el cursor. */
+.boton-icono-accion.boton-icono-peligro:hover:not(:disabled),
+.boton-icono-accion.boton-icono-peligro:focus-visible:not(:disabled) {
+    background: var(--color-error-fondo);
+    color: var(--color-error-texto);
 }
 
 .boton-icono-accion:disabled {
