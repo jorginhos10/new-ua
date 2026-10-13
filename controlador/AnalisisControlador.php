@@ -8,6 +8,7 @@ require_once __DIR__ . '/../modelo/Linea.php';
 require_once __DIR__ . '/../modelo/Motor.php';
 require_once __DIR__ . '/../modelo/Proyecto.php';
 require_once __DIR__ . '/../modelo/Gasto.php';
+require_once __DIR__ . '/../modelo/AutogestionItem.php';
 require_once __DIR__ . '/../modelo/GastoExtension.php';
 require_once __DIR__ . '/../modelo/GastoPostgrado.php';
 require_once __DIR__ . '/../modelo/IngresoExtension.php';
@@ -52,6 +53,12 @@ class AnalisisControlador
     private const VISTAS_VALIDAS = ['tiempo_real', 'repositorio', 'usuario'];
 
     private const ORIGENES_ANALISIS = ['gasto_principal', 'gasto_extension', 'ingreso_extension', 'gasto_postgrado', 'ingreso_postgrado', 'gasto_unisalud', 'monitores', 'arl'];
+
+    /** Egresos de Autogestión que pertenecen a un ítem de autogestion_items => su `modulo`. */
+    private const MODULO_AUTOGESTION_POR_EGRESO = [
+        'gasto_extension' => 'extension',
+        'gasto_postgrado' => 'postgrado',
+    ];
 
     /**
      * Módulos de Autogestión con ingresos y egresos separados: una sola tarjeta en el selector
@@ -1679,6 +1686,28 @@ class AnalisisControlador
         $peticiones = new PeticionesControlador();
         $peticiones->establecerRegistrosPrecargados($registrosPrecargados);
         $resultado = $peticiones->construirFilasPorOrigen($origen, $itemsCrudos, $anioPresupuestalId, 'analisis');
+
+        // Solo en Análisis de distribución: los egresos de Autogestión llevan además a qué
+        // autogestión pertenecen (Alquiler, Educación continua...), justo después de Dependencia
+        // — los ingresos ya se ven por ella. Se resuelve por autogestion_id contra la lista
+        // completa (incluye inactivas), porque las filas de un snapshot (Repositorio) no traen el
+        // nombre unido como sí lo trae obtenerPorAnio() en vivo.
+        if (isset(self::MODULO_AUTOGESTION_POR_EGRESO[$origen])) {
+            $nombresAutogestion = array_column((new AutogestionItem())->obtenerTodos(self::MODULO_AUTOGESTION_POR_EGRESO[$origen]), 'nombre', 'id');
+            $posicion = array_search('dependencia', $resultado['claves'], true);
+            $posicion = $posicion === false ? 0 : $posicion + 1;
+
+            array_splice($resultado['columnas'], $posicion, 0, ['Autogestión']);
+            array_splice($resultado['claves'], $posicion, 0, ['autogestion']);
+
+            foreach ($resultado['filas'] as &$fila) {
+                $registro = $registrosPrecargados[$origen . ':' . (int) $fila['origen_id']] ?? [];
+                $fila['autogestion'] = $registro['autogestion_nombre']
+                    ?? $nombresAutogestion[(int) ($registro['autogestion_id'] ?? 0)]
+                    ?? '—';
+            }
+            unset($fila);
+        }
 
         if ($vista !== 'tiempo_real') {
             foreach ($resultado['filas'] as &$fila) {
