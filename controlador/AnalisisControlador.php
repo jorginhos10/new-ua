@@ -287,6 +287,11 @@ class AnalisisControlador
     {
         $error = '';
         $exito = '';
+        $lado = ($_GET['lado'] ?? '') === 'egresos' ? 'egresos' : 'ingresos';
+
+        if (in_array($tab, ['programacion', 'proyectos'], true) && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'limpiar_arbol') {
+            [$error, $exito] = $this->limpiarArbolPresupuesto($tab, $lado);
+        }
 
         if ($tab === 'analisis' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'eliminar_celda') {
             [$error, $exito] = $this->procesarEliminarModulo((string) ($_GET['origen'] ?? ''));
@@ -323,6 +328,37 @@ class AnalisisControlador
 
         header('Location: ' . $destino);
         exit;
+    }
+
+    /**
+     * "Limpiar" (solo SA): borra el árbol en vivo del lado que se está viendo — Ingresos o Egresos
+     * en Programación presupuestal, o el de Proyectos de inversión — para un cargue en limpio.
+     * Antes guarda una versión de respaldo de ese lado (recuperable desde Repositorio).
+     *
+     * @return array{0: string, 1: string} [error, exito]
+     */
+    private function limpiarArbolPresupuesto(string $tab, string $lado): array
+    {
+        if (!$this->esSuperAdmin()) {
+            return ['Solo el SA puede limpiar el árbol.', ''];
+        }
+
+        $tipo = $tab === 'proyectos' ? 'proyecto' : ($lado === 'egresos' ? 'egreso' : 'ingreso');
+        $nombreLado = ['ingreso' => 'Ingresos', 'egreso' => 'Egresos', 'proyecto' => 'Proyectos de inversión'][$tipo];
+        $modelo = new PresupuestoInstitucional();
+
+        if (empty($modelo->obtenerArbolConValores($tipo, []))) {
+            return ['El árbol de ' . $nombreLado . ' ya está vacío.', ''];
+        }
+
+        try {
+            $modelo->crearVersion($tipo, 'Respaldo antes de limpiar ' . date('d/m/Y H:i'), (int) $_SESSION['usuario_id']);
+            $borradas = $modelo->limpiar($tipo);
+        } catch (Throwable $excepcion) {
+            return ['No se pudo limpiar el árbol: ' . $excepcion->getMessage(), ''];
+        }
+
+        return ['', 'Árbol de ' . $nombreLado . ' limpio (' . $borradas . ' línea(s) borradas). Se guardó una versión de respaldo en Repositorio; ya puedes importar en limpio.'];
     }
 
     /** @return array{0: string, 1: string} [error, exito] */

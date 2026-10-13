@@ -469,6 +469,24 @@ class PresupuestoInstitucional
         }
     }
 
+    /**
+     * "Limpiar": borra todo el árbol en vivo de UN lado (líneas; sus valores y su reparto a
+     * Proyecto(s) PDI caen por ON DELETE CASCADE) para hacer un cargue en limpio — el upsert de
+     * guardarLote() nunca quita las líneas que ya no vienen en el archivo nuevo. Las versiones
+     * guardadas (Repositorio) no se tocan. Devuelve cuántas líneas se borraron.
+     */
+    public function limpiar(string $tipo): int
+    {
+        if (!in_array($tipo, self::TIPOS_VALIDOS, true)) {
+            return 0;
+        }
+
+        $consulta = $this->db->prepare('DELETE FROM presupuesto_institucional_lineas WHERE tipo = :tipo');
+        $consulta->execute(['tipo' => $tipo]);
+
+        return $consulta->rowCount();
+    }
+
     public function eliminarVersion(int $id): bool
     {
         $fila = $this->obtenerVersionPorId($id);

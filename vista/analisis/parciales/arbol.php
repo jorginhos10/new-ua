@@ -33,7 +33,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         . ' data-expandido="' . ($expandido ? '1' : '0') . '">';
 
     foreach ($columnasExtra as $columnaExtra) {
-        echo '<td class="arbol-celda-extra">' . htmlspecialchars((string) ($nodo[$columnaExtra['clave']] ?? '')) . '</td>';
+        echo '<td class="arbol-celda-extra arbol-celda-extra-' . htmlspecialchars($columnaExtra['clave']) . '">' . htmlspecialchars((string) ($nodo[$columnaExtra['clave']] ?? '')) . '</td>';
     }
 
     // El flex vive en un <div> interno, nunca en el <td>: un <td> con display:flex deja de ser
@@ -240,9 +240,9 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         font-variant-numeric: normal;
     }
 
-    /* Código/Proyecto(s) PDI solo se muestran en Tiempo real — confirmado con el usuario: en
-       Repositorio/Usuario esta pestaña es de solo consulta (descripción + cifras). */
-    body.arbol-vista-consulta .arbol-celda-extra {
+    /* Proyecto(s) PDI solo se muestra en Tiempo real: en Repositorio/Usuario esta pestaña es de
+       solo consulta. Código sí se ve en los tres modos (pedido del usuario). */
+    body.arbol-vista-consulta .arbol-celda-extra:not(.arbol-celda-extra-codigo) {
         display: none;
     }
 
@@ -525,7 +525,7 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
             <thead>
                 <tr>
                     <?php foreach ($columnasExtra as $columnaExtra): ?>
-                    <th class="arbol-celda-extra"><?= htmlspecialchars($columnaExtra['etiqueta']) ?></th>
+                    <th class="arbol-celda-extra arbol-celda-extra-<?= htmlspecialchars($columnaExtra['clave']) ?>"><?= htmlspecialchars($columnaExtra['etiqueta']) ?></th>
                     <?php endforeach; ?>
                     <th class="arbol-celda-etiqueta"><?= htmlspecialchars($etiquetaColumnaArbol ?? 'Línea / Motor / Proyecto') ?></th>
                     <?php foreach ($columnasAnios as $columna): ?>
@@ -539,7 +539,7 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
                 </tr>
                 <tr class="arbol-fila-totales" id="arbol-fila-totales">
                     <?php foreach ($columnasExtra as $columnaExtra): ?>
-                    <th class="arbol-celda-extra"></th>
+                    <th class="arbol-celda-extra arbol-celda-extra-<?= htmlspecialchars($columnaExtra['clave']) ?>"></th>
                     <?php endforeach; ?>
                     <th class="arbol-celda-etiqueta">Total</th>
                     <?php foreach ($columnasAnios as $columna): ?>

@@ -153,6 +153,12 @@ require __DIR__ . '/../parciales/encabezado.php';
         background: rgba(0, 0, 0, 0.08);
     }
 
+    /* Limpiar árbol: acción destructiva, se tiñe de rojo al pasar el cursor. */
+    .analisis-icono-boton.analisis-icono-limpiar:hover {
+        background: var(--color-error-fondo);
+        color: var(--color-error-texto);
+    }
+
     .analisis-toggle {
         display: inline-flex;
         border-radius: 999px;
@@ -260,6 +266,14 @@ require __DIR__ . '/../parciales/encabezado.php';
             <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
                 <svg class="svg-exportar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </a>
+            <?php if ($esSuperAdmin): ?>
+            <form method="POST" action="<?= htmlspecialchars(analisisUrl('programacion', 'tiempo_real', ['lado' => $lado])) ?>" style="display:contents;" onsubmit="return confirm('¿Limpiar el árbol de ' + <?= htmlspecialchars(json_encode($lado === 'egresos' ? 'Egresos' : 'Ingresos'), ENT_QUOTES) ?> + '? Se borran todas sus líneas y valores para hacer un cargue en limpio. Antes se guarda una versión de respaldo en Repositorio.');">
+                <input type="hidden" name="accion" value="limpiar_arbol">
+                <button type="submit" class="analisis-icono-boton analisis-icono-limpiar" title="Limpiar árbol (cargue en limpio)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
+                </button>
+            </form>
+            <?php endif; ?>
         </div>
 
         <form method="POST" action="<?= htmlspecialchars(analisisUrl('programacion', 'tiempo_real', ['lado' => $lado])) ?>" enctype="multipart/form-data" id="analisis-form-importar-presupuesto" style="display:none;">
@@ -277,6 +291,14 @@ require __DIR__ . '/../parciales/encabezado.php';
             <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
                 <svg class="svg-exportar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </a>
+            <?php if ($esSuperAdmin): ?>
+            <form method="POST" action="<?= htmlspecialchars(analisisUrl('proyectos', 'tiempo_real')) ?>" style="display:contents;" onsubmit="return confirm('¿Limpiar el árbol de ' + 'Proyectos de inversión' + '? Se borran todas sus líneas y valores para hacer un cargue en limpio. Antes se guarda una versión de respaldo en Repositorio.');">
+                <input type="hidden" name="accion" value="limpiar_arbol">
+                <button type="submit" class="analisis-icono-boton analisis-icono-limpiar" title="Limpiar árbol (cargue en limpio)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
+                </button>
+            </form>
+            <?php endif; ?>
         </div>
 
         <form method="POST" action="<?= htmlspecialchars(analisisUrl('proyectos', 'tiempo_real')) ?>" enctype="multipart/form-data" id="analisis-form-importar-presupuesto" style="display:none;">
