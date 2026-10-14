@@ -1,5 +1,14 @@
 <?php
 
+// Bajo HTTPS (directo o detrás de un proxy que termina SSL), la cookie de sesión solo viaja
+// cifrada y no es accesible desde JavaScript. En localhost por HTTP sigue funcionando igual.
+$esHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https';
+session_set_cookie_params([
+    'secure' => $esHttps,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 session_start();
 
 // Comprime el HTML de las pantallas más pesadas (Análisis, Peticiones y su detalle, Dashboard): la

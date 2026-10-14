@@ -18,6 +18,15 @@ DirectoryIndex index.php
     RewriteCond %{REQUEST_URI}::$1 ^(.*?/)(.*)::\2$
     RewriteRule ^(.*)$ - [E=BASE:%1]
 
+    # --- 0. Siempre HTTPS: http://... → https://... (misma ruta y query). ---
+    # Contempla proxy/balanceador que termina SSL (X-Forwarded-Proto). Se excluye localhost
+    # para no romper el XAMPP local si no tiene SSL configurado.
+    # 302 mientras se valida; pasar a 301 cuando se confirme que HTTPS funciona en producción.
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !=https [NC]
+    RewriteCond %{HTTP_HOST} !^(localhost|127\.0\.0\.1)(:\d+)?$ [NC]
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=302,L,NE]
+
     # --- 1. Nada interno se sirve directo por HTTP (404, sin revelar que existe). ---
     # Carpetas de código/datos: solo se usan vía require desde index.php.
     RewriteRule ^(config|controlador|modelo|vista|sql|almacenamiento)(/|$) - [R=404,L,NC]
