@@ -699,17 +699,19 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
 
 <script>
 // El ModSecurity del hosting bloquea (406 Not Acceptable) un POST con el código <iframe> de
-// "Insertar" o ciertas URLs en crudo. Por eso el enlace y la miniatura viajan en base64
-// ("<campo>_b64", ver AnalisisControlador::campoPresentacionPost()); los campos originales se
-// deshabilitan para que no se envíen, y se rehabilitan si se vuelve a la página con "Atrás".
+// "Insertar" o una URL de imagen (".png", ".jpg"...) en crudo — y también en base64, porque
+// reconoce "aHR0cHM6Ly" ("https://" codificado). Por eso el enlace y la miniatura viajan en
+// hexadecimal ("<campo>_hex", ver AnalisisControlador::campoPresentacionPost()); los campos
+// originales se deshabilitan para que no se envíen, y se rehabilitan si se vuelve con "Atrás".
 (function () {
     var camposCodificados = ['url_enlace', 'miniatura_enlace'];
 
-    var aBase64 = function (texto) {
-        var bytes = new TextEncoder().encode(texto);
-        var binario = '';
-        bytes.forEach(function (b) { binario += String.fromCharCode(b); });
-        return btoa(binario);
+    var aHex = function (texto) {
+        var hex = '';
+        new TextEncoder().encode(texto).forEach(function (b) {
+            hex += (b < 16 ? '0' : '') + b.toString(16);
+        });
+        return hex;
     };
 
     document.addEventListener('submit', function (evento) {
@@ -725,8 +727,8 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
             }
             var oculto = document.createElement('input');
             oculto.type = 'hidden';
-            oculto.name = nombre + '_b64';
-            oculto.value = aBase64(campo.value);
+            oculto.name = nombre + '_hex';
+            oculto.value = aHex(campo.value);
             formulario.appendChild(oculto);
             campo.disabled = true;
             campo.dataset.deshabilitadoEnvio = '1';
@@ -738,7 +740,7 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
             campo.disabled = false;
             delete campo.dataset.deshabilitadoEnvio;
         });
-        document.querySelectorAll('input[name$="_b64"]').forEach(function (oculto) {
+        document.querySelectorAll('input[name$="_hex"]').forEach(function (oculto) {
             oculto.remove();
         });
     });

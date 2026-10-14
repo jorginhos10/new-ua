@@ -975,18 +975,17 @@ class AnalisisControlador
     }
 
     /**
-     * Lee un campo de enlace/miniatura del POST. La vista los manda en base64 ("<campo>_b64") porque
-     * el ModSecurity del hosting bloquea con 406 Not Acceptable un POST que trae el código <iframe>
-     * de "Insertar" o ciertas URLs en crudo, antes de que llegue a PHP. Si no viene codificado (JS
-     * apagado), cae al campo tal cual.
+     * Lee un campo de enlace/miniatura del POST. La vista los manda en hexadecimal ("<campo>_hex")
+     * porque el ModSecurity del hosting bloquea con 406 Not Acceptable, antes de que llegue a PHP,
+     * un POST que trae el código <iframe> de "Insertar" o una URL de imagen en crudo — y también en
+     * base64 (reconoce "aHR0cHM6Ly", "https://" codificado); en hex pasa. Si no viene codificado
+     * (JS apagado), cae al campo tal cual.
      */
     private function campoPresentacionPost(string $campo): string
     {
-        if (isset($_POST[$campo . '_b64'])) {
-            $decodificado = base64_decode((string) $_POST[$campo . '_b64'], true);
-            if ($decodificado !== false) {
-                return $decodificado;
-            }
+        $hex = (string) ($_POST[$campo . '_hex'] ?? '');
+        if ($hex !== '' && ctype_xdigit($hex) && strlen($hex) % 2 === 0) {
+            return (string) hex2bin($hex);
         }
 
         return (string) ($_POST[$campo] ?? '');
