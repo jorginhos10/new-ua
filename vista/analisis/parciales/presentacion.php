@@ -80,16 +80,19 @@ function miniaturaTarjetaPresentacion(?array $tipoDocumento, ?string $miniaturaU
 }
 
 /**
- * Botones "Abrir en otra pestaña" y "Descargar" de cada tarjeta de documento (nunca de la de
+ * Botones "Abrir en ventana emergente" y "Descargar" de cada tarjeta de documento (nunca de la de
  * Actas) — aparte del clic en la miniatura, que abre el visor incrustado. $url es el enlace tal
- * cual lo pegó el admin (para abrir, con la sesión de Microsoft 365 de quien lo mira); $urlDescarga
- * ya viene resuelta a descarga directa (ver AnalisisPresentacion::urlDescarga()). stopPropagation
- * evita que el clic también dispare el botón/tarjeta que lo envuelve (abrir el visor).
+ * cual lo pegó el admin: se abre en una ventana del navegador aparte (data-abrir-ventana, ver el
+ * script de abajo), no en el visor — ahí SharePoint sí carga, con la sesión de Microsoft 365 de
+ * quien lo mira, porque no queda incrustado en otro dominio. El href/target queda como respaldo si
+ * el navegador bloquea la ventana. $urlDescarga ya viene resuelta a descarga directa (ver
+ * AnalisisPresentacion::urlDescarga()). stopPropagation evita que el clic también dispare el
+ * botón/tarjeta que lo envuelve (abrir el visor).
  */
 function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): string
 {
     return '<div class="presentacion-tarjeta-extra">'
-        . '<a class="icono-boton" href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener" title="Abrir en otra pestaña" onclick="event.stopPropagation()">'
+        . '<a class="icono-boton" href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener" title="Abrir en ventana emergente" data-abrir-ventana onclick="event.stopPropagation()">'
         . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>'
         . '</a>'
         . '<a class="icono-boton" href="' . htmlspecialchars($urlDescarga) . '" target="_blank" rel="noopener" download title="Descargar" onclick="event.stopPropagation()">'
@@ -746,6 +749,29 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
     });
 })();
 
+// Ventana emergente del navegador (no el visor incrustado), centrada y al 90% de la pantalla. Si
+// el navegador la bloquea, el clic sigue el href con target="_blank" (otra pestaña).
+function abrirVentanaPresentacion(url) {
+    var ancho = Math.round(screen.availWidth * 0.9);
+    var alto = Math.round(screen.availHeight * 0.9);
+    var izquierda = Math.round((screen.availWidth - ancho) / 2) + (screen.availLeft || 0);
+    var arriba = Math.round((screen.availHeight - alto) / 2) + (screen.availTop || 0);
+    var ventana = window.open(url, 'presentacion-documento', 'popup=yes,width=' + ancho + ',height=' + alto + ',left=' + izquierda + ',top=' + arriba);
+    if (ventana) {
+        try { ventana.opener = null; } catch (e) {}
+        ventana.focus();
+    }
+    return !!ventana;
+}
+
+document.querySelectorAll('[data-abrir-ventana]').forEach(function (enlace) {
+    enlace.addEventListener('click', function (evento) {
+        if (abrirVentanaPresentacion(enlace.href)) {
+            evento.preventDefault();
+        }
+    });
+});
+
 (function () {
     var modal = document.getElementById('presentacion-visor-modal');
     var iframe = document.getElementById('presentacion-visor-iframe');
@@ -766,10 +792,10 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
     document.querySelectorAll('[data-abrir-visor]').forEach(function (boton) {
         boton.addEventListener('click', function () {
             // Sin url incrustable (un PDF de SharePoint/OneDrive, ver
-            // AnalisisPresentacion::urlIncrustada()): se abre en otra pestaña, con la sesión de
-            // Microsoft 365 de quien lo mira, en vez de mostrar el bloqueo dentro del visor.
+            // AnalisisPresentacion::urlIncrustada()): se abre en una ventana emergente, con la
+            // sesión de Microsoft 365 de quien lo mira, en vez de mostrar el bloqueo dentro del visor.
             if (!boton.dataset.src) {
-                if (boton.dataset.externo) {
+                if (boton.dataset.externo && !abrirVentanaPresentacion(boton.dataset.externo)) {
                     window.open(boton.dataset.externo, '_blank', 'noopener');
                 }
                 return;
