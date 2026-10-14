@@ -80,21 +80,14 @@ function miniaturaTarjetaPresentacion(?array $tipoDocumento, ?string $miniaturaU
 }
 
 /**
- * Botones "Abrir en ventana emergente" y "Descargar" de cada tarjeta de documento (nunca de la de
- * Actas) — aparte del clic en la miniatura, que abre el visor incrustado. $url es el enlace tal
- * cual lo pegó el admin: se abre en una ventana del navegador aparte (data-abrir-ventana, ver el
- * script de abajo), no en el visor — ahí SharePoint sí carga, con la sesión de Microsoft 365 de
- * quien lo mira, porque no queda incrustado en otro dominio. El href/target queda como respaldo si
- * el navegador bloquea la ventana. $urlDescarga ya viene resuelta a descarga directa (ver
+ * Botón "Descargar" de cada tarjeta de documento (nunca de la de Actas) — aparte del clic en la
+ * miniatura/tarjeta, que abre el documento. $urlDescarga ya viene resuelta a descarga directa (ver
  * AnalisisPresentacion::urlDescarga()). stopPropagation evita que el clic también dispare el
- * botón/tarjeta que lo envuelve (abrir el visor).
+ * botón/tarjeta que lo envuelve (abrir el documento).
  */
-function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): string
+function botonesExtraTarjetaPresentacion(string $urlDescarga): string
 {
     return '<div class="presentacion-tarjeta-extra">'
-        . '<a class="icono-boton" href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener" title="Abrir en ventana emergente" data-abrir-ventana onclick="event.stopPropagation()">'
-        . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>'
-        . '</a>'
         . '<a class="icono-boton" href="' . htmlspecialchars($urlDescarga) . '" target="_blank" rel="noopener" download title="Descargar" onclick="event.stopPropagation()">'
         . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>'
         . '</a>'
@@ -248,8 +241,8 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
     }
 
     /* Para la tarjeta de usuario (clic = abrir visor): el botón interno ocupa toda la tarjeta menos
-       los botones flotantes de "Abrir en otra pestaña"/"Descargar", que van aparte para no quedar
-       anidados dentro de otro botón. */
+       el botón flotante "Descargar", que va aparte para no quedar
+       anidado dentro de otro botón. */
     .presentacion-tarjeta-disparador {
         display: flex;
         flex-direction: column;
@@ -265,8 +258,8 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
         cursor: pointer;
     }
 
-    /* Fila inferior, alineada con la descripción: a la izquierda el texto, a la derecha los
-       botones "Abrir en otra pestaña"/"Descargar" — aparte del clic en la miniatura (o en el
+    /* Fila inferior, alineada con la descripción: a la izquierda el texto, a la derecha el
+       botón "Descargar" — aparte del clic en la miniatura (o en el
        cuerpo, en la tarjeta de usuario), que abre el visor incrustado. */
     .presentacion-tarjeta-pie {
         display: flex;
@@ -601,7 +594,7 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
                         <input type="text" class="presentacion-tarjeta-campo-url" data-campo="miniatura" name="miniatura_enlace" value="<?= htmlspecialchars($enlace['miniatura_url'] ?? '') ?>" form="form-enlace-<?= (int) $enlace['id'] ?>" placeholder="URL de imagen para la miniatura (opcional)" aria-label="URL de la miniatura">
                         <div class="presentacion-tarjeta-pie">
                             <p class="presentacion-tarjeta-descripcion"><?= htmlspecialchars($enlace['tipo_documento']['descripcion']) ?></p>
-                            <?= botonesExtraTarjetaPresentacion($enlace['url'], $enlace['url_descarga']) ?>
+                            <?= botonesExtraTarjetaPresentacion($enlace['url_descarga']) ?>
                         </div>
                         <p class="presentacion-tarjeta-meta">
                             <?= htmlspecialchars(date('d/m/Y', strtotime($enlace['actualizado_en']))) ?><?= !empty($enlace['actualizado_por_nombre']) ? ' · ' . htmlspecialchars($enlace['actualizado_por_nombre']) : '' ?>
@@ -670,7 +663,7 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
                     </button>
                     <div class="presentacion-tarjeta-pie">
                         <p class="presentacion-tarjeta-descripcion"><?= htmlspecialchars($enlace['tipo_documento']['descripcion']) ?></p>
-                        <?= botonesExtraTarjetaPresentacion($enlace['url'], $enlace['url_descarga']) ?>
+                        <?= botonesExtraTarjetaPresentacion($enlace['url_descarga']) ?>
                     </div>
                 </div>
                 <?php endif; ?>
@@ -749,8 +742,9 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
     });
 })();
 
-// Ventana emergente del navegador (no el visor incrustado), centrada y al 90% de la pantalla. Si
-// el navegador la bloquea, el clic sigue el href con target="_blank" (otra pestaña).
+// Ventana emergente del navegador (no el visor incrustado), centrada y al 90% de la pantalla — para
+// los documentos que no se dejan incrustar (PDF de SharePoint). Devuelve false si el navegador la
+// bloquea, para que quien llama caiga a otra pestaña.
 function abrirVentanaPresentacion(url) {
     var ancho = Math.round(screen.availWidth * 0.9);
     var alto = Math.round(screen.availHeight * 0.9);
@@ -764,13 +758,6 @@ function abrirVentanaPresentacion(url) {
     return !!ventana;
 }
 
-document.querySelectorAll('[data-abrir-ventana]').forEach(function (enlace) {
-    enlace.addEventListener('click', function (evento) {
-        if (abrirVentanaPresentacion(enlace.href)) {
-            evento.preventDefault();
-        }
-    });
-});
 
 (function () {
     var modal = document.getElementById('presentacion-visor-modal');
