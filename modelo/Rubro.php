@@ -61,6 +61,15 @@ class Rubro
         return $filas;
     }
 
+    public function obtenerPorId(int $id): ?array
+    {
+        $consulta = $this->db->prepare('SELECT id, codigo, descripcion, estado, creado_en FROM rubros WHERE id = :id');
+        $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
     public function existeCodigo(string $codigo): bool
     {
         $consulta = $this->db->prepare('SELECT id FROM rubros WHERE codigo = :codigo LIMIT 1');
@@ -87,11 +96,21 @@ class Rubro
         return $consulta->execute(['id' => $id]);
     }
 
-    public function actualizarDescripcion(int $id, string $descripcion): bool
+    public function actualizar(int $id, string $codigo, string $descripcion): bool
     {
-        $consulta = $this->db->prepare('UPDATE rubros SET descripcion = :descripcion WHERE id = :id');
+        $consulta = $this->db->prepare('UPDATE rubros SET codigo = :codigo, descripcion = :descripcion WHERE id = :id');
 
-        return $consulta->execute(['id' => $id, 'descripcion' => $descripcion]);
+        return $consulta->execute(['id' => $id, 'codigo' => $codigo, 'descripcion' => $descripcion]);
+    }
+
+    /** Este catálogo no tiene borrado real como acción principal (ver sincronizarDesdeCsv()), pero
+     * sí se expone eliminar() para la landing — guardado por CsvConfiguracion::tieneReferencias()
+     * en el controlador, igual que el resto de los 10 catálogos de "Listas". */
+    public function eliminar(int $id): bool
+    {
+        $consulta = $this->db->prepare('DELETE FROM rubros WHERE id = :id');
+
+        return $consulta->execute(['id' => $id]);
     }
 
     /**
@@ -131,7 +150,7 @@ class Rubro
                 $cambio = false;
 
                 if ($existente['descripcion'] !== $descripcion) {
-                    $this->actualizarDescripcion((int) $existente['id'], $descripcion);
+                    $this->actualizar((int) $existente['id'], $codigo, $descripcion);
                     $cambio = true;
                 }
 

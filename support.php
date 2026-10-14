@@ -40,7 +40,7 @@ $secciones = [
     'Proyecto' => 'Configuraciones > Proyectos', 'RelojArena' => 'Configuraciones > Reloj de arena',
     'RelojArenaConsejo' => 'Reloj Consejo Superior', 'Rol' => 'Configuraciones > Roles',
     'Rubro' => 'Configuraciones > Rubros', 'RubroCategoria' => 'Configuraciones > Categorías de rubro',
-    'Sede' => 'Configuraciones > Sedes', 'SinExcedentes' => 'Sin excedentes', 'Solicitud' => 'Solicitudes',
+    'Sede' => 'Configuraciones > Sedes', 'Solicitud' => 'Solicitudes',
     'SublineaInversion' => 'Configuraciones > Sublíneas', 'Techos' => 'Techos', 'Unisalud' => 'Unidad de Salud',
     'Usuario' => 'Configuraciones > Usuarios', 'VariableMacroeconomica' => 'Configuraciones > Variables macro',
 ];

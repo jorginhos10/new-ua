@@ -1,9 +1,9 @@
 <?php
 
+require_once __DIR__ . '/ControladorListaCatalogo.php';
 require_once __DIR__ . '/../modelo/Sede.php';
-require_once __DIR__ . '/../modelo/CsvConfiguracion.php';
 
-class SedeControlador
+class SedeControlador extends ControladorListaCatalogo
 {
     private Sede $modeloSede;
 
@@ -12,78 +12,42 @@ class SedeControlador
         $this->modeloSede = new Sede();
     }
 
-    public function index(): void
+    protected function modelo(): object
     {
-        if (empty($_SESSION['usuario_id'])) {
-            header('Location: index.php?ruta=login');
-            exit;
-        }
-
-        if ($_SESSION['usuario_rol'] !== 'administrador') {
-            header('Location: index.php?ruta=dashboard');
-            exit;
-        }
-
-        if (($_GET['accion_csv'] ?? '') === 'plantilla') {
-            $this->exportarCsv();
-        }
-
-        $error = '';
-        $exito = '';
-
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $accion = $_POST['accion'] ?? '';
-
-            if ($accion === 'importar_csv') {
-                [$error, $exito] = $this->importarCsv();
-            } elseif ($accion === 'editar') {
-                [$error, $exito] = $this->editar();
-            } else {
-                [$error, $exito] = $this->guardar();
-            }
-        }
-
-        $sedes = $this->modeloSede->obtenerTodas();
-
-        require __DIR__ . '/../vista/sedes/index.php';
+        return $this->modeloSede;
     }
 
-    private function exportarCsv(): void
+    protected function tabla(): string
     {
-        $filas = array_map(
-            static fn (array $s): array => [$s['codigo'], $s['nombre'], $s['nit']],
-            $this->modeloSede->obtenerTodas()
-        );
-
-        CsvConfiguracion::exportar('sedes.csv', ['codigo', 'nombre', 'nit'], $filas);
+        return 'sedes';
     }
 
-    private function importarCsv(): array
+    protected function ruta(): string
     {
-        $filas = CsvConfiguracion::leerArchivoSubido($_FILES['archivo_csv'] ?? []);
-
-        if ($filas === null) {
-            return ['No se pudo leer el archivo CSV. Verifica que el archivo tenga el formato correcto.', ''];
-        }
-
-        $resultado = $this->modeloSede->sincronizarDesdeCsv($filas);
-
-        $mensaje = 'Se crearon ' . $resultado['creados'] . ', se actualizaron ' . $resultado['actualizados']
-            . ' y se eliminaron ' . $resultado['eliminados'] . ' sede(s).';
-
-        if ($resultado['invalidas'] > 0) {
-            $mensaje .= ' ' . $resultado['invalidas'] . ' fila(s) se omitieron por NIT inválido (dos dígitos, de 00 a 09).';
-        }
-
-        if ($resultado['omitidos'] > 0) {
-            $mensaje .= ' ' . $resultado['omitidos'] . ' no se pudieron eliminar porque siguen en uso en otra parte del sistema.';
-        }
-
-        return ['', $mensaje];
+        return 'sedes';
     }
 
-    /** Alta de sede. Devuelve [error, exito]. */
-    private function guardar(): array
+    protected function vista(): string
+    {
+        return __DIR__ . '/../vista/sedes/index.php';
+    }
+
+    protected function registros(): array
+    {
+        return $this->modeloSede->obtenerTodas();
+    }
+
+    protected function columnasCsv(): array
+    {
+        return ['codigo', 'nombre', 'nit', 'estado'];
+    }
+
+    protected function filaCsv(array $registro): array
+    {
+        return [$registro['codigo'], $registro['nombre'], $registro['nit'], $registro['estado']];
+    }
+
+    protected function crear(): array
     {
         $codigo = trim($_POST['codigo'] ?? '');
         $nombre = trim($_POST['nombre'] ?? '');
@@ -100,14 +64,12 @@ class SedeControlador
         return ['', 'Sede agregada correctamente.'];
     }
 
-    /** Edición de código, nombre y NIT de una sede existente. */
-    private function editar(): array
+    protected function actualizar(): array
     {
         $id = (int) ($_POST['id'] ?? 0);
-        $sede = $id > 0 ? $this->modeloSede->obtenerPorId($id) : null;
 
-        if ($sede === null) {
-            return ['La sede no existe.', ''];
+        if ($id <= 0 || $this->modeloSede->obtenerPorId($id) === null) {
+            return ['La sede que intentas editar no existe.', ''];
         }
 
         $codigo = trim($_POST['codigo'] ?? '');
@@ -122,7 +84,7 @@ class SedeControlador
 
         $this->modeloSede->actualizar($id, $codigo, $nombre, $nit);
 
-        return ['', 'Sede "' . $nombre . '" actualizada correctamente.'];
+        return ['', 'Sede actualizada correctamente.'];
     }
 
     private function validar(string $codigo, string $nombre, string $nit, ?int $excluirId): string

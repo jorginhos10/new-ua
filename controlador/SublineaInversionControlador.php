@@ -1,10 +1,10 @@
 <?php
 
+require_once __DIR__ . '/ControladorListaCatalogo.php';
 require_once __DIR__ . '/../modelo/SublineaInversion.php';
 require_once __DIR__ . '/../modelo/LineaInversion.php';
-require_once __DIR__ . '/../modelo/CsvConfiguracion.php';
 
-class SublineaInversionControlador
+class SublineaInversionControlador extends ControladorListaCatalogo
 {
     private SublineaInversion $modeloSublineaInversion;
     private LineaInversion $modeloLineaInversion;
@@ -15,97 +15,55 @@ class SublineaInversionControlador
         $this->modeloLineaInversion = new LineaInversion();
     }
 
-    public function index(): void
+    protected function modelo(): object
     {
-        if (empty($_SESSION['usuario_id'])) {
-            header('Location: index.php?ruta=login');
-            exit;
-        }
-
-        if ($_SESSION['usuario_rol'] !== 'administrador') {
-            header('Location: index.php?ruta=dashboard');
-            exit;
-        }
-
-        if (($_GET['accion_csv'] ?? '') === 'plantilla') {
-            $this->exportarCsv();
-        }
-
-        $error = '';
-        $exito = '';
-
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $accion = $_POST['accion'] ?? '';
-
-            if ($accion === 'cambiar_estado') {
-                $this->cambiarEstado();
-            } elseif ($accion === 'importar_csv') {
-                [$error, $exito] = $this->importarCsv();
-            } else {
-                [$error, $exito] = $this->guardar();
-            }
-        }
-
-        $sublineasInversion = $this->modeloSublineaInversion->obtenerTodas();
-        $lineasInversion = $this->modeloLineaInversion->obtenerActivas();
-
-        require __DIR__ . '/../vista/sublineas-inversion/index.php';
+        return $this->modeloSublineaInversion;
     }
 
-    private function exportarCsv(): void
+    protected function tabla(): string
     {
-        $filas = array_map(
-            static fn (array $s): array => [$s['codigo'], $s['nombre'], $s['descripcion'], $s['linea_codigo'], $s['estado']],
-            $this->modeloSublineaInversion->obtenerTodas()
-        );
-
-        CsvConfiguracion::exportar(
-            'sublineas_inversion.csv',
-            ['codigo', 'nombre', 'descripcion', 'linea_codigo', 'estado'],
-            $filas
-        );
+        return 'sublineas_inversion';
     }
 
-    private function importarCsv(): array
+    protected function ruta(): string
     {
-        $filas = CsvConfiguracion::leerArchivoSubido($_FILES['archivo_csv'] ?? []);
-
-        if ($filas === null) {
-            return ['No se pudo leer el archivo CSV. Verifica que el archivo tenga el formato correcto.', ''];
-        }
-
-        $resultado = $this->modeloSublineaInversion->sincronizarDesdeCsv($filas);
-
-        $mensaje = 'Se crearon ' . $resultado['creados'] . ', se actualizaron ' . $resultado['actualizados']
-            . ' y se desactivaron ' . $resultado['desactivados'] . ' sublínea(s) de inversión.';
-
-        if ($resultado['ignorados'] > 0) {
-            $mensaje .= ' ' . $resultado['ignorados'] . ' fila(s) se ignoraron porque su línea de inversión no existe.';
-        }
-
-        return ['', $mensaje];
+        return 'sublineas-inversion';
     }
 
-    private function cambiarEstado(): void
+    protected function vista(): string
     {
-        $id = (int) ($_POST['id'] ?? 0);
-
-        if ($id > 0) {
-            $this->modeloSublineaInversion->cambiarEstado($id);
-        }
-
-        header('Location: index.php?ruta=sublineas-inversion');
-        exit;
+        return __DIR__ . '/../vista/sublineas-inversion/index.php';
     }
 
-    private function guardar(): array
+    protected function registros(): array
+    {
+        return $this->modeloSublineaInversion->obtenerTodas();
+    }
+
+    protected function columnasCsv(): array
+    {
+        return ['linea_codigo', 'codigo', 'nombre', 'descripcion', 'estado'];
+    }
+
+    protected function filaCsv(array $registro): array
+    {
+        return [$registro['linea_codigo'], $registro['codigo'], $registro['nombre'], $registro['descripcion'], $registro['estado']];
+    }
+
+    /** Todas las líneas de inversión, no solo activas — ver nota equivalente en MotorControlador. */
+    protected function datosExtra(): array
+    {
+        return ['lineasOpciones' => $this->modeloLineaInversion->obtenerTodas()];
+    }
+
+    protected function crear(): array
     {
         $codigo = trim($_POST['codigo'] ?? '');
         $nombre = trim($_POST['nombre'] ?? '');
         $descripcion = trim($_POST['descripcion'] ?? '');
-        $lineaInversionId = (int) ($_POST['linea_inversion_id'] ?? 0);
+        $lineaInversionId = $_POST['linea_inversion_id'] ?? '';
 
-        if ($codigo === '' || $nombre === '' || $descripcion === '' || $lineaInversionId <= 0) {
+        if ($codigo === '' || $nombre === '' || $descripcion === '' || $lineaInversionId === '') {
             return ['El código, el nombre, la descripción y la línea de inversión son obligatorios.', ''];
         }
 
@@ -113,8 +71,29 @@ class SublineaInversionControlador
             return ['Ese código ya existe.', ''];
         }
 
-        $this->modeloSublineaInversion->crear($codigo, $nombre, $descripcion, $lineaInversionId);
+        $this->modeloSublineaInversion->crear($codigo, $nombre, $descripcion, (int) $lineaInversionId);
 
         return ['', 'Sublínea de inversión agregada correctamente.'];
+    }
+
+    protected function actualizar(): array
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+        $codigo = trim($_POST['codigo'] ?? '');
+        $nombre = trim($_POST['nombre'] ?? '');
+        $descripcion = trim($_POST['descripcion'] ?? '');
+        $lineaInversionId = $_POST['linea_inversion_id'] ?? '';
+
+        if ($id <= 0 || $this->modeloSublineaInversion->obtenerPorId($id) === null) {
+            return ['La sublínea de inversión que intentas editar no existe.', ''];
+        }
+
+        if ($codigo === '' || $nombre === '' || $descripcion === '' || $lineaInversionId === '') {
+            return ['El código, el nombre, la descripción y la línea de inversión son obligatorios.', ''];
+        }
+
+        $this->modeloSublineaInversion->actualizar($id, $codigo, $nombre, $descripcion, (int) $lineaInversionId);
+
+        return ['', 'Sublínea de inversión actualizada correctamente.'];
     }
 }

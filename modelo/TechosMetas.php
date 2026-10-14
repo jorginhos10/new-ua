@@ -113,7 +113,8 @@ class TechosMetas
         ], $nodos);
     }
 
-    private function subarbol(array $arbol, string $nombre): array
+    /** Público: VersionTechos lo reutiliza para filtrar por dependencia sobre datos ya congelados. */
+    public function subarbol(array $arbol, string $nombre): array
     {
         foreach ($arbol as $nodo) {
             if ($nodo['nombre'] === $nombre) {
@@ -129,7 +130,8 @@ class TechosMetas
         return [];
     }
 
-    private function nodosDelBloque(string $bloque, array $arbol, int $anioId): array
+    /** Público: VersionTechos lo llama una sola vez al crear la versión (nunca al leerla). */
+    public function nodosDelBloque(string $bloque, array $arbol, int $anioId): array
     {
         if ($bloque === 'gastos') {
             $presupuestos = (new PresupuestoDependencia())->obtenerPorAnio($anioId);
@@ -299,7 +301,8 @@ class TechosMetas
      * Totales a nivel de las raíces visibles (no se suman hijas y padres a la vez). En autogestión
      * $tope es null cuando no aplica (modo Usuario): entonces no hay restante ni porcentaje.
      */
-    private function totalesDelBloque(string $bloque, array $nodos, ?float $tope): array
+    /** Público: VersionTechos lo reutiliza para recalcular totales sobre datos ya congelados. */
+    public function totalesDelBloque(string $bloque, array $nodos, ?float $tope): array
     {
         if ($bloque === 'gastos') {
             $techo = 0.0;
@@ -334,13 +337,14 @@ class TechosMetas
         ];
     }
 
-    private function clavesDeValor(string $bloque): array
+    /** Público: VersionTechos lo reutiliza para podar sobre datos ya congelados. */
+    public function clavesDeValor(string $bloque): array
     {
         return $bloque === 'gastos' ? ['techo', 'asignacion'] : ['ingresos'];
     }
 
     /** Quita las ramas sin ningún valor (modo Usuario): un nodo se conserva si él o alguna hija tiene valor. */
-    private function podar(array $nodos, array $claves): array
+    public function podar(array $nodos, array $claves): array
     {
         $resultado = [];
         foreach ($nodos as $nodo) {

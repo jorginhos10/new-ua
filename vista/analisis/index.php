@@ -153,8 +153,10 @@ require __DIR__ . '/../parciales/encabezado.php';
         background: rgba(0, 0, 0, 0.08);
     }
 
-    .analisis-icono-boton.analisis-icono-exportar {
-        color: var(--color-primario);
+    /* Limpiar árbol: acción destructiva, se tiñe de rojo al pasar el cursor. */
+    .analisis-icono-boton.analisis-icono-limpiar:hover {
+        background: var(--color-error-fondo);
+        color: var(--color-error-texto);
     }
 
     .analisis-toggle {
@@ -226,26 +228,23 @@ require __DIR__ . '/../parciales/encabezado.php';
 <div class="analisis-barra">
     <?php $pestanasPermitidas = AccesoAnalisis::actual()['pestanas']; ?>
     <nav class="analisis-tabs">
+        <?php if (in_array('presentacion', $pestanasPermitidas, true)): ?>
+        <a href="<?= htmlspecialchars(analisisUrl('presentacion', $vista)) ?>" class="<?= $tab === 'presentacion' ? 'activa' : '' ?>">Documentos</a>
+        <?php endif; ?>
         <?php if (in_array('programacion', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => $lado])) ?>" class="<?= $tab === 'programacion' ? 'activa' : '' ?>">Programación presupuestal <?= htmlspecialchars((string) $anioLabelActivo) ?></a>
+        <?php endif; ?>
+        <?php if (in_array('proyectos', $pestanasPermitidas, true)): ?>
+        <a href="<?= htmlspecialchars(analisisUrl('proyectos', $vista)) ?>" class="<?= $tab === 'proyectos' ? 'activa' : '' ?>">Proyectos de Inversión</a>
         <?php endif; ?>
         <?php if (in_array('pdi', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('pdi', $vista)) ?>" class="<?= $tab === 'pdi' ? 'activa' : '' ?>">Articulación PDI</a>
         <?php endif; ?>
-        <?php if (in_array('analisis', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('analisis', $vista)) ?>" class="<?= $tab === 'analisis' ? 'activa' : '' ?>">Análisis de distribución</a>
-        <?php endif; ?>
-        <?php if (in_array('proyectos', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('proyectos', $vista)) ?>" class="<?= $tab === 'proyectos' ? 'activa' : '' ?>">Proyectos</a>
-        <?php endif; ?>
         <?php if (in_array('techos', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('techos', $vista === 'usuario' ? 'usuario' : 'tiempo_real')) ?>" class="<?= $tab === 'techos' ? 'activa' : '' ?>">Techos y Metas</a>
         <?php endif; ?>
-        <?php if (in_array('actas', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('actas', $vista)) ?>" class="<?= $tab === 'actas' ? 'activa' : '' ?>">Actas</a>
-        <?php endif; ?>
-        <?php if (in_array('presentacion', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('presentacion', $vista)) ?>" class="<?= $tab === 'presentacion' ? 'activa' : '' ?>">Presentación</a>
+        <?php if (in_array('analisis', $pestanasPermitidas, true)): ?>
+        <a href="<?= htmlspecialchars(analisisUrl('analisis', $vista)) ?>" class="<?= $tab === 'analisis' ? 'activa' : '' ?>">Análisis de distribución</a>
         <?php endif; ?>
     </nav>
 
@@ -262,11 +261,19 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
             </a>
             <button type="button" class="analisis-icono-boton" id="analisis-boton-importar-presupuesto" title="Importar">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <svg class="svg-importar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             </button>
             <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                <svg class="svg-exportar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </a>
+            <?php if ($esSuperAdmin): ?>
+            <form method="POST" action="<?= htmlspecialchars(analisisUrl('programacion', 'tiempo_real', ['lado' => $lado])) ?>" style="display:contents;" onsubmit="return confirm('¿Limpiar el árbol de ' + <?= htmlspecialchars(json_encode($lado === 'egresos' ? 'Egresos' : 'Ingresos'), ENT_QUOTES) ?> + '? Se borran todas sus líneas y valores para hacer un cargue en limpio. Antes se guarda una versión de respaldo en Repositorio.');">
+                <input type="hidden" name="accion" value="limpiar_arbol">
+                <button type="submit" class="analisis-icono-boton analisis-icono-limpiar" title="Limpiar árbol (cargue en limpio)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
+                </button>
+            </form>
+            <?php endif; ?>
         </div>
 
         <form method="POST" action="<?= htmlspecialchars(analisisUrl('programacion', 'tiempo_real', ['lado' => $lado])) ?>" enctype="multipart/form-data" id="analisis-form-importar-presupuesto" style="display:none;">
@@ -279,11 +286,19 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
             </a>
             <button type="button" class="analisis-icono-boton" id="analisis-boton-importar-presupuesto" title="Importar">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <svg class="svg-importar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             </button>
             <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                <svg class="svg-exportar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </a>
+            <?php if ($esSuperAdmin): ?>
+            <form method="POST" action="<?= htmlspecialchars(analisisUrl('proyectos', 'tiempo_real')) ?>" style="display:contents;" onsubmit="return confirm('¿Limpiar el árbol de ' + 'Proyectos de inversión' + '? Se borran todas sus líneas y valores para hacer un cargue en limpio. Antes se guarda una versión de respaldo en Repositorio.');">
+                <input type="hidden" name="accion" value="limpiar_arbol">
+                <button type="submit" class="analisis-icono-boton analisis-icono-limpiar" title="Limpiar árbol (cargue en limpio)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>
+                </button>
+            </form>
+            <?php endif; ?>
         </div>
 
         <form method="POST" action="<?= htmlspecialchars(analisisUrl('proyectos', 'tiempo_real')) ?>" enctype="multipart/form-data" id="analisis-form-importar-presupuesto" style="display:none;">
@@ -302,7 +317,7 @@ require __DIR__ . '/../parciales/encabezado.php';
         ?>
         <div class="analisis-grupo-datos" title="Exportar">
             <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars(analisisUrl('analisis', $vista, $extraExportarAnalisis)) ?>" title="Exportar a Excel (resumen + una hoja por módulo)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                <svg class="svg-exportar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </a>
         </div>
         <?php elseif (in_array($tab, ['pdi', 'programacion'], true) && $vista === 'tiempo_real'): ?>
@@ -311,38 +326,43 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
             </button>
             <button type="button" class="analisis-icono-boton" onclick="alert('Prueba de interfaz: esta página todavía no importa datos reales.')" title="Importar">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <svg class="svg-importar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
             </button>
             <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                <svg class="svg-exportar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </a>
         </div>
         <?php elseif (in_array($tab, ['pdi', 'programacion', 'proyectos'], true)): ?>
         <div class="analisis-grupo-datos" title="Exportar">
             <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                <svg class="svg-exportar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </a>
         </div>
         <?php endif; ?>
 
-        <?php if (AccesoAnalisis::actual()['clase'] === 'superadmin' && !in_array($tab, ['actas', 'presentacion'], true)): ?>
+        <?php if (AccesoAnalisis::actual()['clase'] === 'superadmin' && !in_array($tab, ['actas'], true)): ?>
         <div class="analisis-toggle">
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'tiempo_real', $paramsTab)) ?>" class="<?= $vista === 'tiempo_real' ? 'activo' : '' ?>">Tiempo real</a>
-            <?php if ($tab !== 'techos'): ?>
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'repositorio', $paramsTab)) ?>" class="<?= $vista === 'repositorio' ? 'activo' : '' ?>">Repositorio</a>
-            <?php endif; ?>
             <a href="<?= htmlspecialchars(analisisUrl($tab, 'usuario', $paramsTab)) ?>" class="<?= $vista === 'usuario' ? 'activo' : '' ?>">Usuario</a>
         </div>
         <?php endif; ?>
 
         <?php $esSuperadminAnalisis = AccesoAnalisis::actual()['clase'] === 'superadmin'; ?>
-        <?php if ($esSuperadminAnalisis && $vista === 'repositorio' && in_array($tab, ['pdi', 'programacion', 'proyectos'], true)): ?>
+        <?php if ($esSuperadminAnalisis && $vista === 'repositorio' && in_array($tab, ['pdi', 'programacion', 'proyectos', 'techos', 'presentacion'], true)): ?>
         <select class="analisis-selector-modo" onchange="if(this.value){window.location.href=this.value;}">
             <?php if (empty($versiones)): ?>
             <option value="">Sin versiones guardadas</option>
             <?php endif; ?>
+            <?php
+            $extraSelectorVersion = match ($tab) {
+                'programacion' => ['lado' => $lado],
+                'techos' => ['bloque' => $bloque] + ($dependenciaFiltroActual !== null ? ['dependencia' => $dependenciaFiltroActual] : []),
+                default => [],
+            };
+            ?>
             <?php foreach ($versiones as $version): ?>
-            <option value="<?= htmlspecialchars(analisisUrl($tab, 'repositorio', ['version_id' => $version['id']] + ($tab === 'programacion' ? ['lado' => $lado] : []))) ?>" <?= (int) $version['id'] === (int) $versionIdActual ? 'selected' : '' ?>>
+            <option value="<?= htmlspecialchars(analisisUrl($tab, 'repositorio', ['version_id' => $version['id']] + $extraSelectorVersion)) ?>" <?= (int) $version['id'] === (int) $versionIdActual ? 'selected' : '' ?>>
                 <?= htmlspecialchars($version['nombre']) ?> — <?= htmlspecialchars(date('d/m/Y H:i', strtotime($version['creado_en']))) ?>
             </option>
             <?php endforeach; ?>
@@ -358,10 +378,10 @@ require __DIR__ . '/../parciales/encabezado.php';
             </option>
             <?php endforeach; ?>
         </select>
-        <?php elseif ($vista === 'usuario' && !in_array($tab, ['actas', 'presentacion'], true)): ?>
+        <?php elseif (($vista === 'usuario' && !in_array($tab, ['actas', 'presentacion'], true)) || ($vista === 'repositorio' && $tab === 'techos')): ?>
         <select class="analisis-selector-modo" onchange="if(this.value){window.location.href=this.value;}">
             <?php foreach (AccesoAnalisis::dependenciasSelector($dependenciasTodas) as $dependenciaOpcion): ?>
-            <option value="<?= htmlspecialchars(analisisUrl($tab, 'usuario', ['dependencia' => $dependenciaOpcion['nombre']] + $paramsTab + (isset($origenActivo) ? ['origen' => $origenActivo] : []))) ?>" <?= $dependenciaOpcion['nombre'] === $dependenciaFiltroActual ? 'selected' : '' ?>>
+            <option value="<?= htmlspecialchars(analisisUrl($tab, $vista, ['dependencia' => $dependenciaOpcion['nombre']] + $paramsTab + (isset($origenActivo) ? ['origen' => $origenActivo] : []))) ?>" <?= $dependenciaOpcion['nombre'] === $dependenciaFiltroActual ? 'selected' : '' ?>>
                 <?= htmlspecialchars(Dependencia::nombreVisible($dependenciaOpcion['nombre'])) ?>
             </option>
             <?php endforeach; ?>

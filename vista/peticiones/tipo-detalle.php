@@ -102,7 +102,7 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
                 <?php if (!empty($filasCompletas)): ?>
                 <span class="separador-grupo-basico"></span>
                 <a href="index.php?ruta=peticiones-tipo-detalle&estado=<?= urlencode($estado) ?>&origen=<?= urlencode($origen) ?>&anio_id=<?= (int) $anioSeleccionadoId ?><?= $dependenciaFiltro !== '' ? '&dependencia=' . urlencode($dependenciaFiltro) : '' ?>&exportar=xlsx" class="icono-boton icono-exportar" title="Exportar a Excel">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    <svg class="svg-exportar" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                 </a>
                 <?php endif; ?>
             </div>
@@ -118,6 +118,10 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
 
     <?php if (!empty($error)): ?>
     <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
+    <?php endif; ?>
+
+    <?php if (!empty($exito)): ?>
+    <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
     <?php endif; ?>
 
     <?php if (empty($filasCompletas)): ?>
@@ -183,7 +187,7 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
 
 <form method="POST" id="tdt-form-accion" action="index.php?ruta=peticiones-tipo-detalle&estado=<?= urlencode($estado) ?>&origen=<?= urlencode($origen) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&resaltar_id=<?= (int) $resaltarId ?><?= $dependenciaFiltro !== '' ? '&dependencia=' . urlencode($dependenciaFiltro) : '' ?>" style="display:none;">
     <input type="hidden" name="accion" id="tdt-form-accion-valor" value="">
-    <input type="hidden" name="origen_id" id="tdt-form-origen-id" value="">
+    <input type="hidden" name="origen_ids_json" id="tdt-form-origen-ids-json" value="">
 </form>
 
 <script>
@@ -191,6 +195,8 @@ var tdtColumnas = <?php echo json_encode($columnas, JSON_UNESCAPED_UNICODE); ?>;
 var tdtClavesFila = <?php echo json_encode($clavesFila, JSON_UNESCAPED_UNICODE); ?>;
 var tdtNamespace = <?php echo json_encode($origen . '_' . $estado); ?>;
 </script>
-<script src="publico/js/tabla-real.js?v=<?= filemtime(__DIR__ . '/../../publico/js/tabla-real.js') ?>"></script>
+<script src="publico/js/tabla-real/nucleo.js?v=<?= filemtime(__DIR__ . '/../../publico/js/tabla-real/nucleo.js') ?>"></script>
+<script src="publico/js/tabla-real/tabla.js?v=<?= filemtime(__DIR__ . '/../../publico/js/tabla-real/tabla.js') ?>"></script>
+<script src="publico/js/tabla-real/graficos.js?v=<?= filemtime(__DIR__ . '/../../publico/js/tabla-real/graficos.js') ?>"></script>
 
 <?php require __DIR__ . '/../parciales/pie.php'; ?>

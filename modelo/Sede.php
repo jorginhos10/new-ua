@@ -17,15 +17,24 @@ class Sede
 
     public function obtenerTodas(): array
     {
-        $consulta = $this->db->query('SELECT id, codigo, nit, nombre, creado_en FROM sedes ORDER BY nombre');
+        $consulta = $this->db->query('SELECT id, codigo, nit, nombre, estado, creado_en FROM sedes ORDER BY nombre');
 
         return $consulta->fetchAll();
     }
 
     public function obtenerPorId(int $id): ?array
     {
-        $consulta = $this->db->prepare('SELECT id, codigo, nit, nombre FROM sedes WHERE id = :id');
+        $consulta = $this->db->prepare('SELECT id, codigo, nit, nombre, estado FROM sedes WHERE id = :id');
         $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
+    public function obtenerPorCodigo(string $codigo): ?array
+    {
+        $consulta = $this->db->prepare('SELECT id, codigo, nit, nombre, estado FROM sedes WHERE codigo = :codigo LIMIT 1');
+        $consulta->execute(['codigo' => $codigo]);
         $fila = $consulta->fetch();
 
         return $fila !== false ? $fila : null;
@@ -63,6 +72,15 @@ class Sede
         return $consulta->execute(['id' => $id, 'codigo' => $codigo, 'nombre' => $nombre, 'nit' => $nit]);
     }
 
+    public function cambiarEstado(int $id): bool
+    {
+        $consulta = $this->db->prepare(
+            "UPDATE sedes SET estado = IF(estado = 'activo', 'inactivo', 'activo') WHERE id = :id"
+        );
+
+        return $consulta->execute(['id' => $id]);
+    }
+
     public function eliminar(int $id): bool
     {
         $consulta = $this->db->prepare('DELETE FROM sedes WHERE id = :id');
@@ -71,15 +89,16 @@ class Sede
     }
 
     /**
-     * Importa desde CSV (codigo, nombre, nit). Una fila sin NIT válido no se crea ni actualiza y se
-     * cuenta en "invalidas", para que nunca quede una sede sin NIT.
+     * Mismo patrón que el resto de catálogos de "Listas" (crear/actualizar/desactivar, nunca borra
+     * desde CSV) — una fila sin NIT válido no se crea ni actualiza y cuenta como "ignorados", para
+     * que nunca quede una sede sin NIT.
      */
     public function sincronizarDesdeCsv(array $filas): array
     {
         $codigosCsv = [];
         $creados = 0;
         $actualizados = 0;
-        $invalidas = 0;
+        $ignorados = 0;
 
         foreach ($filas as $fila) {
             $codigo = trim($fila['codigo'] ?? '');
@@ -91,54 +110,56 @@ class Sede
             }
 
             if (!preg_match(self::PATRON_NIT, $nit)) {
-                $invalidas++;
+                $ignorados++;
                 continue;
             }
 
             $codigosCsv[] = $codigo;
-            $existente = $this->buscarPorCodigo($codigo);
+            $estadoDeseado = strtolower(trim($fila['estado'] ?? '')) === 'inactivo' ? 'inactivo' : 'activo';
+
+            $existente = $this->obtenerPorCodigo($codigo);
 
             if ($existente === null) {
                 $this->crear($codigo, $nombre, $nit);
+                $nuevoId = (int) $this->db->lastInsertId();
+
+                if ($estadoDeseado === 'inactivo') {
+                    $this->cambiarEstado($nuevoId);
+                }
+
                 $creados++;
-            } elseif ($existente['nombre'] !== $nombre || $existente['nit'] !== $nit) {
-                $this->actualizar((int) $existente['id'], $codigo, $nombre, $nit);
-                $actualizados++;
+            } else {
+                $cambio = false;
+
+                if ($existente['nombre'] !== $nombre || $existente['nit'] !== $nit) {
+                    $this->actualizar((int) $existente['id'], $codigo, $nombre, $nit);
+                    $cambio = true;
+                }
+
+                if ($existente['estado'] !== $estadoDeseado) {
+                    $this->cambiarEstado((int) $existente['id']);
+                    $cambio = true;
+                }
+
+                if ($cambio) {
+                    $actualizados++;
+                }
             }
         }
 
-        $eliminados = 0;
-        $omitidos = 0;
+        $desactivados = 0;
 
         foreach ($this->obtenerTodas() as $existente) {
             if (in_array($existente['codigo'], $codigosCsv, true)) {
                 continue;
             }
 
-            $id = (int) $existente['id'];
-
-            if (CsvConfiguracion::tieneReferencias($this->db, 'sedes', $id)) {
-                $omitidos++;
-                continue;
-            }
-
-            try {
-                $this->eliminar($id);
-                $eliminados++;
-            } catch (PDOException $excepcion) {
-                $omitidos++;
+            if ($existente['estado'] === 'activo') {
+                $this->cambiarEstado((int) $existente['id']);
+                $desactivados++;
             }
         }
 
-        return ['creados' => $creados, 'actualizados' => $actualizados, 'eliminados' => $eliminados, 'omitidos' => $omitidos, 'invalidas' => $invalidas];
-    }
-
-    private function buscarPorCodigo(string $codigo): ?array
-    {
-        $consulta = $this->db->prepare('SELECT id, codigo, nit, nombre FROM sedes WHERE codigo = :codigo LIMIT 1');
-        $consulta->execute(['codigo' => $codigo]);
-        $fila = $consulta->fetch();
-
-        return $fila !== false ? $fila : null;
+        return ['creados' => $creados, 'actualizados' => $actualizados, 'desactivados' => $desactivados, 'ignorados' => $ignorados];
     }
 }

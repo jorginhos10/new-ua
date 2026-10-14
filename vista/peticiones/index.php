@@ -43,20 +43,48 @@ require __DIR__ . '/../parciales/encabezado.php';
             </div>
             <?php if ($vista === 'pendientes'): ?>
             <div class="grupo-acciones-encabezado" id="barra-acciones-pendientes" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
-                <button type="button" id="boton-pendientes-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
-                <button type="button" id="boton-pendientes-aprobar" class="boton-accion boton-accion-enviar" disabled>Aceptar seleccionados</button>
-                <button type="button" id="boton-pendientes-archivar" class="boton-accion boton-accion-editar" disabled>Archivar seleccionados</button>
-                <button type="button" id="boton-pendientes-enviar" class="boton-agregar" disabled>Enviar</button>
-                <button type="button" id="boton-pendientes-devolver-borrador" class="boton-accion" disabled title="Devuelve el ítem a borrador en su propio módulo, sin destinatario, para que su dueño lo corrija y lo reenvíe.">Devolver a borrador</button>
-                <button type="button" id="boton-pendientes-eliminar" class="boton-accion boton-accion-eliminar" disabled>Eliminar seleccionados</button>
+                <button type="button" id="boton-pendientes-ver" class="boton-icono-accion" data-tooltip="Ver" title="Ver" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+                <button type="button" id="boton-pendientes-aprobar" class="boton-icono-accion" data-tooltip="Aceptar" title="Aceptar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </button>
+                <button type="button" id="boton-pendientes-archivar" class="boton-icono-accion" data-tooltip="Archivar" title="Archivar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                </button>
+                <button type="button" id="boton-pendientes-enviar" class="boton-icono-accion" data-tooltip="Enviar" title="Enviar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+                <button type="button" id="boton-pendientes-devolver-borrador" class="boton-icono-accion" data-tooltip="Devolver a borrador" title="Devuelve el ítem a borrador en su propio módulo, sin destinatario, para que su dueño lo corrija y lo reenvíe." disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>
+                </button>
+                <button type="button" id="boton-pendientes-eliminar" class="boton-icono-accion boton-icono-peligro" data-tooltip="Eliminar" title="Eliminar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                </button>
+                <?php if ($modoJerarquia && $esSuperAdminRaiz): ?>
+                <button type="button" id="boton-enviar-todo-superadmin" class="boton-icono-accion" data-tooltip="Enviar todo a Superadmin" title="Redirige de una sola vez TODO lo pendiente del sistema (de cualquier dependencia, sin seleccionar nada) a un usuario de Superadmin — no toca lo ya archivado, en expediente, ni lo que ya esté destinado a Superadmin.">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 19 22 12 13 5 13 19"></polygon><polygon points="2 19 11 12 2 5 2 19"></polygon></svg>
+                </button>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
             <?php if ($vista === 'consolidado'): ?>
             <div class="grupo-acciones-encabezado" id="barra-acciones-consolidado" data-anio-id="<?= (int) $anioSeleccionadoId ?>">
-                <button type="button" id="boton-consolidado-ver" class="boton-accion boton-accion-ver" disabled>Ver</button>
-                <button type="button" id="boton-consolidado-desconsolidar" class="boton-accion boton-accion-eliminar" disabled>Desconsolidar</button>
-                <button type="button" id="boton-consolidado-archivar" class="boton-accion boton-accion-editar" disabled>Archivar</button>
-                <button type="button" id="boton-consolidado-redireccionar" class="boton-agregar" disabled>Enviar</button>
+                <button type="button" id="boton-consolidado-ver" class="boton-icono-accion" data-tooltip="Ver" title="Ver" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+                <button type="button" id="boton-consolidado-desconsolidar" class="boton-icono-accion" data-tooltip="Desconsolidar" title="Desconsolidar: vuelve a Pendientes" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                </button>
+                <button type="button" id="boton-consolidado-archivar" class="boton-icono-accion" data-tooltip="Archivar" title="Archivar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+                </button>
+                <button type="button" id="boton-consolidado-redireccionar" class="boton-icono-accion" data-tooltip="Enviar" title="Enviar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+                <button type="button" id="boton-consolidado-exportar" class="boton-icono-accion" data-tooltip="Exportar" title="Exporta a Excel lo seleccionado (o todo, si no hay nada seleccionado)">
+                    <svg class="svg-exportar" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </button>
             </div>
             <?php endif; ?>
             <?php if ($vista === 'archivar'): ?>
@@ -83,6 +111,12 @@ require __DIR__ . '/../parciales/encabezado.php';
                 </button>
                 <button type="button" id="boton-archivado-historial" class="boton-icono-accion" data-tooltip="Ver historial" title="Ver historial" disabled>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </button>
+                <button type="button" id="boton-archivado-exportar" class="boton-icono-accion" data-tooltip="Exportar" title="Exporta a Excel lo seleccionado (o todo, si no hay nada seleccionado)">
+                    <svg class="svg-exportar" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </button>
+                <button type="button" id="boton-archivado-eliminar" class="boton-icono-accion boton-icono-peligro" data-tooltip="Eliminar" title="Eliminar" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
                 </button>
             </div>
             <?php endif; ?>
@@ -233,13 +267,18 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <th><input type="checkbox" id="checkbox-pendientes-todos" <?= empty($pendientes) ? 'disabled' : '' ?>></th>
                         <th class="th-ordenable">Tipo</th>
                         <th class="th-ordenable">Origen</th>
+                        <th class="th-ordenable">Remite</th>
                         <th class="th-ordenable columna-derecha">Cantidad</th>
                         <th class="th-ordenable columna-derecha">Valor</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($pendientes as $item): ?>
-                    <?php $esGrupo = isset($item['items']); ?>
+                    <?php
+                    $esGrupo = isset($item['items']);
+                    // Tarjeta de Autogestión: egresos e ingresos se muestran aparte, nunca sumados.
+                    $esEgresosIngresos = isset($item['egresos_cantidad']);
+                    ?>
                     <tr>
                         <td>
                             <?php if ($esGrupo): ?>
@@ -266,13 +305,19 @@ require __DIR__ . '/../parciales/encabezado.php';
                             <?php endif; ?>
                         </td>
                         <td><?= htmlspecialchars($item['detalle']) ?></td>
+                        <td><?= htmlspecialchars($item['remite'] ?? '—') ?></td>
+                        <?php if ($esEgresosIngresos): ?>
+                        <td class="columna-derecha" data-orden="<?= (int) $item['egresos_cantidad'] ?>">Egresos: <?= (int) $item['egresos_cantidad'] ?><br>Ingresos: <?= (int) $item['ingresos_cantidad'] ?></td>
+                        <td class="columna-derecha" data-orden="<?= (float) $item['egresos_valor'] ?>">Egresos: $ <?= number_format($item['egresos_valor'], 2, ',', '.') ?><br>Ingresos: $ <?= number_format($item['ingresos_valor'], 2, ',', '.') ?></td>
+                        <?php else: ?>
                         <td class="columna-derecha" data-orden="<?= $item['cantidad'] !== null ? (float) $item['cantidad'] : 0 ?>"><?= $item['cantidad'] !== null ? htmlspecialchars($item['cantidad']) : '—' ?></td>
                         <td class="columna-derecha" data-orden="<?= $item['valor'] ?? 0 ?>"><?= $item['valor'] !== null ? '$ ' . number_format($item['valor'], 2, ',', '.') : '—' ?></td>
+                        <?php endif; ?>
                     </tr>
                     <?php endforeach; ?>
                     <?php if (empty($pendientes)): ?>
                     <tr>
-                        <td colspan="5">No hay peticiones pendientes para este año.</td>
+                        <td colspan="6">No hay peticiones pendientes para este año.</td>
                     </tr>
                     <?php endif; ?>
                 </tbody>
@@ -574,6 +619,57 @@ require __DIR__ . '/../parciales/encabezado.php';
             </form>
         </div>
     </div>
+
+    <?php if ($modoJerarquia && $esSuperAdminRaiz): ?>
+    <?php
+    // Usuarios de Superadmin para el <select> del modal de abajo — se aplana el mapa que ya arma
+    // el controlador (obtenerMapaPorDependenciaYRol()), sin consulta nueva.
+    $usuariosSuperadminPlano = [];
+    foreach (($usuariosPorDependenciaYRol['Superadmin'] ?? []) as $usuariosDelRol) {
+        foreach ($usuariosDelRol as $usuarioSuperadmin) {
+            $usuariosSuperadminPlano[] = $usuarioSuperadmin;
+        }
+    }
+    ?>
+    <div id="modal-enviar-todo-superadmin" class="modal-fondo">
+        <div class="modal-caja">
+            <div class="modal-cabecera">
+                <h2>Enviar todo a Superadmin</h2>
+                <button type="button" id="boton-cerrar-modal-enviar-todo-superadmin" class="modal-cerrar" aria-label="Cerrar">&times;</button>
+            </div>
+
+            <p class="mensaje-error">
+                Esto redirige de una sola vez TODO lo pendiente del sistema (de cualquier dependencia,
+                sin necesidad de seleccionar nada) al usuario que elijas abajo — no toca lo ya
+                archivado, en expediente, ni lo que ya esté destinado a Superadmin. No tiene deshacer
+                fácil.
+            </p>
+
+            <form
+                method="POST"
+                action="index.php?ruta=peticiones"
+                class="form-necesidad"
+                onsubmit="return confirm('¿Confirmas que quieres redirigir TODO lo pendiente del sistema al usuario elegido? Esta acción no se puede deshacer fácilmente.');"
+            >
+                <input type="hidden" name="accion" value="enviar_todo_pendiente_superadmin">
+                <input type="hidden" name="vista" value="pendientes">
+                <input type="hidden" name="anio_id" value="<?= (int) $anioSeleccionadoId ?>">
+
+                <div class="campo campo-ancho">
+                    <label for="enviar-todo-superadmin-usuario">¿A quién de Superadmin se enviará? *</label>
+                    <select id="enviar-todo-superadmin-usuario" name="usuario_destinatario_id" required>
+                        <option value="">Selecciona a quién enviarlo</option>
+                        <?php foreach ($usuariosSuperadminPlano as $usuarioSuperadmin): ?>
+                        <option value="<?= (int) $usuarioSuperadmin['id'] ?>"><?= htmlspecialchars($usuarioSuperadmin['nombre'] . ' (' . $usuarioSuperadmin['rol_nombre'] . ')') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <button type="submit" class="boton-enviar">Enviar todo</button>
+            </form>
+        </div>
+    </div>
+    <?php endif; ?>
 
     <div id="modal-enviar-pendientes" class="modal-fondo">
         <div class="modal-caja">

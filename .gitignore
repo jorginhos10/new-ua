@@ -12,6 +12,9 @@ publico/documentos/*
 Thumbs.db
 *.log
 
+# Credenciales de base de datos por entorno (local vs. producción) — nunca a Git.
+config/conexion.php
+
 # Temporary project local files
 .claude/
 .claude.zip

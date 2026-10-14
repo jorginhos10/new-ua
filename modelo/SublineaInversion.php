@@ -39,6 +39,17 @@ class SublineaInversion
         return $consulta->fetchAll();
     }
 
+    public function obtenerPorId(int $id): ?array
+    {
+        $consulta = $this->db->prepare(
+            'SELECT id, codigo, nombre, descripcion, linea_inversion_id, estado FROM sublineas_inversion WHERE id = :id'
+        );
+        $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
     public function obtenerPorCodigo(string $codigo): ?array
     {
         $consulta = $this->db->prepare('SELECT id, codigo, nombre, descripcion, linea_inversion_id FROM sublineas_inversion WHERE codigo = :codigo');
@@ -79,18 +90,26 @@ class SublineaInversion
         return $consulta->execute(['id' => $id]);
     }
 
-    public function actualizarDatos(int $id, string $nombre, string $descripcion, int $lineaInversionId): bool
+    public function actualizar(int $id, string $codigo, string $nombre, string $descripcion, int $lineaInversionId): bool
     {
         $consulta = $this->db->prepare(
-            'UPDATE sublineas_inversion SET nombre = :nombre, descripcion = :descripcion, linea_inversion_id = :linea_inversion_id WHERE id = :id'
+            'UPDATE sublineas_inversion SET codigo = :codigo, nombre = :nombre, descripcion = :descripcion, linea_inversion_id = :linea_inversion_id WHERE id = :id'
         );
 
         return $consulta->execute([
             'id' => $id,
+            'codigo' => $codigo,
             'nombre' => $nombre,
             'descripcion' => $descripcion,
             'linea_inversion_id' => $lineaInversionId,
         ]);
+    }
+
+    public function eliminar(int $id): bool
+    {
+        $consulta = $this->db->prepare('DELETE FROM sublineas_inversion WHERE id = :id');
+
+        return $consulta->execute(['id' => $id]);
     }
 
     /**
@@ -146,7 +165,7 @@ class SublineaInversion
                     || $existente['descripcion'] !== $descripcion
                     || (int) $existente['linea_inversion_id'] !== $lineaInversionId
                 ) {
-                    $this->actualizarDatos((int) $existente['id'], $nombre, $descripcion, $lineaInversionId);
+                    $this->actualizar((int) $existente['id'], $codigo, $nombre, $descripcion, $lineaInversionId);
                     $cambio = true;
                 }
 

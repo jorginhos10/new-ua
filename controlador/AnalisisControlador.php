@@ -8,6 +8,7 @@ require_once __DIR__ . '/../modelo/Linea.php';
 require_once __DIR__ . '/../modelo/Motor.php';
 require_once __DIR__ . '/../modelo/Proyecto.php';
 require_once __DIR__ . '/../modelo/Gasto.php';
+require_once __DIR__ . '/../modelo/AutogestionItem.php';
 require_once __DIR__ . '/../modelo/GastoExtension.php';
 require_once __DIR__ . '/../modelo/GastoPostgrado.php';
 require_once __DIR__ . '/../modelo/IngresoExtension.php';
@@ -25,8 +26,12 @@ require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
 require_once __DIR__ . '/../modelo/IngresoUnisalud.php';
 require_once __DIR__ . '/../modelo/Acta.php';
 require_once __DIR__ . '/../modelo/AnalisisPresentacion.php';
+require_once __DIR__ . '/../modelo/MensajeGlobal.php';
+require_once __DIR__ . '/../modelo/VersionTechos.php';
+require_once __DIR__ . '/../modelo/VersionDocumentos.php';
 require_once __DIR__ . '/../modelo/GeneradorXlsx.php';
 require_once __DIR__ . '/../modelo/LectorXlsx.php';
+require_once __DIR__ . '/../modelo/PeticionArchivada.php';
 require_once __DIR__ . '/PeticionesControlador.php';
 
 /**
@@ -48,6 +53,12 @@ class AnalisisControlador
     private const VISTAS_VALIDAS = ['tiempo_real', 'repositorio', 'usuario'];
 
     private const ORIGENES_ANALISIS = ['gasto_principal', 'gasto_extension', 'ingreso_extension', 'gasto_postgrado', 'ingreso_postgrado', 'gasto_unisalud', 'monitores', 'arl'];
+
+    /** Egresos de Autogestión que pertenecen a un ítem de autogestion_items => su `modulo`. */
+    private const MODULO_AUTOGESTION_POR_EGRESO = [
+        'gasto_extension' => 'extension',
+        'gasto_postgrado' => 'postgrado',
+    ];
 
     /**
      * Módulos de Autogestión con ingresos y egresos separados: una sola tarjeta en el selector
@@ -87,6 +98,10 @@ class AnalisisControlador
     /** Riesgos ARL 1-5: sin una sola columna 'valor_total', se suman aquí para pills/gráficas. */
     private const CLAVES_RIESGO_ARL = ['riesgo1_valor', 'riesgo2_valor', 'riesgo3_valor', 'riesgo4_valor', 'riesgo5_valor'];
 
+    /** Cache de una sola petición HTTP (ver obtenerIdsArchivadosOExpediente()) — evita repetir la
+     * misma consulta a peticiones_archivadas por cada uno de los 6 módulos del selector. */
+    private ?array $cacheAccionesPorClave = null;
+
     public function index(): void
     {
         $acceso = $this->resolverAcceso();
@@ -96,7 +111,7 @@ class AnalisisControlador
             $this->aplicarRestriccionesNoSuperadmin($acceso);
         }
 
-        $tab =in_array($_GET['tab'] ?? '', self::TABS_VALIDAS, true) ? $_GET['tab'] : 'programacion';
+        $tab =in_array($_GET['tab'] ?? '', self::TABS_VALIDAS, true) ? $_GET['tab'] : 'presentacion';
         $vista = in_array($_GET['vista'] ?? '', self::VISTAS_VALIDAS, true) ? $_GET['vista'] : 'tiempo_real';
         $pestanaArbol = $tab === 'programacion' ? 'programacion_presupuestal' : 'articulacion_pdi';
         $lado = ($_GET['lado'] ?? '') === 'egresos' ? 'egresos' : 'ingresos';
@@ -272,18 +287,29 @@ class AnalisisControlador
     {
         $error = '';
         $exito = '';
+        $lado = ($_GET['lado'] ?? '') === 'egresos' ? 'egresos' : 'ingresos';
+
+        if (in_array($tab, ['programacion', 'proyectos'], true) && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'limpiar_arbol') {
+            [$error, $exito] = $this->limpiarArbolPresupuesto($tab, $lado);
+        }
 
         if ($tab === 'analisis' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'eliminar_celda') {
-            $error = $this->procesarEliminarModulo((string) ($_GET['origen'] ?? ''));
+            [$error, $exito] = $this->procesarEliminarModulo((string) ($_GET['origen'] ?? ''));
         } elseif ($tab === 'programacion' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'importar_presupuesto') {
             $error = $this->importarPresupuestoInstitucional();
             $exito = $error === '' ? 'Presupuesto institucional importado correctamente.' : '';
         } elseif ($tab === 'proyectos' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'importar_proyectos') {
             $error = $this->importarPresupuestoProyectos();
             $exito = $error === '' ? 'Proyectos importado correctamente.' : '';
-        } elseif ($tab === 'presentacion' && ($_POST['accion'] ?? '') === 'guardar_presentacion') {
-            $error = $this->guardarPresentacion();
-            $exito = $error === '' ? 'Presentación actualizada.' : '';
+        } elseif ($tab === 'presentacion' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'guardar_enlace_presentacion') {
+            $esNuevo = (int) ($_POST['id'] ?? 0) <= 0;
+            $error = $this->guardarEnlacePresentacion();
+            $exito = $error === '' ? ($esNuevo ? 'Enlace agregado.' : 'Enlace actualizado.') : '';
+        } elseif ($tab === 'presentacion' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'eliminar_enlace_presentacion') {
+            $error = $this->eliminarEnlacePresentacion();
+            $exito = $error === '' ? 'Enlace eliminado.' : '';
+        } elseif ($tab === 'presentacion' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'mover_enlace_presentacion') {
+            $error = $this->moverEnlacePresentacion();
         }
 
         if ($error !== '') {
@@ -304,15 +330,47 @@ class AnalisisControlador
         exit;
     }
 
-    private function procesarEliminarModulo(string $origen): string
+    /**
+     * "Limpiar" (solo SA): borra el árbol en vivo del lado que se está viendo — Ingresos o Egresos
+     * en Programación presupuestal, o el de Proyectos de inversión — para un cargue en limpio.
+     * Antes guarda una versión de respaldo de ese lado (recuperable desde Repositorio).
+     *
+     * @return array{0: string, 1: string} [error, exito]
+     */
+    private function limpiarArbolPresupuesto(string $tab, string $lado): array
     {
-        if (!in_array($origen, self::ORIGENES_ANALISIS, true)) {
-            return 'Origen inválido.';
+        if (!$this->esSuperAdmin()) {
+            return ['Solo el SA puede limpiar el árbol.', ''];
         }
 
-        $id = (int) ($_POST['origen_id'] ?? 0);
-        if ($id <= 0) {
-            return 'Ítem inválido.';
+        $tipo = $tab === 'proyectos' ? 'proyecto' : ($lado === 'egresos' ? 'egreso' : 'ingreso');
+        $nombreLado = ['ingreso' => 'Ingresos', 'egreso' => 'Egresos', 'proyecto' => 'Proyectos de inversión'][$tipo];
+        $modelo = new PresupuestoInstitucional();
+
+        if (empty($modelo->obtenerArbolConValores($tipo, []))) {
+            return ['El árbol de ' . $nombreLado . ' ya está vacío.', ''];
+        }
+
+        try {
+            $modelo->crearVersion($tipo, 'Respaldo antes de limpiar ' . date('d/m/Y H:i'), (int) $_SESSION['usuario_id']);
+            $borradas = $modelo->limpiar($tipo);
+        } catch (Throwable $excepcion) {
+            return ['No se pudo limpiar el árbol: ' . $excepcion->getMessage(), ''];
+        }
+
+        return ['', 'Árbol de ' . $nombreLado . ' limpio (' . $borradas . ' línea(s) borradas). Se guardó una versión de respaldo en Repositorio; ya puedes importar en limpio.'];
+    }
+
+    /** @return array{0: string, 1: string} [error, exito] */
+    private function procesarEliminarModulo(string $origen): array
+    {
+        if (!in_array($origen, self::ORIGENES_ANALISIS, true)) {
+            return ['Origen inválido.', ''];
+        }
+
+        $ids = $this->leerIdsSeleccionadosTablaReal();
+        if (empty($ids)) {
+            return ['No seleccionaste ningún ítem para eliminar.', ''];
         }
 
         $modelo = $this->obtenerModeloModulo($origen);
@@ -321,13 +379,46 @@ class AnalisisControlador
         // (por ingreso_id) y LUEGO el ingreso — al revés, la FK ON DELETE SET NULL deja esos
         // gastos huérfanos para siempre.
         $origenGastoPar = array_search($origen, self::PARES_GASTO_INGRESO, true);
-        if ($origenGastoPar !== false) {
-            $this->obtenerModeloModulo($origenGastoPar)->eliminarAutomaticosPorIngreso($id);
+
+        $eliminados = 0;
+        foreach ($ids as $id) {
+            if (!method_exists($modelo, 'obtenerPorId') || $modelo->obtenerPorId($id) === null) {
+                continue;
+            }
+
+            if ($origenGastoPar !== false) {
+                $this->obtenerModeloModulo($origenGastoPar)->eliminarAutomaticosPorIngreso($id);
+            }
+            $modelo->eliminar($id);
+            $eliminados++;
         }
 
-        $modelo->eliminar($id);
+        if ($eliminados === 0) {
+            return ['Ningún ítem seleccionado existe ya.', ''];
+        }
 
-        return '';
+        return ['', $eliminados === 1 ? 'Ítem eliminado.' : $eliminados . ' ítems eliminados.'];
+    }
+
+    /**
+     * IDs seleccionados en la tabla real (checkboxes, ver publico/js/tabla-real/tabla.js) — un
+     * solo campo JSON en vez de origen_id[] paralelos, para no toparse con max_input_vars cuando
+     * se selecciona "todo" en una tabla grande (mismo criterio que ya usa Peticiones para sus
+     * acciones masivas, ver PeticionesControlador::leerItemsJson()).
+     */
+    private function leerIdsSeleccionadosTablaReal(): array
+    {
+        $json = $_POST['origen_ids_json'] ?? '';
+        $decodificado = is_string($json) && $json !== '' ? json_decode($json, true) : null;
+
+        if (!is_array($decodificado)) {
+            return [];
+        }
+
+        $ids = array_map('intval', $decodificado);
+        $ids = array_filter($ids, static fn (int $id): bool => $id > 0);
+
+        return array_values(array_unique($ids));
     }
 
     /**
@@ -473,7 +564,7 @@ class AnalisisControlador
 
         $tituloPaginaPorTab = [
             'programacion' => 'Análisis · Programación presupuestal ' . $anioVigenteNumero,
-            'proyectos' => 'Análisis · Proyectos',
+            'proyectos' => 'Análisis · Proyectos de Inversión',
         ];
         $tituloPagina = $tituloPaginaPorTab[$tab] ?? 'Análisis · Articulación PDI';
 
@@ -501,12 +592,12 @@ class AnalisisControlador
     {
         $nombreHoja = match ($tab) {
             'programacion' => $lado === 'ingresos' ? 'Ingresos' : 'Egresos',
-            'proyectos' => 'Proyectos',
+            'proyectos' => 'Proyectos de Inversión',
             default => 'Articulación PDI',
         };
         $titulo = match ($tab) {
             'programacion' => 'Programación presupuestal ' . $anioVigenteNumero . ' — ' . $nombreHoja,
-            'proyectos' => 'Proyectos',
+            'proyectos' => 'Proyectos de Inversión',
             default => 'Articulación PDI',
         };
 
@@ -524,20 +615,28 @@ class AnalisisControlador
             $descripcionModo = 'Usuario — ' . ($dependenciaFiltroActual ?? '');
         }
 
+        // Igual que en la plantilla (ver exportarPlantillaPresupuesto()): "Indexación" solo en
+        // Programación presupuestal, siempre al final, nunca en medio de las otras columnas.
+        $incluirIndexacion = $tab === 'programacion';
+
         $encabezados = array_merge(
             array_column($columnasExtra, 'etiqueta'),
             [$etiquetaColumnaArbol],
-            array_column($columnasAnios, 'etiqueta')
+            array_column($columnasAnios, 'etiqueta'),
+            $incluirIndexacion ? ['Indexación'] : []
         );
 
         $filas = [];
-        $this->aplanarArbolParaExportar($arbolDatos, 0, $columnasAnios, $columnasExtra, $filas);
+        $this->aplanarArbolParaExportar($arbolDatos, 0, $columnasAnios, $columnasExtra, $incluirIndexacion, $filas);
 
         if (!empty($filas)) {
             $filaTotal = array_fill(0, count($columnasExtra), ['valor' => '', 'estilo' => 3]);
             $filaTotal[] = ['valor' => 'Total', 'estilo' => 3];
             foreach ($columnasAnios as $columna) {
                 $filaTotal[] = ['valor' => $this->formatoMonedaExportar((float) ($totalesGenerales[$columna['clave']] ?? 0.0)), 'estilo' => 3];
+            }
+            if ($incluirIndexacion) {
+                $filaTotal[] = ['valor' => '', 'estilo' => 3];
             }
             $filas[] = $filaTotal;
         }
@@ -568,7 +667,7 @@ class AnalisisControlador
     }
 
     /** Padre antes que sus hijos; la profundidad sangra la descripción y las raíces/totales van en negrita. */
-    private function aplanarArbolParaExportar(array $nodos, int $profundidad, array $columnasAnios, array $columnasExtra, array &$filas): void
+    private function aplanarArbolParaExportar(array $nodos, int $profundidad, array $columnasAnios, array $columnasExtra, bool $incluirIndexacion, array &$filas): void
     {
         foreach ($nodos as $nodo) {
             $enNegrita = $profundidad === 0 || !empty($nodo['esTotal']);
@@ -582,9 +681,12 @@ class AnalisisControlador
             foreach ($columnasAnios as $columna) {
                 $fila[] = $celda($this->formatoMonedaExportar((float) ($nodo['valores'][$columna['clave']] ?? 0.0)));
             }
+            if ($incluirIndexacion) {
+                $fila[] = $celda((string) ($nodo['indexacion'] ?? ''));
+            }
             $filas[] = $fila;
 
-            $this->aplanarArbolParaExportar($nodo['hijos'] ?? [], $profundidad + 1, $columnasAnios, $columnasExtra, $filas);
+            $this->aplanarArbolParaExportar($nodo['hijos'] ?? [], $profundidad + 1, $columnasAnios, $columnasExtra, $incluirIndexacion, $filas);
         }
     }
 
@@ -692,40 +794,71 @@ class AnalisisControlador
     }
 
     /**
-     * Pestaña "Techos y Metas": Tiempo real o Usuario (Repositorio no aplica — no hay versiones de
-     * techos). Un bloque a la vez: gasto principal (techo vs asignación) o un módulo de
-     * autogestión (tope vs ingresos).
+     * Pestaña "Techos y Metas": Tiempo real, Usuario o Repositorio (versiones congeladas vía
+     * VersionTechos, con filtro por dependencia también en Repositorio). Un bloque a la vez: gasto
+     * principal (techo vs asignación) o un módulo de autogestión (tope vs ingresos).
      */
     private function renderizarTechosMetas(string $vista, array $dependenciasTodas): void
     {
-        $vista = $vista === 'usuario' ? 'usuario' : 'tiempo_real';
+        $vista = in_array($vista, ['usuario', 'repositorio'], true) ? $vista : 'tiempo_real';
         $bloque = in_array($_GET['bloque'] ?? '', TechosMetas::BLOQUES, true) ? (string) $_GET['bloque'] : 'gastos';
 
         $dependenciaFiltroActual = null;
-        if ($vista === 'usuario') {
+        if ($vista === 'usuario' || $vista === 'repositorio') {
             $dependenciaFiltroActual = trim((string) ($_GET['dependencia'] ?? ''));
             if ($dependenciaFiltroActual === '' && !empty($dependenciasTodas)) {
                 $dependenciaFiltroActual = $dependenciasTodas[0]['nombre'];
             }
         }
 
-        $modeloAnio = new AnioPresupuestal();
-        $aniosTodos = $modeloAnio->obtenerTodos();
-        $aniosActivos = $modeloAnio->obtenerActivos();
-        $anioVigenteRegistro = $aniosActivos[0] ?? ($aniosTodos[0] ?? null);
-        $anioVigenteNumero = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['anio'] : (int) date('Y');
-        $anioVigenteId = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['id'] : 0;
+        $versiones = [];
+        $versionIdActual = null;
+        $sinDatosRepositorio = false;
+        $modeloVersionTechos = new VersionTechos();
 
-        $idPorAnio = [];
-        foreach ($aniosTodos as $filaAnio) {
-            $idPorAnio[(int) $filaAnio['anio']] = (int) $filaAnio['id'];
-        }
-        $aniosVentana = [];
-        for ($anio = $anioVigenteNumero - 4; $anio <= $anioVigenteNumero; $anio++) {
-            $aniosVentana[$anio] = $idPorAnio[$anio] ?? null;
+        if ($vista === 'repositorio') {
+            $versiones = $modeloVersionTechos->obtenerTodos();
+            $versionSolicitada = (int) ($_GET['version_id'] ?? 0);
+
+            // Solo el superadmin elige la versión; los demás ven la que él dejó activa — mismo
+            // mecanismo que renderizarArbol() para Árbol PDI/Programación/Proyectos.
+            if ($versionSolicitada > 0 && AccesoAnalisis::actual()['clase'] === 'superadmin') {
+                $modeloVersionTechos->marcarActiva($versionSolicitada);
+                $versionIdActual = $versionSolicitada;
+            } else {
+                $versionActiva = $modeloVersionTechos->obtenerActiva();
+                $versionIdActual = $versionActiva !== null ? (int) $versionActiva['id'] : 0;
+            }
+
+            if ($versionIdActual <= 0) {
+                $versionIdActual = null;
+                $sinDatosRepositorio = true;
+            }
         }
 
-        $datos = (new TechosMetas())->construirDatos($bloque, $dependenciaFiltroActual, $anioVigenteId, $aniosVentana);
+        if ($sinDatosRepositorio) {
+            $datos = ['nodos' => [], 'totales' => [], 'serie' => []];
+        } elseif ($vista === 'repositorio') {
+            $datos = $modeloVersionTechos->obtenerBloqueDeVersion($versionIdActual, $bloque, $dependenciaFiltroActual) ?? ['nodos' => [], 'totales' => [], 'serie' => []];
+        } else {
+            $modeloAnio = new AnioPresupuestal();
+            $aniosTodos = $modeloAnio->obtenerTodos();
+            $aniosActivos = $modeloAnio->obtenerActivos();
+            $anioVigenteRegistro = $aniosActivos[0] ?? ($aniosTodos[0] ?? null);
+            $anioVigenteNumero = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['anio'] : (int) date('Y');
+            $anioVigenteId = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['id'] : 0;
+
+            $idPorAnio = [];
+            foreach ($aniosTodos as $filaAnio) {
+                $idPorAnio[(int) $filaAnio['anio']] = (int) $filaAnio['id'];
+            }
+            $aniosVentana = [];
+            for ($anio = $anioVigenteNumero - 4; $anio <= $anioVigenteNumero; $anio++) {
+                $aniosVentana[$anio] = $idPorAnio[$anio] ?? null;
+            }
+
+            $datos = (new TechosMetas())->construirDatos($bloque, $dependenciaFiltroActual, $anioVigenteId, $aniosVentana);
+        }
 
         $tab = 'techos';
         $error = '';
@@ -772,32 +905,148 @@ class AnalisisControlador
         require __DIR__ . '/../vista/analisis/index.php';
     }
 
-    /** Pestaña Presentación: la diapositiva (.ppsx) de OneDrive incrustada. Solo el superadmin cambia el enlace. */
+    /** Pestaña Documentos (antes "Presentación"): lista de enlaces de OneDrive/SharePoint. Solo el superadmin la administra. */
     private function renderizarPresentacion(string $vista, array $acceso): void
     {
-        $presentacion = (new AnalisisPresentacion())->obtener();
-        $urlPresentacionIncrustada = $presentacion !== null ? AnalisisPresentacion::urlIncrustada($presentacion['url']) : null;
-        $puedeEditarPresentacion = $acceso['clase'] === 'superadmin';
+        $vista = in_array($vista, ['usuario', 'repositorio'], true) ? $vista : 'tiempo_real';
+
+        // Actas ya no es una pestaña aparte: su tarjeta vive sembrada como una fila más de esta
+        // misma tabla (ver AnalisisPresentacion::URL_ACTAS), así se puede mover ▲▼ junto con los
+        // documentos — pero solo para quien todavía tiene permiso de esa pestaña.
+        $muestraBotonActas = in_array('actas', AccesoAnalisis::actual()['pestanas'], true);
+
+        $versiones = [];
+        $versionIdActual = null;
+        $sinDatosRepositorio = false;
+        $modeloVersionDocumentos = new VersionDocumentos();
+
+        if ($vista === 'repositorio') {
+            $versiones = $modeloVersionDocumentos->obtenerTodos();
+            $versionSolicitada = (int) ($_GET['version_id'] ?? 0);
+
+            if ($versionSolicitada > 0 && $acceso['clase'] === 'superadmin') {
+                $modeloVersionDocumentos->marcarActiva($versionSolicitada);
+                $versionIdActual = $versionSolicitada;
+            } else {
+                $versionActiva = $modeloVersionDocumentos->obtenerActiva();
+                $versionIdActual = $versionActiva !== null ? (int) $versionActiva['id'] : 0;
+            }
+
+            if ($versionIdActual <= 0) {
+                $versionIdActual = null;
+                $sinDatosRepositorio = true;
+            }
+
+            $enlacesPresentacion = $sinDatosRepositorio ? [] : $modeloVersionDocumentos->obtenerDocumentosDeVersion($versionIdActual);
+        } else {
+            $enlacesPresentacion = (new AnalisisPresentacion())->obtenerTodos();
+        }
+
+        if (!$muestraBotonActas) {
+            $enlacesPresentacion = array_values(array_filter(
+                $enlacesPresentacion,
+                static fn (array $enlace): bool => !AnalisisPresentacion::esActas($enlace)
+            ));
+        }
+        $totalDocumentos = 0;
+        foreach ($enlacesPresentacion as &$enlace) {
+            if (AnalisisPresentacion::esActas($enlace)) {
+                continue;
+            }
+            $enlace['url_incrustada'] = AnalisisPresentacion::urlIncrustada($enlace['url']);
+            $enlace['url_descarga'] = AnalisisPresentacion::urlDescarga($enlace['url']);
+            $enlace['tipo_documento'] = AnalisisPresentacion::tipoDocumento($enlace['url']);
+            $totalDocumentos++;
+        }
+        unset($enlace);
+        // "Usuario"/"Repositorio" son de solo lectura: sin controles de edición.
+        $puedeEditarPresentacion = $acceso['clase'] === 'superadmin' && $vista === 'tiempo_real';
+        // El mensaje que explica la sección: misma estructura que Mensajes globales (Configuraciones),
+        // con su propia audiencia — se edita desde ahí, acá solo se muestra.
+        $mensajesPresentacion = (new MensajeGlobal())->listar('analisis_presentacion');
 
         $tab = 'presentacion';
         $error = $_SESSION['analisis_flash_error'] ?? '';
         $exito = $_SESSION['analisis_flash_exito'] ?? '';
         unset($_SESSION['analisis_flash_error'], $_SESSION['analisis_flash_exito']);
-        $tituloPagina = 'Análisis · Presentación';
+        $tituloPagina = 'Análisis · Documentos';
 
         require __DIR__ . '/../vista/analisis/index.php';
     }
 
     /** POST del superadmin (los demás no llegan aquí: ver aplicarRestriccionesNoSuperadmin()). */
-    private function guardarPresentacion(): string
+    private function guardarEnlacePresentacion(): string
     {
-        $url = AnalisisPresentacion::normalizarEnlace((string) ($_POST['url_presentacion'] ?? ''));
+        $nombre = trim((string) ($_POST['nombre_enlace'] ?? ''));
+        $url = AnalisisPresentacion::normalizarEnlace((string) ($_POST['url_enlace'] ?? ''));
+        $id = (int) ($_POST['id'] ?? 0);
+
+        if ($nombre === '') {
+            return 'Ponle un nombre al enlace.';
+        }
 
         if ($url === null) {
             return 'Pega un enlace de OneDrive válido (https://1drv.ms/..., https://onedrive.live.com/... o de SharePoint), o el código "Insertar" de OneDrive.';
         }
 
-        (new AnalisisPresentacion())->guardar($url, (int) $_SESSION['usuario_id']);
+        // Miniatura: opcional, una imagen puesta a mano en vez del ícono por tipo — se muestra tal
+        // cual en el navegador de quien la ve (sin tocar el servidor), por eso solo valida que sea
+        // una URL https bien formada, no que el host esté en una lista como el enlace del documento.
+        $miniaturaTexto = trim((string) ($_POST['miniatura_enlace'] ?? ''));
+        $miniaturaUrl = null;
+        if ($miniaturaTexto !== '') {
+            $partesMiniatura = parse_url($miniaturaTexto);
+            if (!$partesMiniatura || ($partesMiniatura['scheme'] ?? '') !== 'https' || empty($partesMiniatura['host'])) {
+                return 'La URL de la miniatura debe ser una dirección https:// válida.';
+            }
+            $miniaturaUrl = $miniaturaTexto;
+        }
+
+        $modelo = new AnalisisPresentacion();
+
+        if ($id > 0) {
+            $existente = $modelo->obtenerPorId($id);
+            if ($existente === null) {
+                return 'El enlace que intentas editar ya no existe.';
+            }
+            // Defensa en profundidad: la vista no le dibuja campos editables a la tarjeta de Actas,
+            // pero por si acaso llega un POST armado a mano.
+            if (AnalisisPresentacion::esActas($existente)) {
+                return 'La tarjeta de Actas no se edita desde aquí.';
+            }
+
+            $modelo->actualizar($id, $nombre, $url, $miniaturaUrl, (int) $_SESSION['usuario_id']);
+        } else {
+            $modelo->crear($nombre, $url, $miniaturaUrl, (int) $_SESSION['usuario_id']);
+        }
+
+        return '';
+    }
+
+    private function eliminarEnlacePresentacion(): string
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+        $modelo = new AnalisisPresentacion();
+        $existente = $id > 0 ? $modelo->obtenerPorId($id) : null;
+
+        if ($existente === null) {
+            return 'El enlace que intentas eliminar ya no existe.';
+        }
+        if (AnalisisPresentacion::esActas($existente)) {
+            return 'La tarjeta de Actas no se puede eliminar.';
+        }
+
+        $modelo->eliminar($id);
+
+        return '';
+    }
+
+    private function moverEnlacePresentacion(): string
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+        $direccion = ($_POST['direccion'] ?? '') === 'arriba' ? 'arriba' : 'abajo';
+
+        (new AnalisisPresentacion())->mover($id, $direccion);
 
         return '';
     }
@@ -981,7 +1230,8 @@ class AnalisisControlador
         [$snapshotIdActual, $dependenciaFiltroActual] = $this->resolverFiltrosAnalisis($vista, $snapshots, $dependenciasTodas);
 
         $error = $_SESSION['analisis_flash_error'] ?? '';
-        unset($_SESSION['analisis_flash_error']);
+        $exito = $_SESSION['analisis_flash_exito'] ?? '';
+        unset($_SESSION['analisis_flash_error'], $_SESSION['analisis_flash_exito']);
 
         $totalesPorModulo = [];
         foreach (self::ORIGENES_ANALISIS as $origenModulo) {
@@ -1141,9 +1391,19 @@ class AnalisisControlador
         $dependenciaFiltro = null;
 
         if ($vista === 'repositorio') {
-            // Solo el superadmin elige el snapshot; los demás ven el más reciente.
-            $snapshotSolicitado = AccesoAnalisis::actual()['clase'] === 'superadmin' ? ($_GET['snapshot_id'] ?? null) : null;
-            $snapshotId = (int) ($snapshotSolicitado ?? ($snapshots[0]['id'] ?? 0));
+            $snapshotSolicitado = (int) ($_GET['snapshot_id'] ?? 0);
+
+            // Solo el superadmin elige el snapshot; los demás ven el que él dejó marcado como
+            // activo (o el más reciente, si todavía no ha marcado ninguno) — mismo mecanismo que
+            // las versiones de Programación presupuestal/Proyectos/Articulación PDI.
+            if ($snapshotSolicitado > 0 && AccesoAnalisis::actual()['clase'] === 'superadmin') {
+                (new Snapshot())->marcarActiva($snapshotSolicitado);
+                $snapshotId = $snapshotSolicitado;
+            } else {
+                $snapshotActivo = (new Snapshot())->obtenerActiva();
+                $snapshotId = $snapshotActivo !== null ? (int) $snapshotActivo['id'] : 0;
+            }
+
             if ($snapshotId <= 0) {
                 $snapshotId = null;
             }
@@ -1327,7 +1587,9 @@ class AnalisisControlador
                 ));
             }
         } else {
-            $filas = $this->obtenerModeloModulo($origen)->obtenerPorAnio($anioPresupuestalId);
+            // Datos en vivo (Tiempo real/Usuario, nunca Repositorio — un snapshot congelado ya es
+            // su propia verdad histórica): ver filtrarSoloActivos().
+            $filas = $this->filtrarSoloActivos($origen, $this->obtenerModeloModulo($origen)->obtenerPorAnio($anioPresupuestalId));
         }
 
         if ($vista === 'usuario' && $dependenciaFiltro !== null) {
@@ -1339,6 +1601,61 @@ class AnalisisControlador
         }
 
         return $filas;
+    }
+
+    /**
+     * "Solo lo activo", el mismo criterio en todas las pestañas que leen Gasto/Autogestión en vivo
+     * (Análisis de distribución, Articulación PDI, Techos y Metas): nunca borrador (su dueño
+     * todavía lo puede cambiar, no es definitivo) ni lo que ya se archivó o se mandó a Expediente
+     * en Peticiones. $origen es una clave de PeticionesControlador::TABLAS_ORIGEN (ej.
+     * 'gasto_principal', 'gasto_extension') — null si las filas no pasan por Peticiones.
+     */
+    private function filtrarSoloActivos(?string $origen, array $filas): array
+    {
+        $filas = array_values(array_filter(
+            $filas,
+            static fn (array $fila): bool => ($fila['estado'] ?? null) !== 'borrador'
+        ));
+
+        if ($origen === null) {
+            return $filas;
+        }
+
+        $idsExcluidos = $this->obtenerIdsArchivadosOExpediente($origen);
+        if (empty($idsExcluidos)) {
+            return $filas;
+        }
+
+        return array_values(array_filter(
+            $filas,
+            static fn (array $fila): bool => !isset($idsExcluidos[(int) $fila['id']])
+        ));
+    }
+
+    /**
+     * IDs (origen_id) de un origen que ya están "archivada" o "expediente" en Peticiones — ver
+     * filtrarSoloActivos(). Una sola consulta por request (vía $this->cacheAccionesPorClave),
+     * reutilizada por todas las pestañas/módulos que la necesiten.
+     */
+    private function obtenerIdsArchivadosOExpediente(string $origen): array
+    {
+        if ($this->cacheAccionesPorClave === null) {
+            $this->cacheAccionesPorClave = (new PeticionArchivada())->obtenerAccionesPorClave();
+        }
+
+        $ids = [];
+        foreach ($this->cacheAccionesPorClave as $clave => $accion) {
+            if (!in_array($accion, ['archivada', 'expediente'], true)) {
+                continue;
+            }
+
+            [$claveOrigen, $claveId] = explode(':', $clave, 2);
+            if ($claveOrigen === $origen) {
+                $ids[(int) $claveId] = true;
+            }
+        }
+
+        return $ids;
     }
 
     /** Suma del valor de un módulo — usado por las pills del selector (sin joins). */
@@ -1406,6 +1723,28 @@ class AnalisisControlador
         $peticiones->establecerRegistrosPrecargados($registrosPrecargados);
         $resultado = $peticiones->construirFilasPorOrigen($origen, $itemsCrudos, $anioPresupuestalId, 'analisis');
 
+        // Solo en Análisis de distribución: los egresos de Autogestión llevan además a qué
+        // autogestión pertenecen (Alquiler, Educación continua...), justo después de Dependencia
+        // — los ingresos ya se ven por ella. Se resuelve por autogestion_id contra la lista
+        // completa (incluye inactivas), porque las filas de un snapshot (Repositorio) no traen el
+        // nombre unido como sí lo trae obtenerPorAnio() en vivo.
+        if (isset(self::MODULO_AUTOGESTION_POR_EGRESO[$origen])) {
+            $nombresAutogestion = array_column((new AutogestionItem())->obtenerTodos(self::MODULO_AUTOGESTION_POR_EGRESO[$origen]), 'nombre', 'id');
+            $posicion = array_search('dependencia', $resultado['claves'], true);
+            $posicion = $posicion === false ? 0 : $posicion + 1;
+
+            array_splice($resultado['columnas'], $posicion, 0, ['Autogestión']);
+            array_splice($resultado['claves'], $posicion, 0, ['autogestion']);
+
+            foreach ($resultado['filas'] as &$fila) {
+                $registro = $registrosPrecargados[$origen . ':' . (int) $fila['origen_id']] ?? [];
+                $fila['autogestion'] = $registro['autogestion_nombre']
+                    ?? $nombresAutogestion[(int) ($registro['autogestion_id'] ?? 0)]
+                    ?? '—';
+            }
+            unset($fila);
+        }
+
         if ($vista !== 'tiempo_real') {
             foreach ($resultado['filas'] as &$fila) {
                 $fila['puede_editar'] = false;
@@ -1467,6 +1806,10 @@ class AnalisisControlador
         for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
             $encabezados[] = (string) ($anioVigenteNumero - $desplazamiento);
         }
+        // Al final, nunca en medio: así un archivo descargado antes de agregar esta columna sigue
+        // leyéndose bien (le falta la última, nada más) — y el mismo orden sirve para el botón
+        // "Exportar a Excel" (ver exportarArbol()), que la agrega también al final.
+        $encabezados[] = 'Indexación';
 
         $modeloPresupuesto = new PresupuestoInstitucional();
         $hojas = [];
@@ -1487,6 +1830,7 @@ class AnalisisControlador
                 for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
                     $fila[] = $this->formatoNumeroExportar($nodo['valores'][$anioVigenteNumero - $desplazamiento] ?? 0.0);
                 }
+                $fila[] = $nodo['esTotal'] ? '' : ($nodo['indexacion'] ?? '');
                 $filas[] = $fila;
             }
 
@@ -1598,6 +1942,9 @@ class AnalisisControlador
         for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
             $indicesHistoricos[4 + $desplazamiento] = $anioVigenteNumero - $desplazamiento;
         }
+        // Última columna, después de los 4 históricos (índice 10): el criterio de indexación
+        // (texto libre — "IPC", "SMMLV", "ICES"...), solo para hojas (nunca una fila total).
+        $indiceIndexacion = 6 + count($indicesHistoricos);
 
         foreach ($filas as $indice => $fila) {
             $numeroFilaExcel = $indice + 2;
@@ -1678,6 +2025,12 @@ class AnalisisControlador
                 $valores[$anioHistorico] = ['valor_final' => $crudo !== '' && is_numeric($crudo) ? (float) $crudo : 0.0];
             }
 
+            $indexacion = trim((string) ($fila[$indiceIndexacion] ?? ''));
+            if ($indexacion !== '' && $esTotal) {
+                $errores[] = "$nombreHoja, fila $numeroFilaExcel: una fila total (termina en \".0\") no puede tener Indexación.";
+                $filaValida = false;
+            }
+
             if (!$filaValida) {
                 continue;
             }
@@ -1686,6 +2039,7 @@ class AnalisisControlador
                 'codigo' => $codigo,
                 'descripcion' => $descripcion,
                 'proyectos_ids' => $proyectosIds,
+                'indexacion' => $indexacion !== '' ? $indexacion : null,
                 'valores' => $valores,
             ];
         }

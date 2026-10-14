@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../config/conexion.php';
+require_once __DIR__ . '/CsvConfiguracion.php';
 
 class FuenteFinanciacion
 {
@@ -38,6 +39,15 @@ class FuenteFinanciacion
     {
         $consulta = $this->db->prepare('SELECT id, nombre, estado FROM fuentes_financiacion WHERE id = :id');
         $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
+    public function obtenerPorNombre(string $nombre): ?array
+    {
+        $consulta = $this->db->prepare('SELECT id, nombre, estado FROM fuentes_financiacion WHERE nombre = :nombre LIMIT 1');
+        $consulta->execute(['nombre' => $nombre]);
         $fila = $consulta->fetch();
 
         return $fila !== false ? $fila : null;
@@ -115,5 +125,59 @@ class FuenteFinanciacion
         );
 
         return $consulta->execute(['id' => $id]);
+    }
+
+    /**
+     * Mismo patrón que el resto de catálogos de "Listas" (crear/actualizar/desactivar, nunca borra
+     * desde CSV) — el renombrado usa actualizarNombre() para no desalinear el texto denormalizado
+     * en necesidades_academicas.
+     */
+    public function sincronizarDesdeCsv(array $filas): array
+    {
+        $nombresCsv = [];
+        $creados = 0;
+        $actualizados = 0;
+
+        foreach ($filas as $fila) {
+            $nombre = trim($fila['nombre'] ?? '');
+
+            if ($nombre === '') {
+                continue;
+            }
+
+            $nombresCsv[] = $nombre;
+            $estadoDeseado = strtolower(trim($fila['estado'] ?? '')) === 'inactivo' ? 'inactivo' : 'activo';
+
+            $existente = $this->obtenerPorNombre($nombre);
+
+            if ($existente === null) {
+                $this->crear($nombre);
+                $nuevoId = (int) $this->db->lastInsertId();
+
+                if ($estadoDeseado === 'inactivo') {
+                    $this->cambiarEstado($nuevoId);
+                }
+
+                $creados++;
+            } elseif ($existente['estado'] !== $estadoDeseado) {
+                $this->cambiarEstado((int) $existente['id']);
+                $actualizados++;
+            }
+        }
+
+        $desactivados = 0;
+
+        foreach ($this->obtenerTodas() as $existente) {
+            if (in_array($existente['nombre'], $nombresCsv, true)) {
+                continue;
+            }
+
+            if ($existente['estado'] === 'activo') {
+                $this->cambiarEstado((int) $existente['id']);
+                $desactivados++;
+            }
+        }
+
+        return ['creados' => $creados, 'actualizados' => $actualizados, 'desactivados' => $desactivados];
     }
 }

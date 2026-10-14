@@ -142,12 +142,13 @@ class IngresoExtension
         return (float) $consulta->fetchColumn();
     }
 
-    /** Ingresos sin archivados (igual que el Dashboard) agrupados por dependencia: [nombre => total]. */
+    /** Ingresos sin borrador/archivados/expediente (igual que el Dashboard) agrupados por dependencia: [nombre => total]. */
     public function obtenerTotalesPorDependencia(int $anioPresupuestalId): array
     {
         $consulta = $this->db->prepare(
             "SELECT i.dependencia, COALESCE(SUM(i.valor_total), 0) AS total FROM ingresos_extension i
              WHERE i.anio_presupuestal_id = :anio_presupuestal_id
+                AND i.estado != 'borrador'
                 AND NOT EXISTS (
                     SELECT 1 FROM peticiones_archivadas pa
                     WHERE pa.origen = 'ingreso_extension' AND pa.origen_id = i.id AND pa.accion IN ('archivada', 'expediente')

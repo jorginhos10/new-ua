@@ -33,7 +33,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         . ' data-expandido="' . ($expandido ? '1' : '0') . '">';
 
     foreach ($columnasExtra as $columnaExtra) {
-        echo '<td class="arbol-celda-extra">' . htmlspecialchars((string) ($nodo[$columnaExtra['clave']] ?? '')) . '</td>';
+        echo '<td class="arbol-celda-extra arbol-celda-extra-' . htmlspecialchars($columnaExtra['clave']) . '">' . htmlspecialchars((string) ($nodo[$columnaExtra['clave']] ?? '')) . '</td>';
     }
 
     // El flex vive en un <div> interno, nunca en el <td>: un <td> con display:flex deja de ser
@@ -54,8 +54,18 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
     foreach ($columnasAnios as $columna) {
         $valor = $nodo['valores'][$columna['clave']] ?? 0.0;
         echo '<td class="arbol-celda-valor ' . $columna['grupo'] . '" data-clave="' . htmlspecialchars($columna['clave']) . '" data-valor="' . number_format($valor, 2, '.', '') . '">$' . number_format($valor, 2, ',', '.') . '</td>';
-        // Celda vacía: el % lo llena el JS (actualizarVariacionesArbol), así también se recalcula al editar.
         if ($mostrarVariacion && $columna['clave'] === 'vigente') {
+            // Punto de color de "Indexación" (solo hojas — ver PresupuestoInstitucional::colorIndexacion()):
+            // el texto de la plantilla es el tooltip, el color sale de ese mismo texto.
+            $colorIndexacion = isset($nodo['indexacion']) ? PresupuestoInstitucional::colorIndexacion($nodo['indexacion']) : null;
+            echo '<td class="arbol-celda-indexacion">';
+            if ($colorIndexacion !== null) {
+                echo '<span class="arbol-punto-indexacion" style="background:' . htmlspecialchars($colorIndexacion) . '" title="' . htmlspecialchars($nodo['indexacion']) . '"></span>';
+            }
+            echo '</td>';
+            // Celdas vacías: el % lo llena el JS (actualizarPorcentajesGrupoArbol/actualizarVariacionesArbol),
+            // así también se recalculan al editar.
+            echo '<td class="arbol-celda-porcentaje-grupo porcentaje-grupo"></td>';
             echo '<td class="arbol-celda-variacion variacion"></td>';
         }
     }
@@ -230,9 +240,9 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         font-variant-numeric: normal;
     }
 
-    /* Código/Proyecto(s) PDI solo se muestran en Tiempo real — confirmado con el usuario: en
-       Repositorio/Usuario esta pestaña es de solo consulta (descripción + cifras). */
-    body.arbol-vista-consulta .arbol-celda-extra {
+    /* Proyecto(s) PDI solo se muestra en Tiempo real: en Repositorio/Usuario esta pestaña es de
+       solo consulta. Código sí se ve en los tres modos (pedido del usuario). */
+    body.arbol-vista-consulta .arbol-celda-extra:not(.arbol-celda-extra-codigo) {
         display: none;
     }
 
@@ -272,9 +282,42 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         text-align: right;
     }
 
-    .arbol-tabla.mostrar-variacion th.variacion,
-    .arbol-tabla.mostrar-variacion td.variacion {
+    .arbol-tabla.mostrar-anterior th.variacion,
+    .arbol-tabla.mostrar-anterior td.variacion {
         display: table-cell;
+    }
+
+    .arbol-tabla th.arbol-celda-indexacion,
+    .arbol-tabla td.arbol-celda-indexacion {
+        width: 1%;
+        max-width: 22px;
+        min-width: 0;
+        padding-left: 0.15rem;
+        padding-right: 0.15rem;
+        text-align: center;
+    }
+
+    .arbol-punto-indexacion {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        cursor: default;
+    }
+
+    .arbol-tabla th.porcentaje-grupo,
+    .arbol-tabla td.porcentaje-grupo {
+        width: 1%;
+        min-width: 0;
+        padding-left: 0.3rem;
+        padding-right: 0.5rem;
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .arbol-tabla td.porcentaje-grupo {
+        color: #1F3B75;
+        font-weight: 600;
     }
 
     .arbol-tabla .variacion-positiva {
@@ -466,9 +509,6 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
             <button type="button" class="arbol-boton-toggle <?= $arbolExpandidoPorDefecto ? 'activo' : '' ?>" id="arbol-boton-expansion-defecto" aria-pressed="<?= $arbolExpandidoPorDefecto ? 'true' : 'false' ?>" title="Solo SA: define si las listas de esta pestaña salen desplegadas (activo) o recogidas para todos">Listas desplegadas</button>
             <?php endif; ?>
             <?php if ($modoColumnas === 'completo'): ?>
-            <?php if ($mostrarVariacion): ?>
-            <button type="button" class="arbol-boton-toggle" id="arbol-boton-variacion">Variación</button>
-            <?php endif; ?>
             <button type="button" class="arbol-boton-toggle" id="arbol-boton-anterior">Año anterior</button>
             <div class="arbol-corte-envoltorio" id="arbol-corte-envoltorio" hidden>
                 <label for="arbol-fecha-corte">Corte <?= $anioAnteriorNumero ?>:</label>
@@ -485,24 +525,28 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
             <thead>
                 <tr>
                     <?php foreach ($columnasExtra as $columnaExtra): ?>
-                    <th class="arbol-celda-extra"><?= htmlspecialchars($columnaExtra['etiqueta']) ?></th>
+                    <th class="arbol-celda-extra arbol-celda-extra-<?= htmlspecialchars($columnaExtra['clave']) ?>"><?= htmlspecialchars($columnaExtra['etiqueta']) ?></th>
                     <?php endforeach; ?>
                     <th class="arbol-celda-etiqueta"><?= htmlspecialchars($etiquetaColumnaArbol ?? 'Línea / Motor / Proyecto') ?></th>
                     <?php foreach ($columnasAnios as $columna): ?>
                     <th class="<?= $columna['grupo'] ?>" data-clave="<?= htmlspecialchars($columna['clave']) ?>"><?= htmlspecialchars($columna['etiqueta']) ?></th>
                     <?php if ($mostrarVariacion && $columna['clave'] === 'vigente'): ?>
+                    <th class="arbol-celda-indexacion" title="Indexación: el criterio con el que se proyecta esta línea (solo hojas), diligenciado desde la plantilla."></th>
+                    <th class="porcentaje-grupo" title="Porcentaje que representa esta línea sobre el total de su Gran Grupo (1, 2, 3...)">%</th>
                     <th class="variacion" title="Variación: (<?= htmlspecialchars($columna['etiqueta']) ?> − año anterior Final) / año anterior Final">Var. %</th>
                     <?php endif; ?>
                     <?php endforeach; ?>
                 </tr>
                 <tr class="arbol-fila-totales" id="arbol-fila-totales">
                     <?php foreach ($columnasExtra as $columnaExtra): ?>
-                    <th class="arbol-celda-extra"></th>
+                    <th class="arbol-celda-extra arbol-celda-extra-<?= htmlspecialchars($columnaExtra['clave']) ?>"></th>
                     <?php endforeach; ?>
                     <th class="arbol-celda-etiqueta">Total</th>
                     <?php foreach ($columnasAnios as $columna): ?>
                     <th class="arbol-celda-valor <?= $columna['grupo'] ?>" data-clave="<?= htmlspecialchars($columna['clave']) ?>" data-valor="<?= number_format($totalesGenerales[$columna['clave']], 2, '.', '') ?>">$<?= number_format($totalesGenerales[$columna['clave']], 2, ',', '.') ?></th>
                     <?php if ($mostrarVariacion && $columna['clave'] === 'vigente'): ?>
+                    <th class="arbol-celda-indexacion"></th>
+                    <th class="porcentaje-grupo"></th>
                     <th class="arbol-celda-variacion variacion"></th>
                     <?php endif; ?>
                     <?php endforeach; ?>
@@ -510,7 +554,7 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
             </thead>
             <tbody>
                 <?php if (empty($arbolDatos)): ?>
-                <tr><td colspan="<?= count($columnasAnios) + 1 + count($columnasExtra) + ($mostrarVariacion ? 1 : 0) ?>" class="texto-atenuado arbol-celda-vacia">No hay datos para mostrar.</td></tr>
+                <tr><td colspan="<?= count($columnasAnios) + 1 + count($columnasExtra) + ($mostrarVariacion ? 3 : 0) ?>" class="texto-atenuado arbol-celda-vacia">No hay datos para mostrar.</td></tr>
                 <?php endif; ?>
                 <?php foreach ($arbolDatos as $nodoLinea): ?>
                 <?php renderFilaArbolAnalisis($nodoLinea, $columnasAnios, null, $columnasExtra, $mostrarVariacion, $arbolExpandidoPorDefecto); ?>
@@ -542,7 +586,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var CLAVE_ANTERIOR = 'analisis_arbol_mostrar_anterior_' + sufijoClaveArbol;
     var CLAVE_HISTORICO = 'analisis_arbol_mostrar_historico_' + sufijoClaveArbol;
-    var CLAVE_VARIACION = 'analisis_arbol_mostrar_variacion_' + sufijoClaveArbol;
 
     function leerBool(clave) {
         try {
@@ -592,24 +635,6 @@ document.addEventListener('DOMContentLoaded', function () {
         if (botonHistorico) {
             botonHistorico.classList.toggle('activo', mostrar);
         }
-    }
-
-    var botonVariacion = document.getElementById('arbol-boton-variacion');
-
-    function aplicarMostrarVariacion(mostrar) {
-        tabla.classList.toggle('mostrar-variacion', mostrar);
-        if (botonVariacion) {
-            botonVariacion.classList.toggle('activo', mostrar);
-        }
-    }
-
-    if (botonVariacion) {
-        aplicarMostrarVariacion(leerBool(CLAVE_VARIACION));
-        botonVariacion.addEventListener('click', function () {
-            var nuevoValor = !tabla.classList.contains('mostrar-variacion');
-            aplicarMostrarVariacion(nuevoValor);
-            guardarBool(CLAVE_VARIACION, nuevoValor);
-        });
     }
 
     aplicarMostrarAnterior(leerBool(CLAVE_ANTERIOR));
@@ -803,7 +828,40 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // --- % Participación = valor de la línea / valor de su Gran Grupo (la raíz nivel-0 de la que
+    // cuelga, código "1", "2", "3"...) — para una raíz, eso es ella misma, por eso le queda 100%.
+    // Columna siempre visible (a diferencia de Var. %, que depende de "Año anterior"); el título
+    // de la cabecera queda corto ("%") para ahorrar espacio, con la explicación larga como tooltip. ---
+    function filaGrupoRaizArbol(fila) {
+        var actual = fila;
+        while (actual && actual.dataset.padre && filasPorId[actual.dataset.padre]) {
+            actual = filasPorId[actual.dataset.padre];
+        }
+        return actual;
+    }
+
+    function actualizarPorcentajesGrupoArbol() {
+        Array.prototype.forEach.call(tabla.querySelectorAll('.arbol-celda-porcentaje-grupo'), function (celda) {
+            var fila = celda.parentNode;
+            var filaGrupo = filaGrupoRaizArbol(fila);
+            var celdaValor = fila.querySelector('[data-clave="vigente"]');
+            var celdaGrupo = filaGrupo ? filaGrupo.querySelector('[data-clave="vigente"]') : null;
+            var valor = celdaValor ? parseFloat(celdaValor.dataset.valor) : NaN;
+            var totalGrupo = celdaGrupo ? parseFloat(celdaGrupo.dataset.valor) : NaN;
+            var porcentaje = valor / totalGrupo * 100;
+
+            celda.classList.remove('variacion-na');
+            if (!isFinite(porcentaje)) {
+                celda.textContent = 'N.A.';
+                celda.classList.add('variacion-na');
+                return;
+            }
+            celda.textContent = porcentaje.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+        });
+    }
+
     actualizarVariacionesArbol();
+    actualizarPorcentajesGrupoArbol();
 
     Array.prototype.forEach.call(tabla.querySelectorAll('.arbol-fila.nivel-2 td.arbol-celda-valor'), function (celda) {
         celda.addEventListener('dblclick', function () {
@@ -840,6 +898,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 recalcularTotalesGeneralesArbol();
                 actualizarTodasCeldasCorteArbol();
                 actualizarVariacionesArbol();
+                actualizarPorcentajesGrupoArbol();
             }
 
             input.addEventListener('blur', confirmar);

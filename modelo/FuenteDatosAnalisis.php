@@ -10,6 +10,7 @@ require_once __DIR__ . '/GastoPostgrado.php';
 require_once __DIR__ . '/GastoUnisalud.php';
 require_once __DIR__ . '/Dependencia.php';
 require_once __DIR__ . '/VersionArbol.php';
+require_once __DIR__ . '/PeticionArchivada.php';
 
 /**
  * Fuente de datos única para el árbol PDI (página ?ruta=analisis), que abstrae los 3 modos
@@ -29,9 +30,13 @@ class FuenteDatosAnalisis
     private GastoUnisalud $modeloGastoUnisalud;
     private Dependencia $modeloDependencia;
     private VersionArbol $modeloVersion;
+    private PeticionArchivada $modeloArchivada;
 
     private ?int $versionId;
     private ?string $dependenciaFiltro;
+
+    /** Cache de una sola instancia (ver filtrarActivos()) — una sola consulta a peticiones_archivadas. */
+    private ?array $cacheAccionesPorClave = null;
 
     /**
      * @param int|null $versionId Si no es null, todo se lee de esa versión guardada en vez de las
@@ -51,6 +56,7 @@ class FuenteDatosAnalisis
         $this->modeloGastoUnisalud = new GastoUnisalud();
         $this->modeloDependencia = new Dependencia();
         $this->modeloVersion = new VersionArbol();
+        $this->modeloArchivada = new PeticionArchivada();
         $this->versionId = $versionId;
         $this->dependenciaFiltro = $dependenciaFiltro;
     }
@@ -164,15 +170,18 @@ class FuenteDatosAnalisis
                 static fn (array $g): bool => (int) $g['anio_presupuestal_id'] === $anioPresupuestalId
             ));
         } else {
-            $gastos = $this->modeloGasto->obtenerPorAnio($anioPresupuestalId);
+            // Datos en vivo (nunca Repositorio — un snapshot congelado ya es su propia verdad
+            // histórica): Articulación PDI debe mostrar solo lo activo — ni borrador (todavía no
+            // es definitivo) ni lo que ya se archivó o se mandó a Expediente en Peticiones.
+            $gastos = $this->filtrarActivos('gasto_principal', $this->modeloGasto->obtenerPorAnio($anioPresupuestalId));
         }
 
         return $this->aplicarFiltroDependencia($gastos);
     }
 
     /**
-     * Gastos de los 3 módulos de autogestión (Extensión/Postgrado/Unisalud — Sin Excedentes
-     * descontinuado, fuera) para un año, ya combinados en una sola lista — usado por
+     * Gastos de los 3 módulos de autogestión (Extensión/Postgrado/Unisalud)
+     * para un año, ya combinados en una sola lista — usado por
      * Articulación PDI para sumarlos junto a gasto_principal en el total de cada proyecto (antes
      * de este método, ese total solo incluía gasto_principal). Respeta tiempo_real/repositorio/
      * usuario igual que obtenerGastosPorAnio().
@@ -187,13 +196,37 @@ class FuenteDatosAnalisis
             );
         } else {
             $gastos = array_merge(
-                $this->modeloGastoExtension->obtenerPorAnio($anioPresupuestalId),
-                $this->modeloGastoPostgrado->obtenerPorAnio($anioPresupuestalId),
-                $this->modeloGastoUnisalud->obtenerPorAnio($anioPresupuestalId)
+                $this->filtrarActivos('gasto_extension', $this->modeloGastoExtension->obtenerPorAnio($anioPresupuestalId)),
+                $this->filtrarActivos('gasto_postgrado', $this->modeloGastoPostgrado->obtenerPorAnio($anioPresupuestalId)),
+                $this->filtrarActivos('gasto_unisalud', $this->modeloGastoUnisalud->obtenerPorAnio($anioPresupuestalId))
             );
         }
 
         return $this->aplicarFiltroDependencia($gastos);
+    }
+
+    /**
+     * "Solo lo activo", el mismo criterio que usa AnalisisControlador::filtrarSoloActivos() para
+     * Análisis de distribución: nunca borrador (su dueño lo puede cambiar todavía, no es
+     * definitivo) ni lo que ya se archivó o se mandó a Expediente en Peticiones. $origen es una
+     * clave de PeticionesControlador::TABLAS_ORIGEN (ej. 'gasto_principal').
+     */
+    private function filtrarActivos(string $origen, array $filas): array
+    {
+        $filas = array_values(array_filter(
+            $filas,
+            static fn (array $fila): bool => ($fila['estado'] ?? null) !== 'borrador'
+        ));
+
+        if ($this->cacheAccionesPorClave === null) {
+            $this->cacheAccionesPorClave = $this->modeloArchivada->obtenerAccionesPorClave();
+        }
+
+        return array_values(array_filter($filas, function (array $fila) use ($origen): bool {
+            $accion = $this->cacheAccionesPorClave[$origen . ':' . $fila['id']] ?? null;
+
+            return !in_array($accion, ['archivada', 'expediente'], true);
+        }));
     }
 
     private function filtrarPorAnioDeVersion(string $tabla, int $anioPresupuestalId): array

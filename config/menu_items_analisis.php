@@ -8,9 +8,9 @@ return [
         'analisis_programacion' => 'Programación presupuestal',
         'analisis_pdi' => 'Articulación PDI',
         'analisis_distribucion' => 'Análisis de distribución',
-        'analisis_proyectos' => 'Proyectos (análisis)',
+        'analisis_proyectos' => 'Proyectos de Inversión (análisis)',
         'analisis_techos' => 'Techos y Metas',
         'analisis_actas' => 'Actas',
-        'analisis_presentacion' => 'Presentación',
+        'analisis_presentacion' => 'Documentos',
     ],
 ];

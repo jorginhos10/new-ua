@@ -23,7 +23,7 @@ class Snapshot
     public function obtenerTodos(): array
     {
         $consulta = $this->db->query(
-            'SELECT s.id, s.nombre, s.creado_en, u.nombre AS creado_por_nombre,
+            'SELECT s.id, s.nombre, s.activa, s.creado_en, u.nombre AS creado_por_nombre,
                     (SELECT COUNT(*) FROM snapshots_datos sd WHERE sd.snapshot_id = s.id) AS total_tablas
              FROM snapshots s
              LEFT JOIN usuarios u ON u.id = s.creado_por
@@ -35,11 +35,56 @@ class Snapshot
 
     public function obtenerPorId(int $id): ?array
     {
-        $consulta = $this->db->prepare('SELECT id, nombre, creado_en, creado_por FROM snapshots WHERE id = :id');
+        $consulta = $this->db->prepare('SELECT id, nombre, activa, creado_en, creado_por FROM snapshots WHERE id = :id');
         $consulta->execute(['id' => $id]);
         $fila = $consulta->fetch();
 
         return $fila !== false ? $fila : null;
+    }
+
+    /**
+     * El snapshot que "Repositorio" debe mostrar cuando el admin no acaba de elegir otro — el que
+     * él marcó vía marcarActiva(), o, si ninguno está marcado todavía (o el marcado se eliminó), el
+     * más reciente, igual que el comportamiento de siempre. Mismo patrón que
+     * PresupuestoInstitucional::obtenerVersionActiva()/VersionArbol::obtenerActiva().
+     */
+    public function obtenerActiva(): ?array
+    {
+        $consulta = $this->db->query(
+            'SELECT id, nombre, activa, creado_en, creado_por
+             FROM snapshots
+             ORDER BY activa DESC, creado_en DESC, id DESC
+             LIMIT 1'
+        );
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
+    /**
+     * El admin elige, desde el selector de "Repositorio", cuál snapshot ve Consejo Superior — esa
+     * elección queda como la activa para todos (no solo para su propia visita) hasta que él la
+     * cambie de nuevo.
+     */
+    public function marcarActiva(int $id): void
+    {
+        $consultaVerificar = $this->db->prepare('SELECT id FROM snapshots WHERE id = :id');
+        $consultaVerificar->execute(['id' => $id]);
+        if ($consultaVerificar->fetch() === false) {
+            return;
+        }
+
+        $this->db->beginTransaction();
+
+        try {
+            $this->db->exec('UPDATE snapshots SET activa = 0');
+            $this->db->prepare('UPDATE snapshots SET activa = 1 WHERE id = :id')->execute(['id' => $id]);
+            $this->db->commit();
+        } catch (Throwable $excepcion) {
+            $this->db->rollBack();
+
+            throw $excepcion;
+        }
     }
 
     /**

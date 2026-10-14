@@ -1,9 +1,9 @@
 <?php
 
+require_once __DIR__ . '/ControladorListaCatalogo.php';
 require_once __DIR__ . '/../modelo/Estamento.php';
-require_once __DIR__ . '/../modelo/CsvConfiguracion.php';
 
-class EstamentoControlador
+class EstamentoControlador extends ControladorListaCatalogo
 {
     private Estamento $modeloEstamento;
 
@@ -12,86 +12,37 @@ class EstamentoControlador
         $this->modeloEstamento = new Estamento();
     }
 
-    public function index(): void
+    protected function modelo(): object
     {
-        if (empty($_SESSION['usuario_id'])) {
-            header('Location: index.php?ruta=login');
-            exit;
-        }
-
-        if ($_SESSION['usuario_rol'] !== 'administrador') {
-            header('Location: index.php?ruta=dashboard');
-            exit;
-        }
-
-        if (($_GET['accion_csv'] ?? '') === 'plantilla') {
-            $this->exportarCsv();
-        }
-
-        $error = '';
-        $exito = '';
-
-        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            $accion = $_POST['accion'] ?? '';
-
-            if ($accion === 'eliminar') {
-                $this->eliminar();
-            } elseif ($accion === 'actualizar') {
-                [$error, $exito] = $this->actualizar();
-            } elseif ($accion === 'importar_csv') {
-                [$error, $exito] = $this->importarCsv();
-            } else {
-                [$error, $exito] = $this->guardar();
-            }
-        }
-
-        $estamentos = $this->modeloEstamento->obtenerTodos();
-
-        require __DIR__ . '/../vista/estamentos/index.php';
+        return $this->modeloEstamento;
     }
 
-    private function exportarCsv(): void
+    protected function tabla(): string
     {
-        $filas = array_map(
-            static fn (array $e): array => [$e['nombre']],
-            $this->modeloEstamento->obtenerTodos()
-        );
-
-        CsvConfiguracion::exportar('estamentos.csv', ['nombre'], $filas);
+        return 'estamentos';
     }
 
-    private function importarCsv(): array
+    protected function ruta(): string
     {
-        $filas = CsvConfiguracion::leerArchivoSubido($_FILES['archivo_csv'] ?? []);
-
-        if ($filas === null) {
-            return ['No se pudo leer el archivo CSV. Verifica que el archivo tenga el formato correcto.', ''];
-        }
-
-        $resultado = $this->modeloEstamento->sincronizarDesdeCsv($filas);
-
-        $mensaje = 'Se crearon ' . $resultado['creados'] . ' y se eliminaron ' . $resultado['eliminados'] . ' estamento(s).';
-
-        if ($resultado['omitidos'] > 0) {
-            $mensaje .= ' ' . $resultado['omitidos'] . ' no se pudieron eliminar porque siguen en uso en otra parte del sistema.';
-        }
-
-        return ['', $mensaje];
+        return 'estamentos';
     }
 
-    private function eliminar(): void
+    protected function vista(): string
     {
-        $id = (int) ($_POST['id'] ?? 0);
-
-        if ($id > 0) {
-            $this->modeloEstamento->eliminar($id);
-        }
-
-        header('Location: index.php?ruta=estamentos');
-        exit;
+        return __DIR__ . '/../vista/estamentos/index.php';
     }
 
-    private function guardar(): array
+    protected function columnasCsv(): array
+    {
+        return ['nombre', 'estado'];
+    }
+
+    protected function filaCsv(array $registro): array
+    {
+        return [$registro['nombre'], $registro['estado']];
+    }
+
+    protected function crear(): array
     {
         $nombre = trim($_POST['nombre'] ?? '');
 
@@ -108,7 +59,7 @@ class EstamentoControlador
         return ['', 'Estamento agregado correctamente.'];
     }
 
-    private function actualizar(): array
+    protected function actualizar(): array
     {
         $id = (int) ($_POST['id'] ?? 0);
         $nombre = trim($_POST['nombre'] ?? '');

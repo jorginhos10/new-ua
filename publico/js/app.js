@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', function () {
     var campoObjetoProyecto = document.getElementById('objeto_proyecto_paa');
     var campoActividad = document.getElementById('actividad');
     var formularioGasto = campoProyectoId ? campoProyectoId.closest('form') : null;
-    var rutasConRecordado = ['gastos', 'extension', 'sin-excedentes', 'unisalud', 'postgrado'];
+    var rutasConRecordado = ['gastos', 'extension', 'unisalud', 'postgrado'];
     var ruta = new URLSearchParams(window.location.search).get('ruta') || '';
 
     if (formularioGasto && rutasConRecordado.indexOf(ruta) !== -1) {
@@ -660,7 +660,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
-['extension', 'postgrado', 'sin-excedentes', 'unisalud', 'perfil-proyectos'].forEach(function (moduloAutogestion) {
+['extension', 'postgrado', 'unisalud', 'perfil-proyectos'].forEach(function (moduloAutogestion) {
     document.addEventListener('DOMContentLoaded', function () {
         var modal = document.getElementById('modal-enviar-todo-' + moduloAutogestion);
         var botonAbrir = document.getElementById('boton-abrir-modal-enviar-todo-' + moduloAutogestion);
@@ -698,7 +698,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
-['extension', 'postgrado', 'unisalud', 'sin-excedentes', 'gastos'].forEach(function (moduloAutogestion) {
+['extension', 'postgrado', 'unisalud', 'gastos'].forEach(function (moduloAutogestion) {
     document.addEventListener('DOMContentLoaded', function () {
         var botonImportar = document.getElementById('boton-importar-' + moduloAutogestion);
         var inputArchivo = document.getElementById('input-importar-' + moduloAutogestion);
@@ -3120,7 +3120,80 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     }
+
+    var botonEnviarTodoSuperadmin = document.getElementById('boton-enviar-todo-superadmin');
+    var modalEnviarTodoSuperadmin = document.getElementById('modal-enviar-todo-superadmin');
+
+    if (botonEnviarTodoSuperadmin && modalEnviarTodoSuperadmin) {
+        var botonCerrarEnviarTodoSuperadmin = document.getElementById('boton-cerrar-modal-enviar-todo-superadmin');
+
+        var cerrarEnviarTodoSuperadmin = function () {
+            modalEnviarTodoSuperadmin.classList.remove('abierto');
+        };
+
+        botonEnviarTodoSuperadmin.addEventListener('click', function () {
+            modalEnviarTodoSuperadmin.classList.add('abierto');
+        });
+
+        if (botonCerrarEnviarTodoSuperadmin) {
+            botonCerrarEnviarTodoSuperadmin.addEventListener('click', cerrarEnviarTodoSuperadmin);
+        }
+
+        modalEnviarTodoSuperadmin.addEventListener('click', function (evento) {
+            if (evento.target === modalEnviarTodoSuperadmin) {
+                cerrarEnviarTodoSuperadmin();
+            }
+        });
+
+        document.addEventListener('keydown', function (evento) {
+            if (evento.key === 'Escape') {
+                cerrarEnviarTodoSuperadmin();
+            }
+        });
+    }
 });
+
+// Casillas marcadas; si no hay ninguna, todas las de filas visibles (respeta el filtro de tarjetas).
+function seleccionOTodoVisible(casillas) {
+    var marcadas = Array.prototype.filter.call(casillas, function (casilla) {
+        return casilla.checked;
+    });
+    if (marcadas.length > 0) {
+        return marcadas;
+    }
+    return Array.prototype.filter.call(casillas, function (casilla) {
+        var fila = casilla.closest('tr');
+        return !fila || fila.offsetParent !== null;
+    });
+}
+
+// Exportar a Excel (Consolidado por tipo / Archivados): un POST con items_json que el servidor
+// responde con el .xlsx directo (ver PeticionesControlador::exportarSeleccion()).
+function exportarSeleccionPeticiones(vista, anioId, items) {
+    if (items.length === 0) {
+        window.alert('No hay ítems para exportar.');
+        return;
+    }
+
+    var formulario = document.createElement('form');
+    formulario.method = 'POST';
+    formulario.action = 'index.php?ruta=peticiones';
+    formulario.style.display = 'none';
+
+    [['accion', 'exportar_seleccion'], ['vista', vista], ['anio_id', anioId || ''], ['items_json', JSON.stringify(items.map(function (item) {
+        return { origen: item.origen, origen_id: item.origen_id };
+    }))]].forEach(function (par) {
+        var campo = document.createElement('input');
+        campo.type = 'hidden';
+        campo.name = par[0];
+        campo.value = par[1];
+        formulario.appendChild(campo);
+    });
+
+    document.body.appendChild(formulario);
+    formulario.submit();
+    formulario.remove();
+}
 
 document.addEventListener('DOMContentLoaded', function () {
     var checkboxes = document.querySelectorAll('.checkbox-consolidado');
@@ -3510,6 +3583,15 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // ---- Exportar: descarga a Excel lo seleccionado, sin entrar a "Ver" (o todo lo visible si no
+    // hay nada seleccionado). ----
+    var botonExportarConsolidado = document.getElementById('boton-consolidado-exportar');
+    if (botonExportarConsolidado) {
+        botonExportarConsolidado.addEventListener('click', function () {
+            exportarSeleccionPeticiones('consolidado', anioIdConsolidado, itemsDeSeleccion(seleccionOTodoVisible(checkboxes)));
+        });
+    }
+
     document.addEventListener('keydown', function (evento) {
         if (evento.key !== 'Escape') {
             return;
@@ -3525,7 +3607,7 @@ document.addEventListener('DOMContentLoaded', function () {
 // Filtro de texto simple para las tarjetas agrupadas de Archivados/Enviadas: cada fila ya trae su
 // propio data-texto-filtro (tipo+dependencia+remitente[+estado], en minúsculas); escribir en el
 // campo de búsqueda oculta las filas que no lo contengan. No reemplaza el motor pesado de
-// tabla-real.js (pensado para una grilla plana de cientos de filas) — esto es solo para las pocas
+// publico/js/tabla-real/ (pensado para una grilla plana de cientos de filas) — esto es solo para las pocas
 // tarjetas ya agrupadas de estas dos pestañas.
 document.addEventListener('DOMContentLoaded', function () {
     [
@@ -3754,6 +3836,43 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             enviarFormularioArchivado('duplicar_archivado', seleccionados);
+        });
+    }
+
+    var botonArchivadoEliminar = document.getElementById('boton-archivado-eliminar');
+    var botonArchivadoExportar = document.getElementById('boton-archivado-exportar');
+
+    if (botonArchivadoEliminar) {
+        checkboxesArchivado.forEach(function (casilla) {
+            casilla.addEventListener('change', function () {
+                botonArchivadoEliminar.disabled = obtenerSeleccionadosArchivado().length === 0;
+            });
+        });
+        if (checkboxArchivadoTodos) {
+            checkboxArchivadoTodos.addEventListener('change', function () {
+                botonArchivadoEliminar.disabled = obtenerSeleccionadosArchivado().length === 0;
+            });
+        }
+
+        botonArchivadoEliminar.addEventListener('click', function () {
+            if (botonArchivadoEliminar.disabled) {
+                return;
+            }
+
+            var seleccionados = obtenerSeleccionadosArchivado();
+            var cantidad = itemsDeSeleccionArchivado(seleccionados).length;
+
+            if (!window.confirm('¿Eliminar permanentemente ' + cantidad + ' ítem(s) seleccionado(s)? Se borran también de su módulo de origen y no se puede deshacer.')) {
+                return;
+            }
+
+            enviarFormularioArchivado('eliminar_archivado_grupo', seleccionados);
+        });
+    }
+
+    if (botonArchivadoExportar) {
+        botonArchivadoExportar.addEventListener('click', function () {
+            exportarSeleccionPeticiones('archivar', anioIdArchivado, itemsDeSeleccionArchivado(seleccionOTodoVisible(checkboxesArchivado)));
         });
     }
 

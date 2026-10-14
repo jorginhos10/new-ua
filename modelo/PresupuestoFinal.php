@@ -27,7 +27,6 @@ class PresupuestoFinal
         ['tabla' => 'gastos_extension', 'procedencia' => 'Autogestión - Extensión', 'tipo' => 'g.categoria'],
         ['tabla' => 'gastos_postgrado', 'procedencia' => 'Autogestión - Postgrado', 'tipo' => 'g.categoria'],
         ['tabla' => 'gastos_unisalud', 'procedencia' => 'Autogestión - Unisalud', 'tipo' => 'g.categoria'],
-        ['tabla' => 'gastos_sin_excedentes', 'procedencia' => 'Autogestión - Sin excedentes', 'tipo' => 'g.categoria'],
     ];
 
     private PDO $db;

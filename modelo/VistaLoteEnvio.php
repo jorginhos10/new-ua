@@ -5,11 +5,9 @@ require_once __DIR__ . '/Gasto.php';
 require_once __DIR__ . '/GastoExtension.php';
 require_once __DIR__ . '/GastoPostgrado.php';
 require_once __DIR__ . '/GastoUnisalud.php';
-require_once __DIR__ . '/GastoSinExcedentes.php';
 require_once __DIR__ . '/IngresoExtension.php';
 require_once __DIR__ . '/IngresoPostgrado.php';
 require_once __DIR__ . '/IngresoUnisalud.php';
-require_once __DIR__ . '/IngresoSinExcedentes.php';
 require_once __DIR__ . '/Sede.php';
 require_once __DIR__ . '/Linea.php';
 require_once __DIR__ . '/Motor.php';
@@ -207,14 +205,12 @@ class VistaLoteEnvio
         'gasto_extension' => GastoExtension::class,
         'gasto_postgrado' => GastoPostgrado::class,
         'gasto_unisalud' => GastoUnisalud::class,
-        'gasto_sin_excedentes' => GastoSinExcedentes::class,
     ];
 
     private const MODELOS_INGRESO = [
         'ingreso_extension' => IngresoExtension::class,
         'ingreso_postgrado' => IngresoPostgrado::class,
         'ingreso_unisalud' => IngresoUnisalud::class,
-        'ingreso_sin_excedentes' => IngresoSinExcedentes::class,
     ];
 
     public function soportaOrigen(string $origen): bool
@@ -345,7 +341,7 @@ class VistaLoteEnvio
     }
 
     /**
-     * Ingresos de Autogestión (Extensión/Postgrado/Unisalud/SinExcedentes): forma mucho más simple
+     * Ingresos de Autogestión (Extensión/Postgrado/Unisalud): forma mucho más simple
      * que un gasto — sin catálogos que resolver. La foto congelada (SELECT * de la tabla) no incluye
      * el desglose de "conceptos" (viene de una tabla hija vía JOIN en las consultas normales del
      * módulo) — el snapshot y su comparación solo cubren estas 4 columnas planas.

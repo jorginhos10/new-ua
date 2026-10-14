@@ -145,10 +145,6 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <?php if ($puedeVerMenu('unisalud')): ?>
             <a href="index.php?ruta=unisalud" class="<?= $rutaActual === 'unisalud' ? 'activo' : '' ?>">Unidad de Salud</a>
             <?php endif; ?>
-            <?php // Convenios (sin-excedentes) se oculta del sidebar: su único propósito era sumar al
-            // tope de la tarjeta de Autogestión del Dashboard, que ahora mide solo Extensión — el
-            // controlador, las rutas y los datos ya registrados siguen intactos (ver
-            // SinExcedentesControlador), solo se quitó el enlace de navegación. ?>
             <?php endif; ?>
 
             <?php if ($puedeVerMenu('gastos') || $puedeVerMenu('solicitudes') || $puedeVerMenu('techos') || $puedeVerActas): ?>

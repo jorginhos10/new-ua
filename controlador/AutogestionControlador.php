@@ -26,12 +26,11 @@ class AutogestionControlador
         'extension' => 'Extensión',
         'postgrado' => 'Postgrado',
         'unisalud' => 'Unidad de Salud',
-        'sin-excedentes' => 'Convenios',
     ];
 
     /**
      * Módulos donde tiene sentido "Definir" parámetros de fila automática (sede/proyecto/rubro/
-     * actividad/insumo/meses) — Convenios/SinExcedentes queda fuera a pedido explícito del usuario.
+     * actividad/insumo/meses).
      */
     private const MODULOS_CON_DEFINICION_AUTOMATICO = ['extension', 'postgrado', 'unisalud'];
 
@@ -149,7 +148,7 @@ class AutogestionControlador
         $definicionesModulo = [];
 
         if (!$tieneDefinicionAutomatico) {
-            // Convenios/SinExcedentes: sin "Definir" (fuera de alcance a pedido del usuario).
+            // Módulo sin "Definir": sin tipos de fila automática.
             $tiposAutomaticoPorModulo = [];
         } elseif (!in_array($moduloActivo, ['extension', 'postgrado'], true)) {
             // Unisalud: sin ítems propios — una sola definición por (módulo, tipo, dependencia).
@@ -250,7 +249,7 @@ class AutogestionControlador
     /**
      * Guarda el Costos/Inversiones/Excedentes (y, si el ítem es de Postgrado, también Contribución
      * a posgrado) de UN ítem — a diferencia de guardarPorcentaje(), que sigue siendo el % global
-     * por módulo, usado por Unidad de Salud/Convenios, que no tienen ítems propios.
+     * por módulo, usado por Unidad de Salud, que no tiene ítems propios.
      */
     private function actualizarPorcentajeItem(): array
     {
@@ -322,7 +321,7 @@ class AutogestionControlador
     }
 
     /**
-     * % global por módulo — ya solo aplica a Unidad de Salud/Convenios (Extensión y Postgrado
+     * % global por módulo — ya solo aplica a Unidad de Salud (Extensión y Postgrado
      * tienen ítems propios, ver actualizarPorcentajeItem()).
      */
     private function guardarPorcentaje(string $modulo): array
@@ -361,7 +360,7 @@ class AutogestionControlador
      * automática de Excedentes/Contribución a posgrado de un ítem+dependencia, en vez de las
      * constantes fijas AUTOMATICO_* de cada controlador (ver
      * ExtensionControlador::regenerarAutomaticosDeIngreso()). Solo aplica a Extensión/Postgrado/
-     * Unisalud (self::MODULOS_CON_DEFINICION_AUTOMATICO) — Convenios queda fuera.
+     * Unisalud (self::MODULOS_CON_DEFINICION_AUTOMATICO).
      */
     private function guardarDefinicionAutomatico(string $modulo): array
     {

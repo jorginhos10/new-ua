@@ -231,6 +231,8 @@ class UnisaludControlador
 
             if ($accion === 'enviar_todo') {
                 [$error, $exito] = $this->enviarTodo();
+            } elseif ($accion === 'recalcular_excedentes') {
+                [$error, $exito] = $this->recalcularExcedentes();
             } elseif ($accion === 'ocultar_lote') {
                 [$error, $exito] = $this->ocultarLote();
             } elseif ($accion === 'eliminar_lote') {
@@ -340,18 +342,31 @@ class UnisaludControlador
         }
 
         $totalGastado = array_sum(array_map(static fn (array $g): float => (float) $g['valor_total'], $gastos));
-        $totalEjecutado = array_sum(array_map(static fn (array $g): float => (float) $g['valor_total'], $gastosEgresos));
-        $presupuestoAnio = $anioSeleccionadoId > 0
+        $sumarValores = static fn (array $filas): float => array_sum(array_map(static fn (array $f): float => (float) $f['valor_total'], $filas));
+
+        // "Enviar todo" sigue usando los totales de todos los estados (la misma regla que valida
+        // enviarTodo() en el servidor).
+        $totalEgresosTodos = $sumarValores($gastosEgresos);
+        $totalIngresosTodos = $anioSeleccionadoId > 0
             ? $this->modeloIngreso->obtenerTotalPorAnioYDependencias($anioSeleccionadoId, $dependenciasSugeridas)
             : 0.0;
+        $puedeEnviarTodo = $totalIngresosTodos > 0 && abs($totalIngresosTodos - $totalEgresosTodos) < 0.01;
+
+        // La barra de progreso solo refleja lo que sigue en borrador de las dependencias del usuario,
+        // para no mezclarlo con lo ya enviado.
+        $esBorradorPropio = static fn (array $f): bool => ($f['estado'] ?? '') === 'borrador'
+            && in_array($f['dependencia'] ?? '', $dependenciasSugeridas, true);
+        $egresosBorrador = array_filter($gastosEgresos, $esBorradorPropio);
+        $ingresosAnio = $tab === 'ingresos' ? $gastos : ($anioSeleccionadoId > 0 ? $this->modeloIngreso->obtenerPorAnio($anioSeleccionadoId) : []);
+        $totalEjecutado = $sumarValores($egresosBorrador);
+        $presupuestoAnio = $sumarValores(array_filter($ingresosAnio, $esBorradorPropio));
         $porcentajeGastado = $presupuestoAnio > 0 ? min(100, ($totalEjecutado / $presupuestoAnio) * 100) : 0.0;
-        $puedeEnviarTodo = $presupuestoAnio > 0 && abs($presupuestoAnio - $totalEjecutado) < 0.01;
 
         $totalCostos = 0.0;
         $totalInversion = 0.0;
         $totalExcedentes = 0.0;
 
-        foreach ($gastosEgresos as $gasto) {
+        foreach ($egresosBorrador as $gasto) {
             $valor = (float) $gasto['valor_total'];
             $categoria = $gasto['categoria'];
 
@@ -367,9 +382,6 @@ class UnisaludControlador
         $pctCostos = $presupuestoAnio > 0 ? min(100, ($totalCostos / $presupuestoAnio) * 100) : 0.0;
         $pctInversion = $presupuestoAnio > 0 ? min(100, ($totalInversion / $presupuestoAnio) * 100) : 0.0;
         $pctExcedentes = $presupuestoAnio > 0 ? min(100, ($totalExcedentes / $presupuestoAnio) * 100) : 0.0;
-
-        $diaActual = (int) date('z') + 1;
-        $totalDiasAnio = date('L') ? 366 : 365;
 
         // Lotes visibles del tab activo: mismos ids ya filtrados en $gastos arriba (evita duplicar
         // la lógica de visibilidad de filtrarPorPropietarioODestinatario()).
@@ -494,31 +506,65 @@ class UnisaludControlador
         $gastos = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerPorAnio($anioSeleccionadoId) : [];
         $gastos = $this->filtrarPorPropietarioODestinatario($gastos, $usuarioActual, $dependenciasPermitidas);
 
-        $filaIngreso = static function (array $ingreso): array {
-            return [
-                $ingreso['dependencia'],
-                (string) ($ingreso['concepto_adicional'] ?? ''),
-                number_format((float) $ingreso['valor_adicional'], 2, ',', '.'),
-                number_format((float) $ingreso['valor_total'], 2, ',', '.'),
-                $ingreso['estado'],
-            ];
+        // Mismo orden que exportarPlantilla() (Dependencia/Concepto/Cantidad/Valor unitario/Valor
+        // total), con "Estado" al final (dato de la fila existente, no aplica a Plantilla). La
+        // plantilla importa un registro POR CONCEPTO (tabla ingresos_unisalud_conceptos,
+        // uno-a-muchos) — antes Exportar solo sacaba el resumen de cabecera (concepto_adicional/
+        // valor_adicional), perdiendo el desglose; ahora saca una fila por concepto. Un ingreso
+        // viejo sin conceptos propios (solo cabecera) se exporta igual, con una sola fila usando
+        // esa cabecera como si fuera su único concepto.
+        $filasIngreso = static function (array $ingreso): array {
+            $conceptos = $ingreso['conceptos'] ?? [];
+
+            if (empty($conceptos)) {
+                $conceptos = [[
+                    'concepto' => (string) ($ingreso['concepto_adicional'] ?? ''),
+                    'cantidad' => 1,
+                    'valor' => (float) $ingreso['valor_adicional'],
+                ]];
+            }
+
+            return array_map(static function (array $concepto) use ($ingreso): array {
+                $cantidad = (float) $concepto['cantidad'];
+                $valorUnitario = (float) $concepto['valor'];
+
+                return [
+                    $ingreso['dependencia'],
+                    (string) $concepto['concepto'],
+                    (string) (int) $cantidad,
+                    number_format($valorUnitario, 2, ',', '.'),
+                    number_format($cantidad * $valorUnitario, 2, ',', '.'),
+                    $ingreso['estado'],
+                ];
+            }, $conceptos);
         };
 
+        // Mismo orden que exportarPlantilla() (Sede/Dependencia/Proyecto PDI/Contratos comunes/
+        // Categoría/Actividad/Rubro/Insumo/Cantidad/Costo unitario/Valor total/Meses), con
+        // "Estado" al final.
         $filaGasto = static function (array $gasto): array {
             return [
+                $gasto['sede_codigo'] . ' - ' . $gasto['sede_nombre'],
                 $gasto['dependencia'],
+                $gasto['proyecto_codigo'] . ' - ' . $gasto['proyecto_nombre'],
+                (string) ($gasto['objeto_proyecto_paa'] ?? ''),
                 $gasto['categoria'],
+                $gasto['actividad'],
+                $gasto['rubro_id'] !== null ? $gasto['rubro_codigo'] . ' - ' . $gasto['rubro_descripcion'] : ($gasto['rubro_texto'] ?? '—'),
                 $gasto['insumo'],
                 (string) (int) $gasto['cantidad'],
                 number_format((float) $gasto['costo_unitario'], 2, ',', '.'),
                 number_format((float) $gasto['valor_total'], 2, ',', '.'),
+                (string) ($gasto['meses'] ?? ''),
                 $gasto['estado'],
             ];
         };
 
+        $filasIngresoAplanadas = array_merge([], ...array_map($filasIngreso, $ingresos));
+
         $hojas = [
-            ['nombre' => 'Ingresos', 'encabezados' => ['Dependencia', 'Concepto adicional', 'Valor adicional', 'Valor total', 'Estado'], 'filas' => array_map($filaIngreso, $ingresos)],
-            ['nombre' => 'Gastos', 'encabezados' => ['Dependencia', 'Categoría', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Estado'], 'filas' => array_map($filaGasto, $gastos)],
+            ['nombre' => 'Ingresos', 'encabezados' => ['Dependencia', 'Concepto', 'Cantidad', 'Valor unitario', 'Valor total', 'Estado'], 'filas' => $filasIngresoAplanadas],
+            ['nombre' => 'Gastos', 'encabezados' => ['Sede', 'Dependencia', 'Proyecto PDI', 'Contratos comunes', 'Categoría', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Meses', 'Estado'], 'filas' => array_map($filaGasto, $gastos)],
         ];
 
         // Una pestaña por lote enviado (foto congelada).
@@ -1521,6 +1567,68 @@ class UnisaludControlador
         }
 
         return ['', 'Se duplicaron ' . $duplicados . ' elemento(s).'];
+    }
+
+    /**
+     * "Recalcular excedentes" (botón de la barra): vuelve a generar las filas automáticas de cada
+     * ingreso en borrador visible para el usuario, con los % vigentes de la tabla de referencia de
+     * Configuraciones > Autogestión, para que cuadren con el ingreso. Descarta los ajustes manuales
+     * sobre esas filas y borra las automáticas huérfanas (sin ingreso). Lo ya enviado no se toca. No exige el permiso
+     * de automáticos: solo restablece los % oficiales sobre los ingresos que el usuario ya ve.
+     */
+    private function recalcularExcedentes(): array
+    {
+        $anioId = (int) ($_POST['anio_presupuestal_id'] ?? 0);
+        if ($anioId <= 0) {
+            return ['Selecciona el año presupuestal.', ''];
+        }
+
+        [$usuarioActual, $dependencias] = $this->obtenerDependenciasVisiblesUsuarioActual();
+        $ingresos = $this->filtrarPorPropietarioODestinatario($this->modeloIngreso->obtenerPorAnio($anioId), $usuarioActual, $dependencias);
+        $egresos = $this->filtrarPorPropietarioODestinatario($this->modeloGasto->obtenerPorAnio($anioId), $usuarioActual, $dependencias);
+
+        // Un ingreso cuyas filas derivadas ya se enviaron no se recalcula: se descuadraría lo enviado.
+        $ingresosConDerivadosEnviados = [];
+        foreach ($egresos as $egreso) {
+            if ($egreso['ingreso_id'] !== null && $egreso['estado'] !== 'borrador') {
+                $ingresosConDerivadosEnviados[(int) $egreso['ingreso_id']] = true;
+            }
+        }
+
+        $huerfanas = 0;
+        foreach ($egresos as $egreso) {
+            if ($egreso['tipo_automatico'] !== null && $egreso['ingreso_id'] === null && $egreso['estado'] === 'borrador') {
+                $this->modeloGasto->eliminarForzado((int) $egreso['id']);
+                $huerfanas++;
+            }
+        }
+
+        $recalculados = 0;
+        $omitidos = 0;
+        foreach ($ingresos as $ingreso) {
+            if ($ingreso['estado'] !== 'borrador' || isset($ingresosConDerivadosEnviados[(int) $ingreso['id']])) {
+                $omitidos++;
+                continue;
+            }
+
+            $this->modeloGasto->eliminarDerivadosBorradorPorIngreso((int) $ingreso['id']);
+            $this->regenerarAutomaticosDeIngreso($ingreso);
+            $recalculados++;
+        }
+
+        if ($recalculados === 0 && $huerfanas === 0) {
+            return ['No hay ingresos en borrador para recalcular.', ''];
+        }
+
+        $mensaje = 'Excedentes recalculados para ' . $recalculados . ' ingreso(s) en borrador.';
+        if ($huerfanas > 0) {
+            $mensaje .= ' Se eliminaron ' . $huerfanas . ' fila(s) automática(s) sin ingreso asociado.';
+        }
+        if ($omitidos > 0) {
+            $mensaje .= ' ' . $omitidos . ' ingreso(s) ya enviado(s) no se modificaron.';
+        }
+
+        return ['', $mensaje];
     }
 
     /**

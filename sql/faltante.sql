@@ -10,12 +10,13 @@ CREATE TABLE IF NOT EXISTS analisis_arbol_configuracion (
     actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 2) Mensajes globales (varias diapositivas en el inicio), ya con la audiencia del Consejo Superior.
+-- 2) Mensajes globales (varias diapositivas en el inicio), con las audiencias de Consejo Superior
+--    y de la pestaña "Presentación" de Análisis (mensaje editable que explica esa sección).
 --    El primer mensaje toma el contenido actual de mensaje_global.
 CREATE TABLE IF NOT EXISTS mensajes_globales (
     id INT NOT NULL AUTO_INCREMENT,
     contenido TEXT NOT NULL,
-    audiencia ENUM('administrador', 'consejo_superior') NOT NULL DEFAULT 'administrador',
+    audiencia ENUM('administrador', 'consejo_superior', 'analisis_presentacion') NOT NULL DEFAULT 'administrador',
     orden INT NOT NULL DEFAULT 0,
     actualizado_por INT NULL,
     creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -230,3 +231,102 @@ ALTER TABLE gastos
     ADD COLUMN categoria_confianza DECIMAL(4, 3) NULL,
     ADD KEY idx_gastos_categoria_gasto (categoria_gasto_id),
     ADD CONSTRAINT fk_gastos_categoria_gasto FOREIGN KEY (categoria_gasto_id) REFERENCES categorias_gasto (id);
+
+-- 6) Pestaña "Documentos" (antes "Presentación") de Análisis: lista de enlaces de OneDrive/SharePoint
+--    (Word, Excel, PowerPoint o PDF) con nombre y orden propio — ya no es un solo enlace sin nombre.
+--    La fila "Actas" (url reservada 'actas:interno', ver AnalisisPresentacion::URL_ACTAS) es la
+--    tarjeta que manda a la pestaña Actas: vive en esta misma tabla para poder moverla ▲▼ junto con
+--    los documentos — al final (orden más alto) por defecto. miniatura_url es opcional: una imagen
+--    puesta a mano para la tarjeta (si no, ícono por tipo de archivo) — se muestra tal cual, hecho
+--    en el frontend, nunca se descarga ni se redimensiona en el servidor.
+CREATE TABLE IF NOT EXISTS analisis_presentacion (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    url VARCHAR(2000) NOT NULL,
+    miniatura_url VARCHAR(2000) NULL,
+    orden INT NOT NULL DEFAULT 0,
+    actualizado_por INT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_analisis_presentacion_orden (orden),
+    CONSTRAINT fk_analisis_presentacion_usuario FOREIGN KEY (actualizado_por) REFERENCES usuarios(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO analisis_presentacion (nombre, url, orden, actualizado_por)
+SELECT 'Actas', 'actas:interno', (SELECT COALESCE(MAX(orden), 0) + 1 FROM analisis_presentacion), NULL
+FROM DUAL
+WHERE NOT EXISTS (
+    SELECT 1 FROM analisis_presentacion WHERE url = 'actas:interno'
+);
+
+-- 7) Indexación por línea de Programación presupuestal (solo hojas): el criterio con el que se
+--    proyecta esa línea (ej. "IPC", "SMMLV", "ICES"), diligenciado desde la plantilla Excel y
+--    mostrado como un punto de color (con el texto como tooltip) junto al valor del año vigente.
+ALTER TABLE presupuesto_institucional_lineas
+    ADD COLUMN indexacion VARCHAR(50) NULL AFTER descripcion;
+
+-- 8) Snapshot activo (Análisis de distribución, modo Repositorio): igual que las versiones de
+--    Programación presupuestal/Proyectos/Articulación PDI, para que el admin pueda marcar cuál ve
+--    Consejo Superior en vez de que siempre sea el más reciente por fecha (ver Snapshot::marcarActiva()).
+ALTER TABLE snapshots
+    ADD COLUMN activa TINYINT(1) NOT NULL DEFAULT 0 AFTER nombre;
+
+-- 9) Versiones/snapshot de "Techos y Metas" y "Documentos" (Análisis) — mismo mecanismo que
+--    arbol_versiones, independiente para cada pestaña (ver VersionTechos.php/VersionDocumentos.php).
+CREATE TABLE IF NOT EXISTS techos_versiones (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    activa TINYINT(1) NOT NULL DEFAULT 0,
+    creado_por INT DEFAULT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS techos_versiones_datos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    version_id INT NOT NULL,
+    bloque VARCHAR(20) NOT NULL,
+    datos LONGTEXT NOT NULL,
+    KEY idx_techos_version_bloque (version_id, bloque),
+    CONSTRAINT fk_techos_versiones_datos_version FOREIGN KEY (version_id) REFERENCES techos_versiones(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS documentos_versiones (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nombre VARCHAR(150) NOT NULL,
+    activa TINYINT(1) NOT NULL DEFAULT 0,
+    creado_por INT DEFAULT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS documentos_versiones_datos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    version_id INT NOT NULL,
+    datos LONGTEXT NOT NULL,
+    CONSTRAINT fk_documentos_versiones_datos_version FOREIGN KEY (version_id) REFERENCES documentos_versiones(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 10) Estandarizar landings de "Listas" (botón Listas de Configuraciones): agrega `estado`
+--    (activo/inactivo) a los 5 catálogos que todavía no lo tenían, para que activar/desactivar
+--    quede disponible en los 10 (lineas/motores/proyectos del PDI, estamentos, rubros, sedes,
+--    contratos_comunes, lineas_inversion, sublineas_inversion, fuentes_financiacion ya lo tenían).
+ALTER TABLE lineas ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER nombre;
+ALTER TABLE motores ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER linea_id;
+ALTER TABLE proyectos ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER motor_id;
+ALTER TABLE estamentos ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER nombre;
+ALTER TABLE sedes ADD COLUMN estado ENUM('activo','inactivo') NOT NULL DEFAULT 'activo' AFTER nombre;
+
+-- 11) Eliminar el módulo "Sin excedentes" (Convenios): el código ya no lo usa (sin rutas, menú,
+--    Peticiones, lotes ni Presupuesto final). IRREVERSIBLE: borra sus gastos/ingresos y todo
+--    rastro en menús, porcentajes, historial, archivadas y lotes. Unisalud no se toca.
+DELETE FROM envios_lote WHERE origen IN ('gasto_sin_excedentes', 'ingreso_sin_excedentes');
+DELETE FROM peticiones_archivadas WHERE origen IN ('gasto_sin_excedentes', 'ingreso_sin_excedentes');
+DELETE FROM peticiones_historial WHERE origen IN ('gasto_sin_excedentes', 'ingreso_sin_excedentes');
+DELETE FROM autogestion_porcentajes WHERE modulo = 'sin-excedentes';
+DELETE FROM autogestion_automatico_definiciones WHERE modulo = 'sin-excedentes';
+DELETE FROM autogestion_automatico_permisos WHERE modulo = 'sin-excedentes';
+DELETE FROM autogestion_items WHERE modulo = 'sin-excedentes';
+DELETE FROM tipo_dependencia_menu WHERE menu_key = 'sin-excedentes';
+DELETE FROM usuario_menu WHERE menu_key = 'sin-excedentes';
+DROP TABLE IF EXISTS gastos_sin_excedentes;
+DROP TABLE IF EXISTS ingresos_sin_excedentes_conceptos;
+DROP TABLE IF EXISTS ingresos_sin_excedentes;

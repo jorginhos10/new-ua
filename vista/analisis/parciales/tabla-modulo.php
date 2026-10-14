@@ -1,7 +1,7 @@
 <?php
 /**
  * Tabla + gráficas de la pestaña "Análisis de distribución" — mismo motor que
- * vista/peticiones/tipo-detalle.php (estructura, tabla-real.js), adaptado: sin botón "Volver" ni
+ * vista/peticiones/tipo-detalle.php (estructura, publico/js/tabla-real/), adaptado: sin botón "Volver" ni
  * exportar (no aplican aquí), y Editar/Eliminar solo se muestran en modo Tiempo real (en
  * Repositorio/Usuario, $filasCompletas ya viene con 'puede_editar' forzado a false desde
  * AnalisisControlador::obtenerFilasAnalisis()).
@@ -163,7 +163,7 @@ $idTabla = 'tabla-analisis-' . $origenActivo;
 <?php if ($vista === 'tiempo_real'): ?>
 <form method="POST" id="tdt-form-accion" action="<?= htmlspecialchars(analisisUrl('analisis', $vista, ['origen' => $origenActivo])) ?>" style="display:none;">
     <input type="hidden" name="accion" id="tdt-form-accion-valor" value="">
-    <input type="hidden" name="origen_id" id="tdt-form-origen-id" value="">
+    <input type="hidden" name="origen_ids_json" id="tdt-form-origen-ids-json" value="">
 </form>
 <?php endif; ?>
 
@@ -172,4 +172,6 @@ var tdtColumnas = <?php echo json_encode($columnas, JSON_UNESCAPED_UNICODE); ?>;
 var tdtClavesFila = <?php echo json_encode($clavesFila, JSON_UNESCAPED_UNICODE); ?>;
 var tdtNamespace = <?php echo json_encode('analisis_' . $origenActivo); ?>;
 </script>
-<script src="publico/js/tabla-real.js?v=<?= filemtime(__DIR__ . '/../../../publico/js/tabla-real.js') ?>"></script>
+<script src="publico/js/tabla-real/nucleo.js?v=<?= filemtime(__DIR__ . '/../../../publico/js/tabla-real/nucleo.js') ?>"></script>
+<script src="publico/js/tabla-real/tabla.js?v=<?= filemtime(__DIR__ . '/../../../publico/js/tabla-real/tabla.js') ?>"></script>
+<script src="publico/js/tabla-real/graficos.js?v=<?= filemtime(__DIR__ . '/../../../publico/js/tabla-real/graficos.js') ?>"></script>

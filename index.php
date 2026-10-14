@@ -45,7 +45,6 @@ require_once __DIR__ . '/controlador/AutogestionControlador.php';
 require_once __DIR__ . '/controlador/ExtensionControlador.php';
 require_once __DIR__ . '/controlador/PostgradoControlador.php';
 require_once __DIR__ . '/controlador/UnisaludControlador.php';
-require_once __DIR__ . '/controlador/SinExcedentesControlador.php';
 require_once __DIR__ . '/controlador/PerfilProyectosControlador.php';
 require_once __DIR__ . '/controlador/SolicitudControlador.php';
 require_once __DIR__ . '/controlador/PeticionesControlador.php';
@@ -78,9 +77,6 @@ $rutaAMenuKey = [
     'unisalud' => 'unisalud',
     'unisalud-exportar-plantilla' => 'unisalud',
     'unisalud-exportar' => 'unisalud',
-    'sin-excedentes' => 'sin-excedentes',
-    'sin-excedentes-exportar-plantilla' => 'sin-excedentes',
-    'sin-excedentes-exportar' => 'sin-excedentes',
     'gastos' => 'gastos',
     'gastos-exportar-plantilla' => 'gastos',
     'solicitudes' => 'solicitudes',
@@ -307,18 +303,6 @@ switch ($ruta) {
 
     case 'unisalud-exportar':
         (new UnisaludControlador())->exportar();
-        break;
-
-    case 'sin-excedentes':
-        (new SinExcedentesControlador())->index();
-        break;
-
-    case 'sin-excedentes-exportar-plantilla':
-        (new SinExcedentesControlador())->exportarPlantilla();
-        break;
-
-    case 'sin-excedentes-exportar':
-        (new SinExcedentesControlador())->exportar();
         break;
 
     case 'perfil-proyectos':

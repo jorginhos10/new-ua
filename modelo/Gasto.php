@@ -308,9 +308,10 @@ class Gasto
                 WHERE anio_presupuestal_id = :anio_con_propio AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')
              ) ep ON ep.dependencia = dh.nombre
              WHERE g.anio_presupuestal_id = :anio_presupuestal_id
+                AND g.estado != 'borrador'
                 AND NOT EXISTS (
                     SELECT 1 FROM peticiones_archivadas pa
-                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion = 'expediente'
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion IN ('archivada', 'expediente')
                 )
              GROUP BY g.dependencia"
         );
@@ -348,9 +349,10 @@ class Gasto
                 WHERE anio_presupuestal_id = :anio_con_propio AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')
              ) ep ON ep.dependencia = dh.nombre
              WHERE g.anio_presupuestal_id = :anio_presupuestal_id
+                AND g.estado != 'borrador'
                 AND NOT EXISTS (
                     SELECT 1 FROM peticiones_archivadas pa
-                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion = 'expediente'
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion IN ('archivada', 'expediente')
                 )
              GROUP BY g.dependencia"
         );
@@ -389,9 +391,10 @@ class Gasto
              FROM gastos g
              LEFT JOIN dependencias dh ON dh.id = g.dependencia_hija_id
              WHERE g.anio_presupuestal_id = :anio_presupuestal_id AND g.dependencia = :dependencia
+                AND g.estado != 'borrador'
                 AND NOT EXISTS (
                     SELECT 1 FROM peticiones_archivadas pa
-                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion = 'expediente'
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion IN ('archivada', 'expediente')
                 )"
         );
         $consulta->execute([

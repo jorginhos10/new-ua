@@ -79,8 +79,8 @@
 
         <?php
         // Extensión y Postgrado tienen ítems propios (cada uno con su propio Costos/Inversiones/
-        // Excedentes, y Postgrado además Contribución a posgrado) — Unidad de Salud/Convenios
-        // siguen con un único % global por módulo, porque no tienen ítems.
+        // Excedentes, y Postgrado además Contribución a posgrado) — Unidad de Salud
+        // sigue con un único % global por módulo, porque no tiene ítems.
         $moduloTieneItems = in_array($moduloActivo, ['extension', 'postgrado'], true);
         $camposPorcentajeItem = ['costos' => 'Costos', 'inversiones' => 'Inversiones', 'excedentes' => 'Excedentes'];
         if ($moduloActivo === 'postgrado') {
