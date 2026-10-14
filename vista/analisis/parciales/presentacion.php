@@ -80,20 +80,22 @@ function miniaturaTarjetaPresentacion(?array $tipoDocumento, ?string $miniaturaU
 }
 
 /**
- * Botones "Ver en ventana" y "Descargar" de cada tarjeta de documento (nunca de la de Actas).
- * "Ver en ventana" abre el mismo visor incrustado (ventana dentro de la página) que el clic en la
- * tarjeta; esa ventana trae su propio enlace "Abrir en otra pestaña" para cuando el proveedor no
- * deja incrustar (PDF de SharePoint, ver AnalisisPresentacion::urlIncrustada()). $urlDescarga ya
- * viene resuelta a descarga directa (ver AnalisisPresentacion::urlDescarga()). stopPropagation
- * evita que el clic también dispare el botón/tarjeta que lo envuelve.
+ * Botones "Abrir en ventana emergente" y "Descargar" de cada tarjeta de documento (nunca de la de
+ * Actas) — aparte del clic en la miniatura, que abre el visor incrustado. $url es el enlace tal
+ * cual lo pegó el admin: se abre en una ventana del navegador aparte (data-abrir-ventana, ver el
+ * script de abajo), no en el visor — ahí SharePoint sí carga, con la sesión de Microsoft 365 de
+ * quien lo mira, porque no queda incrustado en otro dominio. El href/target queda como respaldo si
+ * el navegador bloquea la ventana. $urlDescarga ya viene resuelta a descarga directa (ver
+ * AnalisisPresentacion::urlDescarga()). stopPropagation evita que el clic también dispare el
+ * botón/tarjeta que lo envuelve (abrir el visor).
  */
-function botonesExtraTarjetaPresentacion(array $enlace): string
+function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): string
 {
     return '<div class="presentacion-tarjeta-extra">'
-        . '<button type="button" class="icono-boton" data-abrir-visor data-src="' . htmlspecialchars($enlace['url_incrustada']) . '" data-externo="' . htmlspecialchars($enlace['url']) . '" data-titulo="' . htmlspecialchars($enlace['nombre']) . '" title="Ver en ventana" onclick="event.stopPropagation()">'
+        . '<a class="icono-boton" href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener" title="Abrir en ventana emergente" data-abrir-ventana onclick="event.stopPropagation()">'
         . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>'
-        . '</button>'
-        . '<a class="icono-boton" href="' . htmlspecialchars($enlace['url_descarga']) . '" target="_blank" rel="noopener" download title="Descargar" onclick="event.stopPropagation()">'
+        . '</a>'
+        . '<a class="icono-boton" href="' . htmlspecialchars($urlDescarga) . '" target="_blank" rel="noopener" download title="Descargar" onclick="event.stopPropagation()">'
         . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>'
         . '</a>'
         . '</div>';
@@ -498,24 +500,6 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
 
     .presentacion-visor-cabecera h2 {
         font-size: 0.9rem;
-        flex: 1;
-        min-width: 0;
-    }
-
-    /* Respaldo para cuando el proveedor no deja incrustar el documento (p. ej. un PDF de
-       SharePoint: "rechazó la conexión") — lo abre fuera del visor, con la sesión de quien mira. */
-    .presentacion-visor-externo {
-        flex-shrink: 0;
-        margin-right: 0.6rem;
-        font-size: 0.78rem;
-        font-weight: 600;
-        color: var(--color-primario);
-        text-decoration: none;
-        white-space: nowrap;
-    }
-
-    .presentacion-visor-externo:hover {
-        text-decoration: underline;
     }
 
     .presentacion-visor-cabecera .modal-cerrar {
@@ -567,7 +551,7 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
             <form class="presentacion-analisis-form" method="POST" action="<?= htmlspecialchars(analisisUrl('presentacion', $vista)) ?>">
                 <input type="hidden" name="accion" value="guardar_enlace_presentacion">
                 <input type="text" name="nombre_enlace" placeholder="Nombre que ven los usuarios" maxlength="150" required>
-                <input type="text" name="url_enlace" placeholder="Enlace de OneDrive/SharePoint o Google Drive (presentación, Word, Excel o PDF) o código &quot;Insertar&quot;" required>
+                <input type="text" name="url_enlace" placeholder="Enlace de OneDrive/SharePoint (presentación, Word, Excel o PDF) o código &quot;Insertar&quot;" required>
                 <input type="text" name="miniatura_enlace" placeholder="URL de imagen para la miniatura (opcional)">
                 <button type="submit" class="presentacion-analisis-boton">Agregar</button>
             </form>
@@ -608,7 +592,7 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
                 </div>
                 <?php else: ?>
                 <div class="presentacion-tarjeta">
-                    <button type="button" class="presentacion-tarjeta-miniatura" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada']) ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>" title="Ver">
+                    <button type="button" class="presentacion-tarjeta-miniatura" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada'] ?? '') ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>" title="Ver">
                         <?= miniaturaTarjetaPresentacion($enlace['tipo_documento'], $enlace['miniatura_url'] ?? null) ?>
                     </button>
                     <div class="presentacion-tarjeta-cuerpo">
@@ -617,7 +601,7 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
                         <input type="text" class="presentacion-tarjeta-campo-url" data-campo="miniatura" name="miniatura_enlace" value="<?= htmlspecialchars($enlace['miniatura_url'] ?? '') ?>" form="form-enlace-<?= (int) $enlace['id'] ?>" placeholder="URL de imagen para la miniatura (opcional)" aria-label="URL de la miniatura">
                         <div class="presentacion-tarjeta-pie">
                             <p class="presentacion-tarjeta-descripcion"><?= htmlspecialchars($enlace['tipo_documento']['descripcion']) ?></p>
-                            <?= botonesExtraTarjetaPresentacion($enlace) ?>
+                            <?= botonesExtraTarjetaPresentacion($enlace['url'], $enlace['url_descarga']) ?>
                         </div>
                         <p class="presentacion-tarjeta-meta">
                             <?= htmlspecialchars(date('d/m/Y', strtotime($enlace['actualizado_en']))) ?><?= !empty($enlace['actualizado_por_nombre']) ? ' · ' . htmlspecialchars($enlace['actualizado_por_nombre']) : '' ?>
@@ -678,7 +662,7 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
                 </a>
                 <?php else: ?>
                 <div class="presentacion-tarjeta">
-                    <button type="button" class="presentacion-tarjeta-disparador" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada']) ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>">
+                    <button type="button" class="presentacion-tarjeta-disparador" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada'] ?? '') ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>">
                         <span class="presentacion-tarjeta-miniatura"><?= miniaturaTarjetaPresentacion($enlace['tipo_documento'], $enlace['miniatura_url'] ?? null) ?></span>
                         <span class="presentacion-tarjeta-cuerpo">
                             <span class="presentacion-tarjeta-nombre" title="<?= htmlspecialchars($enlace['nombre']) ?>"><?= htmlspecialchars($enlace['nombre']) ?></span>
@@ -686,7 +670,7 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
                     </button>
                     <div class="presentacion-tarjeta-pie">
                         <p class="presentacion-tarjeta-descripcion"><?= htmlspecialchars($enlace['tipo_documento']['descripcion']) ?></p>
-                        <?= botonesExtraTarjetaPresentacion($enlace) ?>
+                        <?= botonesExtraTarjetaPresentacion($enlace['url'], $enlace['url_descarga']) ?>
                     </div>
                 </div>
                 <?php endif; ?>
@@ -703,7 +687,6 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
     <div class="modal-caja presentacion-visor-caja">
         <div class="modal-cabecera presentacion-visor-cabecera">
             <h2 id="presentacion-visor-titulo"></h2>
-            <a class="presentacion-visor-externo" id="presentacion-visor-externo" href="#" target="_blank" rel="noopener">Abrir en otra pestaña</a>
             <button type="button" class="modal-cerrar" id="presentacion-visor-cerrar" aria-label="Cerrar">&times;</button>
         </div>
         <div class="presentacion-visor-marco">
@@ -766,11 +749,33 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
     });
 })();
 
+// Ventana emergente del navegador (no el visor incrustado), centrada y al 90% de la pantalla. Si
+// el navegador la bloquea, el clic sigue el href con target="_blank" (otra pestaña).
+function abrirVentanaPresentacion(url) {
+    var ancho = Math.round(screen.availWidth * 0.9);
+    var alto = Math.round(screen.availHeight * 0.9);
+    var izquierda = Math.round((screen.availWidth - ancho) / 2) + (screen.availLeft || 0);
+    var arriba = Math.round((screen.availHeight - alto) / 2) + (screen.availTop || 0);
+    var ventana = window.open(url, 'presentacion-documento', 'popup=yes,width=' + ancho + ',height=' + alto + ',left=' + izquierda + ',top=' + arriba);
+    if (ventana) {
+        try { ventana.opener = null; } catch (e) {}
+        ventana.focus();
+    }
+    return !!ventana;
+}
+
+document.querySelectorAll('[data-abrir-ventana]').forEach(function (enlace) {
+    enlace.addEventListener('click', function (evento) {
+        if (abrirVentanaPresentacion(enlace.href)) {
+            evento.preventDefault();
+        }
+    });
+});
+
 (function () {
     var modal = document.getElementById('presentacion-visor-modal');
     var iframe = document.getElementById('presentacion-visor-iframe');
     var titulo = document.getElementById('presentacion-visor-titulo');
-    var enlaceExterno = document.getElementById('presentacion-visor-externo');
     var botonCerrar = document.getElementById('presentacion-visor-cerrar');
 
     if (!modal || !iframe) {
@@ -786,14 +791,17 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
 
     document.querySelectorAll('[data-abrir-visor]').forEach(function (boton) {
         boton.addEventListener('click', function () {
+            // Sin url incrustable (un PDF de SharePoint/OneDrive, ver
+            // AnalisisPresentacion::urlIncrustada()): se abre en una ventana emergente, con la
+            // sesión de Microsoft 365 de quien lo mira, en vez de mostrar el bloqueo dentro del visor.
             if (!boton.dataset.src) {
+                if (boton.dataset.externo && !abrirVentanaPresentacion(boton.dataset.externo)) {
+                    window.open(boton.dataset.externo, '_blank', 'noopener');
+                }
                 return;
             }
             iframe.src = boton.dataset.src;
             titulo.textContent = boton.dataset.titulo || '';
-            if (enlaceExterno) {
-                enlaceExterno.href = boton.dataset.externo || boton.dataset.src;
-            }
             modal.classList.add('abierto');
             // No esperar solo a 'load' para darle el foco (ver más abajo): así la primera flecha
             // que toque la persona ya le llega al visor, no se pierde moviendo el foco recién ahí.
