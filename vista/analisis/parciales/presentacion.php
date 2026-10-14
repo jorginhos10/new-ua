@@ -498,6 +498,24 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
 
     .presentacion-visor-cabecera h2 {
         font-size: 0.9rem;
+        flex: 1;
+        min-width: 0;
+    }
+
+    /* Respaldo para cuando el proveedor no deja incrustar el documento (p. ej. un PDF de
+       SharePoint: "rechazó la conexión") — lo abre fuera del visor, con la sesión de quien mira. */
+    .presentacion-visor-externo {
+        flex-shrink: 0;
+        margin-right: 0.6rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--color-primario);
+        text-decoration: none;
+        white-space: nowrap;
+    }
+
+    .presentacion-visor-externo:hover {
+        text-decoration: underline;
     }
 
     .presentacion-visor-cabecera .modal-cerrar {
@@ -685,6 +703,7 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
     <div class="modal-caja presentacion-visor-caja">
         <div class="modal-cabecera presentacion-visor-cabecera">
             <h2 id="presentacion-visor-titulo"></h2>
+            <a class="presentacion-visor-externo" id="presentacion-visor-externo" href="#" target="_blank" rel="noopener">Abrir en otra pestaña</a>
             <button type="button" class="modal-cerrar" id="presentacion-visor-cerrar" aria-label="Cerrar">&times;</button>
         </div>
         <div class="presentacion-visor-marco">
@@ -747,33 +766,11 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
     });
 })();
 
-// Ventana emergente del navegador (no el visor incrustado), centrada y al 90% de la pantalla. Si
-// el navegador la bloquea, el clic sigue el href con target="_blank" (otra pestaña).
-function abrirVentanaPresentacion(url) {
-    var ancho = Math.round(screen.availWidth * 0.9);
-    var alto = Math.round(screen.availHeight * 0.9);
-    var izquierda = Math.round((screen.availWidth - ancho) / 2) + (screen.availLeft || 0);
-    var arriba = Math.round((screen.availHeight - alto) / 2) + (screen.availTop || 0);
-    var ventana = window.open(url, 'presentacion-documento', 'popup=yes,width=' + ancho + ',height=' + alto + ',left=' + izquierda + ',top=' + arriba);
-    if (ventana) {
-        try { ventana.opener = null; } catch (e) {}
-        ventana.focus();
-    }
-    return !!ventana;
-}
-
-document.querySelectorAll('[data-abrir-ventana]').forEach(function (enlace) {
-    enlace.addEventListener('click', function (evento) {
-        if (abrirVentanaPresentacion(enlace.href)) {
-            evento.preventDefault();
-        }
-    });
-});
-
 (function () {
     var modal = document.getElementById('presentacion-visor-modal');
     var iframe = document.getElementById('presentacion-visor-iframe');
     var titulo = document.getElementById('presentacion-visor-titulo');
+    var enlaceExterno = document.getElementById('presentacion-visor-externo');
     var botonCerrar = document.getElementById('presentacion-visor-cerrar');
 
     if (!modal || !iframe) {
@@ -789,17 +786,14 @@ document.querySelectorAll('[data-abrir-ventana]').forEach(function (enlace) {
 
     document.querySelectorAll('[data-abrir-visor]').forEach(function (boton) {
         boton.addEventListener('click', function () {
-            // Sin url incrustable (un PDF de SharePoint/OneDrive, ver
-            // AnalisisPresentacion::urlIncrustada()): se abre en una ventana emergente, con la
-            // sesión de Microsoft 365 de quien lo mira, en vez de mostrar el bloqueo dentro del visor.
             if (!boton.dataset.src) {
-                if (boton.dataset.externo && !abrirVentanaPresentacion(boton.dataset.externo)) {
-                    window.open(boton.dataset.externo, '_blank', 'noopener');
-                }
                 return;
             }
             iframe.src = boton.dataset.src;
             titulo.textContent = boton.dataset.titulo || '';
+            if (enlaceExterno) {
+                enlaceExterno.href = boton.dataset.externo || boton.dataset.src;
+            }
             modal.classList.add('abierto');
             // No esperar solo a 'load' para darle el foco (ver más abajo): así la primera flecha
             // que toque la persona ya le llega al visor, no se pierde moviendo el foco recién ahí.
