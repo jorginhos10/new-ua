@@ -698,6 +698,52 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
 <?php endif; ?>
 
 <script>
+// El ModSecurity del hosting bloquea (406 Not Acceptable) un POST con el código <iframe> de
+// "Insertar" o ciertas URLs en crudo. Por eso el enlace y la miniatura viajan en base64
+// ("<campo>_b64", ver AnalisisControlador::campoPresentacionPost()); los campos originales se
+// deshabilitan para que no se envíen, y se rehabilitan si se vuelve a la página con "Atrás".
+(function () {
+    var camposCodificados = ['url_enlace', 'miniatura_enlace'];
+
+    var aBase64 = function (texto) {
+        var bytes = new TextEncoder().encode(texto);
+        var binario = '';
+        bytes.forEach(function (b) { binario += String.fromCharCode(b); });
+        return btoa(binario);
+    };
+
+    document.addEventListener('submit', function (evento) {
+        var formulario = evento.target;
+        var accion = formulario.elements && formulario.elements.namedItem('accion');
+        if (!accion || accion.value !== 'guardar_enlace_presentacion') {
+            return;
+        }
+        camposCodificados.forEach(function (nombre) {
+            var campo = formulario.elements.namedItem(nombre);
+            if (!campo || campo.disabled) {
+                return;
+            }
+            var oculto = document.createElement('input');
+            oculto.type = 'hidden';
+            oculto.name = nombre + '_b64';
+            oculto.value = aBase64(campo.value);
+            formulario.appendChild(oculto);
+            campo.disabled = true;
+            campo.dataset.deshabilitadoEnvio = '1';
+        });
+    });
+
+    window.addEventListener('pageshow', function () {
+        document.querySelectorAll('[data-deshabilitado-envio]').forEach(function (campo) {
+            campo.disabled = false;
+            delete campo.dataset.deshabilitadoEnvio;
+        });
+        document.querySelectorAll('input[name$="_b64"]').forEach(function (oculto) {
+            oculto.remove();
+        });
+    });
+})();
+
 (function () {
     var modal = document.getElementById('presentacion-visor-modal');
     var iframe = document.getElementById('presentacion-visor-iframe');

@@ -974,11 +974,29 @@ class AnalisisControlador
         require __DIR__ . '/../vista/analisis/index.php';
     }
 
+    /**
+     * Lee un campo de enlace/miniatura del POST. La vista los manda en base64 ("<campo>_b64") porque
+     * el ModSecurity del hosting bloquea con 406 Not Acceptable un POST que trae el código <iframe>
+     * de "Insertar" o ciertas URLs en crudo, antes de que llegue a PHP. Si no viene codificado (JS
+     * apagado), cae al campo tal cual.
+     */
+    private function campoPresentacionPost(string $campo): string
+    {
+        if (isset($_POST[$campo . '_b64'])) {
+            $decodificado = base64_decode((string) $_POST[$campo . '_b64'], true);
+            if ($decodificado !== false) {
+                return $decodificado;
+            }
+        }
+
+        return (string) ($_POST[$campo] ?? '');
+    }
+
     /** POST del superadmin (los demás no llegan aquí: ver aplicarRestriccionesNoSuperadmin()). */
     private function guardarEnlacePresentacion(): string
     {
         $nombre = trim((string) ($_POST['nombre_enlace'] ?? ''));
-        $url = AnalisisPresentacion::normalizarEnlace((string) ($_POST['url_enlace'] ?? ''));
+        $url = AnalisisPresentacion::normalizarEnlace($this->campoPresentacionPost('url_enlace'));
         $id = (int) ($_POST['id'] ?? 0);
 
         if ($nombre === '') {
@@ -992,7 +1010,7 @@ class AnalisisControlador
         // Miniatura: opcional, una imagen puesta a mano en vez del ícono por tipo — se muestra tal
         // cual en el navegador de quien la ve (sin tocar el servidor), por eso solo valida que sea
         // una URL https bien formada, no que el host esté en una lista como el enlace del documento.
-        $miniaturaTexto = trim((string) ($_POST['miniatura_enlace'] ?? ''));
+        $miniaturaTexto = trim($this->campoPresentacionPost('miniatura_enlace'));
         $miniaturaUrl = null;
         if ($miniaturaTexto !== '') {
             $partesMiniatura = parse_url($miniaturaTexto);
