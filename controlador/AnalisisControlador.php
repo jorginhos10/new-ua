@@ -953,6 +953,7 @@ class AnalisisControlador
             if (AnalisisPresentacion::esActas($enlace)) {
                 continue;
             }
+            $enlace['url_incrustada'] = AnalisisPresentacion::urlIncrustada($enlace['url']);
             $enlace['url_descarga'] = AnalisisPresentacion::urlDescarga($enlace['url']);
             $enlace['tipo_documento'] = AnalisisPresentacion::tipoDocumento($enlace['url']);
             $totalDocumentos++;
