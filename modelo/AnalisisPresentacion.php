@@ -224,14 +224,30 @@ class AnalisisPresentacion
      * - SharePoint / OneDrive de Microsoft 365: el mismo enlace con action=embedview.
      * - OneDrive personal (1drv.ms o enlace de compartir): visor de Office sobre la descarga
      *   directa del archivo compartido (API de shares de OneDrive).
+     *
+     * Excepción, los PDF: no los abre Office Online sino el visor propio de SharePoint/OneDrive, que
+     * ignora action=embedview y no se deja incrustar desde otro dominio (Chrome muestra el ícono de
+     * bloqueo), y view.officeapps.live.com tampoco abre PDF. Así que un PDF solo va al visor si el
+     * admin pegó un enlace que ya es de incrustar (código "Insertar"); si no, devuelve null y la
+     * tarjeta lo abre en otra pestaña.
      */
-    public static function urlIncrustada(string $url): string
+    public static function urlIncrustada(string $url): ?string
     {
         $partes = parse_url($url);
         $host = strtolower($partes['host'] ?? '');
         $ruta = $partes['path'] ?? '';
+        $yaEsDeIncrustar = ($host === 'onedrive.live.com' && str_starts_with($ruta, '/embed'))
+            || (str_ends_with($host, 'sharepoint.com') && str_contains(strtolower($ruta), '/_layouts/15/embed.aspx'));
 
-        if ($host === 'view.officeapps.live.com' || ($host === 'onedrive.live.com' && str_starts_with($ruta, '/embed'))) {
+        if ($yaEsDeIncrustar) {
+            return $url;
+        }
+
+        if (self::tipoDocumento($url)['tipo'] === 'pdf') {
+            return null;
+        }
+
+        if ($host === 'view.officeapps.live.com') {
             return $url;
         }
 

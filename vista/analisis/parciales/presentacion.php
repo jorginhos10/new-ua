@@ -589,7 +589,7 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
                 </div>
                 <?php else: ?>
                 <div class="presentacion-tarjeta">
-                    <button type="button" class="presentacion-tarjeta-miniatura" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>" title="Ver">
+                    <button type="button" class="presentacion-tarjeta-miniatura" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada'] ?? '') ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>" title="Ver">
                         <?= miniaturaTarjetaPresentacion($enlace['tipo_documento'], $enlace['miniatura_url'] ?? null) ?>
                     </button>
                     <div class="presentacion-tarjeta-cuerpo">
@@ -659,7 +659,7 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
                 </a>
                 <?php else: ?>
                 <div class="presentacion-tarjeta">
-                    <button type="button" class="presentacion-tarjeta-disparador" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>">
+                    <button type="button" class="presentacion-tarjeta-disparador" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada'] ?? '') ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>">
                         <span class="presentacion-tarjeta-miniatura"><?= miniaturaTarjetaPresentacion($enlace['tipo_documento'], $enlace['miniatura_url'] ?? null) ?></span>
                         <span class="presentacion-tarjeta-cuerpo">
                             <span class="presentacion-tarjeta-nombre" title="<?= htmlspecialchars($enlace['nombre']) ?>"><?= htmlspecialchars($enlace['nombre']) ?></span>
@@ -763,7 +763,13 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
 
     document.querySelectorAll('[data-abrir-visor]').forEach(function (boton) {
         boton.addEventListener('click', function () {
+            // Sin url incrustable (un PDF de SharePoint/OneDrive, ver
+            // AnalisisPresentacion::urlIncrustada()): se abre en otra pestaña, con la sesión de
+            // Microsoft 365 de quien lo mira, en vez de mostrar el bloqueo dentro del visor.
             if (!boton.dataset.src) {
+                if (boton.dataset.externo) {
+                    window.open(boton.dataset.externo, '_blank', 'noopener');
+                }
                 return;
             }
             iframe.src = boton.dataset.src;
