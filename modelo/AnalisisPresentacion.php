@@ -166,6 +166,35 @@ class AnalisisPresentacion
     }
 
     /**
+     * URL que va en el <img> de la miniatura. Un enlace de compartir de Google Drive
+     * (drive.google.com/file/d/<id>/view, open?id=<id>, uc?id=<id>) lleva a la página de Drive, no a
+     * la imagen, y el <img> queda roto — se pasa al endpoint de miniaturas de Drive, que sí devuelve
+     * la imagen (el archivo debe estar compartido con "Cualquier persona con el enlace"). Cualquier
+     * otra URL va tal cual. Se aplica al mostrar, así que sirve también para lo ya guardado.
+     */
+    public static function urlImagenMiniatura(string $url): string
+    {
+        $partes = parse_url($url);
+        $host = strtolower($partes['host'] ?? '');
+
+        if ($host !== 'drive.google.com') {
+            return $url;
+        }
+
+        $id = null;
+        if (preg_match('#/file/d/([A-Za-z0-9_-]+)#', $partes['path'] ?? '', $coincidencia)) {
+            $id = $coincidencia[1];
+        } else {
+            parse_str($partes['query'] ?? '', $parametros);
+            if (isset($parametros['id']) && is_string($parametros['id']) && preg_match('/^[A-Za-z0-9_-]+$/', $parametros['id'])) {
+                $id = $parametros['id'];
+            }
+        }
+
+        return $id !== null ? 'https://drive.google.com/thumbnail?id=' . $id . '&sz=w640' : $url;
+    }
+
+    /**
      * Tipo de documento detectado del enlace (para la miniatura y la descripción automática de
      * cada tarjeta — nunca lo escribe el admin a mano). Primero intenta con la convención de
      * SharePoint/OneDrive 365 (".../:w:/g/..." = Word, ":x:" Excel, ":p:" PowerPoint, ":b:" PDF);

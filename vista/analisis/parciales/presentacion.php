@@ -59,7 +59,7 @@ function miniaturaTarjetaPresentacion(?array $tipoDocumento, ?string $miniaturaU
         // El recuadro real (.presentacion-tarjeta-miniatura) mide 130px de alto; 230×130 es nomás
         // una pista de proporción para que el navegador reserve el espacio, el ancho real lo pone
         // el CSS (width/height:100%, object-fit:cover) según el ancho de cada tarjeta en la grilla.
-        return '<img src="' . htmlspecialchars($miniaturaUrl) . '" alt="" loading="lazy" decoding="async" width="230" height="130">';
+        return '<img src="' . htmlspecialchars(AnalisisPresentacion::urlImagenMiniatura($miniaturaUrl)) . '" alt="" loading="lazy" decoding="async" width="230" height="130">';
     }
 
     if ($tipoDocumento === null) {
