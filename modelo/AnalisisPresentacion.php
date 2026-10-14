@@ -4,13 +4,13 @@ require_once __DIR__ . '/../config/conexion.php';
 
 /**
  * Enlaces de la pestaña "Presentación" de ?ruta=analisis: una lista (no solo uno) de documentos de
- * OneDrive/SharePoint — presentación, Word, Excel o PDF — con nombre visible y orden propio, que el
- * superadmin administra. Cada uno se ve incrustado con el visor de Office (ver urlIncrustada()).
+ * OneDrive/SharePoint o Google Drive — presentación, Word, Excel o PDF — con nombre visible y orden
+ * propio, que el superadmin administra. Cada uno se ve incrustado en un visor (ver urlIncrustada()).
  */
 class AnalisisPresentacion
 {
-    /** Hosts aceptados: OneDrive personal, OneDrive/SharePoint de Microsoft 365 y el visor de Office. */
-    private const HOSTS_PERMITIDOS = ['onedrive.live.com', '1drv.ms', 'view.officeapps.live.com', 'sharepoint.com'];
+    /** Hosts aceptados: OneDrive personal, OneDrive/SharePoint de Microsoft 365, el visor de Office y Google Drive. */
+    private const HOSTS_PERMITIDOS = ['onedrive.live.com', '1drv.ms', 'view.officeapps.live.com', 'sharepoint.com', 'drive.google.com'];
 
     /**
      * Valor reservado de `url` para la fila de "Actas": vive en esta misma tabla (una fila más,
@@ -174,24 +174,32 @@ class AnalisisPresentacion
      */
     public static function urlImagenMiniatura(string $url): string
     {
-        $partes = parse_url($url);
-        $host = strtolower($partes['host'] ?? '');
-
-        if ($host !== 'drive.google.com') {
-            return $url;
-        }
-
-        $id = null;
-        if (preg_match('#/file/d/([A-Za-z0-9_-]+)#', $partes['path'] ?? '', $coincidencia)) {
-            $id = $coincidencia[1];
-        } else {
-            parse_str($partes['query'] ?? '', $parametros);
-            if (isset($parametros['id']) && is_string($parametros['id']) && preg_match('/^[A-Za-z0-9_-]+$/', $parametros['id'])) {
-                $id = $parametros['id'];
-            }
-        }
+        $id = self::idArchivoDrive($url);
 
         return $id !== null ? 'https://drive.google.com/thumbnail?id=' . $id . '&sz=w640' : $url;
+    }
+
+    /**
+     * Id del archivo en un enlace de Google Drive (drive.google.com/file/d/<id>/..., open?id=<id>,
+     * uc?id=<id>); null si no es de Drive o no trae id.
+     */
+    private static function idArchivoDrive(string $url): ?string
+    {
+        $partes = parse_url($url);
+        if (strtolower($partes['host'] ?? '') !== 'drive.google.com') {
+            return null;
+        }
+
+        if (preg_match('#/file/d/([A-Za-z0-9_-]+)#', $partes['path'] ?? '', $coincidencia)) {
+            return $coincidencia[1];
+        }
+
+        parse_str($partes['query'] ?? '', $parametros);
+        if (isset($parametros['id']) && is_string($parametros['id']) && preg_match('/^[A-Za-z0-9_-]+$/', $parametros['id'])) {
+            return $parametros['id'];
+        }
+
+        return null;
     }
 
     /**
@@ -253,14 +261,16 @@ class AnalisisPresentacion
      * - SharePoint / OneDrive de Microsoft 365: el mismo enlace con action=embedview.
      * - OneDrive personal (1drv.ms o enlace de compartir): visor de Office sobre la descarga
      *   directa del archivo compartido (API de shares de OneDrive).
+     * - Google Drive: la vista /preview del archivo, que Google sí deja incrustar en otro dominio
+     *   (el archivo debe estar compartido con "Cualquier persona con el enlace").
      *
-     * Excepción, los PDF: no los abre Office Online sino el visor propio de SharePoint/OneDrive, que
-     * ignora action=embedview y no se deja incrustar desde otro dominio (Chrome muestra el ícono de
-     * bloqueo), y view.officeapps.live.com tampoco abre PDF. Así que un PDF solo va al visor si el
-     * admin pegó un enlace que ya es de incrustar (código "Insertar"); si no, devuelve null y la
-     * tarjeta lo abre en otra pestaña.
+     * Ojo con los PDF de SharePoint/OneDrive: no los abre Office Online sino el visor propio de
+     * SharePoint, que ignora action=embedview y no se deja incrustar desde otro dominio (Chrome
+     * muestra "rechazó la conexión"). Igual se mandan al visor — la ventana trae un enlace "Abrir en
+     * otra pestaña" para ese caso —; para verlos incrustados, subirlos a Google Drive o pegar el
+     * código "Insertar" de SharePoint (embed.aspx).
      */
-    public static function urlIncrustada(string $url): ?string
+    public static function urlIncrustada(string $url): string
     {
         $partes = parse_url($url);
         $host = strtolower($partes['host'] ?? '');
@@ -272,8 +282,9 @@ class AnalisisPresentacion
             return $url;
         }
 
-        if (self::tipoDocumento($url)['tipo'] === 'pdf') {
-            return null;
+        $idDrive = self::idArchivoDrive($url);
+        if ($idDrive !== null) {
+            return 'https://drive.google.com/file/d/' . $idDrive . '/preview';
         }
 
         if ($host === 'view.officeapps.live.com') {
@@ -298,6 +309,7 @@ class AnalisisPresentacion
      * Microsoft responde con Content-Disposition: attachment, así que funciona aunque el atributo
      * HTML `download` no se respete entre dominios distintos (solo aplica mismo origen).
      * - SharePoint / OneDrive de Microsoft 365: el mismo enlace con download=1 en vez de embedview.
+     * - Google Drive: uc?export=download con el id del archivo.
      * - OneDrive personal (1drv.ms o enlace de compartir): la misma API de descarga directa que usa
      *   urlIncrustada() para alimentar el visor, pero expuesta tal cual, no envuelta en el visor.
      * - Ya es un enlace de incrustar (caso raro, el admin pegó eso directamente): no hay forma simple
@@ -311,6 +323,11 @@ class AnalisisPresentacion
 
         if ($host === 'view.officeapps.live.com' || ($host === 'onedrive.live.com' && str_starts_with($ruta, '/embed'))) {
             return $url;
+        }
+
+        $idDrive = self::idArchivoDrive($url);
+        if ($idDrive !== null) {
+            return 'https://drive.google.com/uc?export=download&id=' . $idDrive;
         }
 
         if (str_ends_with($host, 'sharepoint.com')) {

@@ -80,22 +80,20 @@ function miniaturaTarjetaPresentacion(?array $tipoDocumento, ?string $miniaturaU
 }
 
 /**
- * Botones "Abrir en ventana emergente" y "Descargar" de cada tarjeta de documento (nunca de la de
- * Actas) — aparte del clic en la miniatura, que abre el visor incrustado. $url es el enlace tal
- * cual lo pegó el admin: se abre en una ventana del navegador aparte (data-abrir-ventana, ver el
- * script de abajo), no en el visor — ahí SharePoint sí carga, con la sesión de Microsoft 365 de
- * quien lo mira, porque no queda incrustado en otro dominio. El href/target queda como respaldo si
- * el navegador bloquea la ventana. $urlDescarga ya viene resuelta a descarga directa (ver
- * AnalisisPresentacion::urlDescarga()). stopPropagation evita que el clic también dispare el
- * botón/tarjeta que lo envuelve (abrir el visor).
+ * Botones "Ver en ventana" y "Descargar" de cada tarjeta de documento (nunca de la de Actas).
+ * "Ver en ventana" abre el mismo visor incrustado (ventana dentro de la página) que el clic en la
+ * tarjeta; esa ventana trae su propio enlace "Abrir en otra pestaña" para cuando el proveedor no
+ * deja incrustar (PDF de SharePoint, ver AnalisisPresentacion::urlIncrustada()). $urlDescarga ya
+ * viene resuelta a descarga directa (ver AnalisisPresentacion::urlDescarga()). stopPropagation
+ * evita que el clic también dispare el botón/tarjeta que lo envuelve.
  */
-function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): string
+function botonesExtraTarjetaPresentacion(array $enlace): string
 {
     return '<div class="presentacion-tarjeta-extra">'
-        . '<a class="icono-boton" href="' . htmlspecialchars($url) . '" target="_blank" rel="noopener" title="Abrir en ventana emergente" data-abrir-ventana onclick="event.stopPropagation()">'
+        . '<button type="button" class="icono-boton" data-abrir-visor data-src="' . htmlspecialchars($enlace['url_incrustada']) . '" data-externo="' . htmlspecialchars($enlace['url']) . '" data-titulo="' . htmlspecialchars($enlace['nombre']) . '" title="Ver en ventana" onclick="event.stopPropagation()">'
         . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>'
-        . '</a>'
-        . '<a class="icono-boton" href="' . htmlspecialchars($urlDescarga) . '" target="_blank" rel="noopener" download title="Descargar" onclick="event.stopPropagation()">'
+        . '</button>'
+        . '<a class="icono-boton" href="' . htmlspecialchars($enlace['url_descarga']) . '" target="_blank" rel="noopener" download title="Descargar" onclick="event.stopPropagation()">'
         . '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>'
         . '</a>'
         . '</div>';
@@ -592,7 +590,7 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
                 </div>
                 <?php else: ?>
                 <div class="presentacion-tarjeta">
-                    <button type="button" class="presentacion-tarjeta-miniatura" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada'] ?? '') ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>" title="Ver">
+                    <button type="button" class="presentacion-tarjeta-miniatura" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada']) ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>" title="Ver">
                         <?= miniaturaTarjetaPresentacion($enlace['tipo_documento'], $enlace['miniatura_url'] ?? null) ?>
                     </button>
                     <div class="presentacion-tarjeta-cuerpo">
@@ -601,7 +599,7 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
                         <input type="text" class="presentacion-tarjeta-campo-url" data-campo="miniatura" name="miniatura_enlace" value="<?= htmlspecialchars($enlace['miniatura_url'] ?? '') ?>" form="form-enlace-<?= (int) $enlace['id'] ?>" placeholder="URL de imagen para la miniatura (opcional)" aria-label="URL de la miniatura">
                         <div class="presentacion-tarjeta-pie">
                             <p class="presentacion-tarjeta-descripcion"><?= htmlspecialchars($enlace['tipo_documento']['descripcion']) ?></p>
-                            <?= botonesExtraTarjetaPresentacion($enlace['url'], $enlace['url_descarga']) ?>
+                            <?= botonesExtraTarjetaPresentacion($enlace) ?>
                         </div>
                         <p class="presentacion-tarjeta-meta">
                             <?= htmlspecialchars(date('d/m/Y', strtotime($enlace['actualizado_en']))) ?><?= !empty($enlace['actualizado_por_nombre']) ? ' · ' . htmlspecialchars($enlace['actualizado_por_nombre']) : '' ?>
@@ -662,7 +660,7 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
                 </a>
                 <?php else: ?>
                 <div class="presentacion-tarjeta">
-                    <button type="button" class="presentacion-tarjeta-disparador" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada'] ?? '') ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>">
+                    <button type="button" class="presentacion-tarjeta-disparador" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada']) ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>">
                         <span class="presentacion-tarjeta-miniatura"><?= miniaturaTarjetaPresentacion($enlace['tipo_documento'], $enlace['miniatura_url'] ?? null) ?></span>
                         <span class="presentacion-tarjeta-cuerpo">
                             <span class="presentacion-tarjeta-nombre" title="<?= htmlspecialchars($enlace['nombre']) ?>"><?= htmlspecialchars($enlace['nombre']) ?></span>
@@ -670,7 +668,7 @@ function botonesExtraTarjetaPresentacion(string $url, string $urlDescarga): stri
                     </button>
                     <div class="presentacion-tarjeta-pie">
                         <p class="presentacion-tarjeta-descripcion"><?= htmlspecialchars($enlace['tipo_documento']['descripcion']) ?></p>
-                        <?= botonesExtraTarjetaPresentacion($enlace['url'], $enlace['url_descarga']) ?>
+                        <?= botonesExtraTarjetaPresentacion($enlace) ?>
                     </div>
                 </div>
                 <?php endif; ?>
