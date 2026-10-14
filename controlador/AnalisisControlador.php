@@ -1003,7 +1003,7 @@ class AnalisisControlador
         }
 
         if ($url === null) {
-            return 'Pega un enlace de OneDrive válido (https://1drv.ms/..., https://onedrive.live.com/... o de SharePoint), o el código "Insertar" de OneDrive.';
+            return 'Pega un enlace de OneDrive válido (https://1drv.ms/..., https://onedrive.live.com/..., de SharePoint o de Google Drive), o el código "Insertar" de OneDrive.';
         }
 
         // Miniatura: opcional, una imagen puesta a mano en vez del ícono por tipo — se muestra tal

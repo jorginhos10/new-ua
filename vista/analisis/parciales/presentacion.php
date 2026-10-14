@@ -567,7 +567,7 @@ function botonesExtraTarjetaPresentacion(array $enlace): string
             <form class="presentacion-analisis-form" method="POST" action="<?= htmlspecialchars(analisisUrl('presentacion', $vista)) ?>">
                 <input type="hidden" name="accion" value="guardar_enlace_presentacion">
                 <input type="text" name="nombre_enlace" placeholder="Nombre que ven los usuarios" maxlength="150" required>
-                <input type="text" name="url_enlace" placeholder="Enlace de OneDrive/SharePoint (presentación, Word, Excel o PDF) o código &quot;Insertar&quot;" required>
+                <input type="text" name="url_enlace" placeholder="Enlace de OneDrive/SharePoint o Google Drive (presentación, Word, Excel o PDF) o código &quot;Insertar&quot;" required>
                 <input type="text" name="miniatura_enlace" placeholder="URL de imagen para la miniatura (opcional)">
                 <button type="submit" class="presentacion-analisis-boton">Agregar</button>
             </form>
