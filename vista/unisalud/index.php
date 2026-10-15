@@ -112,16 +112,19 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php if (!$modoEdicion && $anioSeleccionado): ?>
         <form method="POST" action="index.php?ruta=unisalud&tab=<?= htmlspecialchars($tab) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>" id="form-recalcular-excedentes-unisalud" style="display: none;">
             <input type="hidden" name="accion" value="recalcular_excedentes">
+            <input type="hidden" name="incluir_manuales" value="0">
             <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
             <input type="hidden" name="anio_presupuestal_id" value="<?= (int) $anioSeleccionadoId ?>">
         </form>
         <script>
         document.getElementById('boton-recalcular-excedentes-unisalud').addEventListener('click', function () {
-            if (confirm('¿Recalcular los excedentes de todos los ingresos en borrador con los porcentajes vigentes de Autogestión?
-
-Se reemplazarán las filas automáticas (incluidos los ajustes manuales hechos sobre ellas). Lo ya enviado no se modifica.')) {
-                document.getElementById('form-recalcular-excedentes-unisalud').submit();
+            if (!confirm('¿Recalcular los excedentes de todos los ingresos en borrador con los porcentajes vigentes de Autogestión?\n\nLo que no tenga excedentes se calcula. Lo ya enviado no se modifica.')) {
+                return;
             }
+            var incluirManuales = confirm('¿Recalcular también los excedentes ajustados manualmente?\n\nAceptar: se reemplazan por el cálculo automático.\nCancelar: se conservan tal cual.');
+            var formRecalcular = document.getElementById('form-recalcular-excedentes-unisalud');
+            formRecalcular.querySelector('input[name="incluir_manuales"]').value = incluirManuales ? '1' : '0';
+            formRecalcular.submit();
         });
         </script>
         <?php endif; ?>

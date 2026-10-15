@@ -1572,8 +1572,9 @@ class UnisaludControlador
     /**
      * "Recalcular excedentes" (botón de la barra): vuelve a generar las filas automáticas de cada
      * ingreso en borrador visible para el usuario, con los % vigentes de la tabla de referencia de
-     * Configuraciones > Autogestión, para que cuadren con el ingreso. Descarta los ajustes manuales
-     * sobre esas filas y borra las automáticas huérfanas (sin ingreso). Lo ya enviado no se toca. No exige el permiso
+     * Configuraciones > Autogestión, para que cuadren con el ingreso (y las crea si no existen).
+     * Los ajustes manuales sobre esas filas solo se descartan si el usuario lo confirma
+     * (incluir_manuales=1); si no, ese ingreso se deja tal cual. Borra las automáticas huérfanas (sin ingreso). Lo ya enviado no se toca. No exige el permiso
      * de automáticos: solo restablece los % oficiales sobre los ingresos que el usuario ya ve.
      */
     private function recalcularExcedentes(): array
@@ -1587,11 +1588,18 @@ class UnisaludControlador
         $ingresos = $this->filtrarPorPropietarioODestinatario($this->modeloIngreso->obtenerPorAnio($anioId), $usuarioActual, $dependencias);
         $egresos = $this->filtrarPorPropietarioODestinatario($this->modeloGasto->obtenerPorAnio($anioId), $usuarioActual, $dependencias);
 
+        $incluirManuales = ($_POST['incluir_manuales'] ?? '') === '1';
+
         // Un ingreso cuyas filas derivadas ya se enviaron no se recalcula: se descuadraría lo enviado.
+        // Uno con filas derivadas ajustadas a mano (convertidas a manual: conservan ingreso_id con
+        // tipo_automatico NULL) solo se recalcula si el usuario pidió incluir los manuales.
         $ingresosConDerivadosEnviados = [];
+        $ingresosConManuales = [];
         foreach ($egresos as $egreso) {
             if ($egreso['ingreso_id'] !== null && $egreso['estado'] !== 'borrador') {
                 $ingresosConDerivadosEnviados[(int) $egreso['ingreso_id']] = true;
+            } elseif ($egreso['ingreso_id'] !== null && $egreso['tipo_automatico'] === null) {
+                $ingresosConManuales[(int) $egreso['ingreso_id']] = true;
             }
         }
 
@@ -1605,9 +1613,15 @@ class UnisaludControlador
 
         $recalculados = 0;
         $omitidos = 0;
+        $conservados = 0;
         foreach ($ingresos as $ingreso) {
             if ($ingreso['estado'] !== 'borrador' || isset($ingresosConDerivadosEnviados[(int) $ingreso['id']])) {
                 $omitidos++;
+                continue;
+            }
+
+            if (!$incluirManuales && isset($ingresosConManuales[(int) $ingreso['id']])) {
+                $conservados++;
                 continue;
             }
 
@@ -1616,7 +1630,7 @@ class UnisaludControlador
             $recalculados++;
         }
 
-        if ($recalculados === 0 && $huerfanas === 0) {
+        if ($recalculados === 0 && $huerfanas === 0 && $conservados === 0) {
             return ['No hay ingresos en borrador para recalcular.', ''];
         }
 
@@ -1626,6 +1640,9 @@ class UnisaludControlador
         }
         if ($omitidos > 0) {
             $mensaje .= ' ' . $omitidos . ' ingreso(s) ya enviado(s) no se modificaron.';
+        }
+        if ($conservados > 0) {
+            $mensaje .= ' ' . $conservados . ' ingreso(s) con ajustes manuales se conservaron.';
         }
 
         return ['', $mensaje];

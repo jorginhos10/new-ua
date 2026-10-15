@@ -116,17 +116,20 @@ require __DIR__ . '/../parciales/encabezado.php';
         <?php if (!$modoEdicion && $anioSeleccionado): ?>
         <form method="POST" action="index.php?ruta=extension&tab=<?= htmlspecialchars($tab) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&autogestion_id=<?= (int) $autogestionSeleccionadoId ?>" id="form-recalcular-excedentes-extension" style="display: none;">
             <input type="hidden" name="accion" value="recalcular_excedentes">
+            <input type="hidden" name="incluir_manuales" value="0">
             <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
             <input type="hidden" name="anio_presupuestal_id" value="<?= (int) $anioSeleccionadoId ?>">
             <input type="hidden" name="autogestion_id" value="<?= (int) $autogestionSeleccionadoId ?>">
         </form>
         <script>
         document.getElementById('boton-recalcular-excedentes-extension').addEventListener('click', function () {
-            if (confirm('¿Recalcular los excedentes de todos los ingresos en borrador con los porcentajes vigentes de Autogestión?
-
-Se reemplazarán las filas automáticas (incluidos los ajustes manuales hechos sobre ellas). Lo ya enviado no se modifica.')) {
-                document.getElementById('form-recalcular-excedentes-extension').submit();
+            if (!confirm('¿Recalcular los excedentes de todos los ingresos en borrador con los porcentajes vigentes de Autogestión?\n\nLo que no tenga excedentes se calcula. Lo ya enviado no se modifica.')) {
+                return;
             }
+            var incluirManuales = confirm('¿Recalcular también los excedentes ajustados manualmente?\n\nAceptar: se reemplazan por el cálculo automático.\nCancelar: se conservan tal cual.');
+            var formRecalcular = document.getElementById('form-recalcular-excedentes-extension');
+            formRecalcular.querySelector('input[name="incluir_manuales"]').value = incluirManuales ? '1' : '0';
+            formRecalcular.submit();
         });
         </script>
         <?php endif; ?>
