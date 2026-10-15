@@ -291,13 +291,16 @@ class Gasto
      * esa hija ya tenga al menos un gasto real registrado. Un techo asignado que la hija todavía
      * no ha empezado a usar no debe descontarse del disponible.
      *
-     * $incluirBorradores: por defecto los gastos en borrador no cuentan (Dashboard, Techos y
-     * Techos y Metas muestran solo lo enviado). La pantalla de Gastos sí los cuenta (true): ahí la
-     * barra del techo y la validación de "no superar el techo" tienen que ver lo que la dependencia
-     * está armando, que siempre es borrador hasta que lo envía — si no, la barra queda en 0% y
-     * "Enviar" (que exige llegar al techo) nunca se habilita.
+     * $criterioPantallaGastos:
+     * - false (por defecto): solo lo activo — ni borrador ni lo archivado/enviado a Expediente en
+     *   Peticiones. Es el criterio de la landing de Programación Presupuestal (Análisis → Techos y
+     *   Metas), y también lo usan Dashboard y Techos.
+     * - true: el criterio de antes del 12-oct, el de la pantalla de Gastos — cuenta los borradores
+     *   y lo archivado, y solo excluye lo enviado a Expediente. Ahí la barra del techo, "Enviar" (que
+     *   exige llegar al techo) y la validación de "no superar el techo" tienen que ver lo que la
+     *   dependencia está armando, que es borrador hasta que lo envía.
      */
-    public function obtenerTotalesEjecutadosPorDependencia(int $anioPresupuestalId, bool $incluirBorradores = false): array
+    public function obtenerTotalesEjecutadosPorDependencia(int $anioPresupuestalId, bool $criterioPantallaGastos = false): array
     {
         $consulta = $this->db->prepare(
             "SELECT g.dependencia, COALESCE(SUM(
@@ -314,14 +317,15 @@ class Gasto
                 WHERE anio_presupuestal_id = :anio_con_propio AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')
              ) ep ON ep.dependencia = dh.nombre
              WHERE g.anio_presupuestal_id = :anio_presupuestal_id
-                AND (:incluir_borradores = 1 OR g.estado != 'borrador')
+                AND (:criterio_gastos_1 = 1 OR g.estado != 'borrador')
                 AND NOT EXISTS (
                     SELECT 1 FROM peticiones_archivadas pa
-                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion IN ('archivada', 'expediente')
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id
+                        AND (pa.accion = 'expediente' OR (:criterio_gastos_2 = 0 AND pa.accion = 'archivada'))
                 )
              GROUP BY g.dependencia"
         );
-        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'anio_con_propio' => $anioPresupuestalId, 'incluir_borradores' => $incluirBorradores ? 1 : 0]);
+        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'anio_con_propio' => $anioPresupuestalId, 'criterio_gastos_1' => $criterioPantallaGastos ? 1 : 0, 'criterio_gastos_2' => $criterioPantallaGastos ? 1 : 0]);
 
         $totales = [];
         foreach ($consulta->fetchAll() as $fila) {
@@ -340,13 +344,16 @@ class Gasto
      * poder mostrar en la barra de Gastos qué parte es ejecución propia y qué parte es techo ya
      * comprometido a una hija, sin sumar ese segundo monto dos veces.
      *
-     * $incluirBorradores: por defecto los gastos en borrador no cuentan (Dashboard, Techos y
-     * Techos y Metas muestran solo lo enviado). La pantalla de Gastos sí los cuenta (true): ahí la
-     * barra del techo y la validación de "no superar el techo" tienen que ver lo que la dependencia
-     * está armando, que siempre es borrador hasta que lo envía — si no, la barra queda en 0% y
-     * "Enviar" (que exige llegar al techo) nunca se habilita.
+     * $criterioPantallaGastos:
+     * - false (por defecto): solo lo activo — ni borrador ni lo archivado/enviado a Expediente en
+     *   Peticiones. Es el criterio de la landing de Programación Presupuestal (Análisis → Techos y
+     *   Metas), y también lo usan Dashboard y Techos.
+     * - true: el criterio de antes del 12-oct, el de la pantalla de Gastos — cuenta los borradores
+     *   y lo archivado, y solo excluye lo enviado a Expediente. Ahí la barra del techo, "Enviar" (que
+     *   exige llegar al techo) y la validación de "no superar el techo" tienen que ver lo que la
+     *   dependencia está armando, que es borrador hasta que lo envía.
      */
-    public function obtenerTotalesPropioYComprometidoPorDependencia(int $anioPresupuestalId, bool $incluirBorradores = false): array
+    public function obtenerTotalesPropioYComprometidoPorDependencia(int $anioPresupuestalId, bool $criterioPantallaGastos = false): array
     {
         $consulta = $this->db->prepare(
             "SELECT g.dependencia,
@@ -361,14 +368,15 @@ class Gasto
                 WHERE anio_presupuestal_id = :anio_con_propio AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')
              ) ep ON ep.dependencia = dh.nombre
              WHERE g.anio_presupuestal_id = :anio_presupuestal_id
-                AND (:incluir_borradores = 1 OR g.estado != 'borrador')
+                AND (:criterio_gastos_1 = 1 OR g.estado != 'borrador')
                 AND NOT EXISTS (
                     SELECT 1 FROM peticiones_archivadas pa
-                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion IN ('archivada', 'expediente')
+                    WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id
+                        AND (pa.accion = 'expediente' OR (:criterio_gastos_2 = 0 AND pa.accion = 'archivada'))
                 )
              GROUP BY g.dependencia"
         );
-        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'anio_con_propio' => $anioPresupuestalId, 'incluir_borradores' => $incluirBorradores ? 1 : 0]);
+        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'anio_con_propio' => $anioPresupuestalId, 'criterio_gastos_1' => $criterioPantallaGastos ? 1 : 0, 'criterio_gastos_2' => $criterioPantallaGastos ? 1 : 0]);
 
         $totales = [];
         foreach ($consulta->fetchAll() as $fila) {
