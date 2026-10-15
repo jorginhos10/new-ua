@@ -135,7 +135,7 @@ class TechosMetas
     {
         if ($bloque === 'gastos') {
             $presupuestos = (new PresupuestoDependencia())->obtenerPorAnio($anioId);
-            $gastado = (new Gasto())->obtenerTotalesEjecutadosPorDependencia($anioId);
+            $gastado = (new Gasto())->obtenerTotalesEjecutadosPorDependencia($anioId, true);
 
             return $this->agruparRectoria($this->agregarRaicesSinTecho($this->calcularGastos($arbol, $presupuestos, $gastado)));
         }

@@ -293,9 +293,8 @@ class Gasto
      *
      * $criterioPantallaGastos:
      * - false (por defecto): solo lo activo — ni borrador ni lo archivado/enviado a Expediente en
-     *   Peticiones. Es el criterio de la landing de Programación Presupuestal (Análisis → Techos y
-     *   Metas), y también lo usa el Dashboard.
-     * - true: el criterio de antes del 12-oct, el de las pantallas de Gastos y Techos — cuenta los borradores
+     *   Peticiones. Hoy solo lo usa el Dashboard.
+     * - true: el criterio de antes del 12-oct, el de Gastos, Techos y Análisis → Techos y Metas — cuenta los borradores
      *   y lo archivado, y solo excluye lo enviado a Expediente. Ahí la barra del techo, "Enviar" (que
      *   exige llegar al techo) y la validación de "no superar el techo" tienen que ver lo que la
      *   dependencia está armando, que es borrador hasta que lo envía.
@@ -346,9 +345,8 @@ class Gasto
      *
      * $criterioPantallaGastos:
      * - false (por defecto): solo lo activo — ni borrador ni lo archivado/enviado a Expediente en
-     *   Peticiones. Es el criterio de la landing de Programación Presupuestal (Análisis → Techos y
-     *   Metas), y también lo usa el Dashboard.
-     * - true: el criterio de antes del 12-oct, el de las pantallas de Gastos y Techos — cuenta los borradores
+     *   Peticiones. Hoy solo lo usa el Dashboard.
+     * - true: el criterio de antes del 12-oct, el de Gastos, Techos y Análisis → Techos y Metas — cuenta los borradores
      *   y lo archivado, y solo excluye lo enviado a Expediente. Ahí la barra del techo, "Enviar" (que
      *   exige llegar al techo) y la validación de "no superar el techo" tienen que ver lo que la
      *   dependencia está armando, que es borrador hasta que lo envía.
