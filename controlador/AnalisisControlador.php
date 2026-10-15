@@ -1362,6 +1362,9 @@ class AnalisisControlador
             $techos['gasto_principal'] = ['avance' => $egresosGasto, 'techo' => $techoGasto, 'etiqueta' => $etiquetaGasto];
             $asignacion['gasto_principal'] = [
                 'porcentaje' => $egresosGasto / $techoGasto * 100,
+                // Se compara al centavo, no el porcentaje: sumar muchos montos en float deja
+                // residuos (ej. 100,0000000001 %) que pintaban en rojo un 100,0 exacto.
+                'excedido' => round($egresosGasto, 2) > round($techoGasto, 2),
                 'titulo' => 'Egresos asignados del ' . $etiquetaGasto . ': ' . $monedaCorta($egresosGasto) . ' de ' . $monedaCorta($techoGasto),
             ];
         }
@@ -1373,6 +1376,7 @@ class AnalisisControlador
             if ($ingresos > 0) {
                 $asignacion[$origenEgresos] = [
                     'porcentaje' => $egresos / $ingresos * 100,
+                    'excedido' => round($egresos, 2) > round((float) $ingresos, 2),
                     'titulo' => 'Egresos asignados de los ingresos: ' . $monedaCorta($egresos) . ' de ' . $monedaCorta($ingresos),
                 ];
             }

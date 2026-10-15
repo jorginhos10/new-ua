@@ -289,7 +289,7 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
     }
 
     $htmlPorcentaje = $asignacion !== null
-        ? '<span class="analisis-selector-porcentaje' . ($asignacion['porcentaje'] > 100 ? ' excedido' : '') . '" title="' . htmlspecialchars($asignacion['titulo']) . '">'
+        ? '<span class="analisis-selector-porcentaje' . (($asignacion['excedido'] ?? $asignacion['porcentaje'] > 100) ? ' excedido' : '') . '" title="' . htmlspecialchars($asignacion['titulo']) . '">'
             . number_format($asignacion['porcentaje'], 1, ',', '.') . '%</span>'
         : '';
     ?>
