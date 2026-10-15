@@ -72,7 +72,7 @@ class TechosControlador
 
         $arbolHijas = $dependenciaUsuarioId !== null ? $this->modeloDependencia->construirArbolDescendientes($dependenciaUsuarioId) : [];
         $presupuestosActuales = $anioSeleccionadoId > 0 ? $this->modeloPresupuestoDependencia->obtenerPorAnio($anioSeleccionadoId) : [];
-        $gastadoPorDependencia = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioSeleccionadoId) : [];
+        $gastadoPorDependencia = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioSeleccionadoId, true) : [];
 
         $asignadoPorId = [];
         foreach ($arbolHijas as $nodoRaiz) {
@@ -136,7 +136,7 @@ class TechosControlador
 
         $arbolHijas = $dependenciaUsuarioId !== null ? $this->modeloDependencia->construirArbolDescendientes($dependenciaUsuarioId) : [];
         $presupuestosActuales = $anioSeleccionadoId > 0 ? $this->modeloPresupuestoDependencia->obtenerPorAnio($anioSeleccionadoId) : [];
-        $gastadoPorDependencia = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioSeleccionadoId) : [];
+        $gastadoPorDependencia = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioSeleccionadoId, true) : [];
 
         $asignadoPorId = [];
         foreach ($arbolHijas as $nodoRaiz) {
