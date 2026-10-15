@@ -1378,6 +1378,116 @@ input[type="file"]::-webkit-file-upload-button:hover {
     margin-top: 1.25rem;
 }
 
+/* Ventana "Ver mensaje" (bandeja del encabezado): más angosta que los demás modales, con avatar
+   del remitente, el cuerpo en un recuadro suave y pie con Cerrar + Responder. */
+.modal-caja-mensaje {
+    max-width: 560px;
+    padding: 1.25rem 1.5rem 1.4rem;
+}
+
+.modal-caja-mensaje .modal-cabecera {
+    margin: -1.25rem -1.5rem 0;
+    padding: 1.1rem 1.5rem 0.95rem;
+    gap: 0.75rem;
+}
+
+.ver-mensaje-titulo {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    min-width: 0;
+}
+
+.ver-mensaje-titulo h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+}
+
+.ver-mensaje-icono {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--color-primario-suave);
+    color: var(--color-primario);
+}
+
+.ver-mensaje-icono svg {
+    width: 18px;
+    height: 18px;
+}
+
+.ver-mensaje-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 1.1rem 0 1rem;
+}
+
+.ver-mensaje-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--color-primario);
+    color: #fff;
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.ver-mensaje-meta-texto {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.ver-mensaje-meta-texto strong {
+    font-size: 0.92rem;
+    color: var(--color-texto);
+}
+
+.ver-mensaje-meta-detalle {
+    font-size: 0.8rem;
+    color: var(--color-texto-tenue);
+}
+
+.ver-mensaje-separador {
+    margin: 0 0.3rem;
+}
+
+.modal-caja-mensaje .detalle-mensaje-cuerpo {
+    background: var(--color-fondo);
+    border: 1px solid var(--color-borde);
+    border-radius: var(--radio-chico);
+    padding: 0.9rem 1rem;
+    font-size: 0.95rem;
+}
+
+.modal-caja-mensaje .modal-pie {
+    gap: 0.5rem;
+    margin-top: 1.2rem;
+}
+
+.modal-caja-mensaje .modal-pie .boton-agregar {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.modal-caja-mensaje .modal-pie .boton-agregar svg {
+    width: 16px;
+    height: 16px;
+}
+
 /* Badge de rol */
 
 .badge-rol {
