@@ -215,8 +215,8 @@ class GastoControlador
         // no-raíz) — hace falta también para el superadmin raíz, ya que ambos mapas alimentan el
         // desglose propio/heredado de la barra de abajo.
         $presupuestosDependencia = $anioSeleccionadoId > 0 ? $this->modeloPresupuestoDependencia->obtenerPorAnio($anioSeleccionadoId) : [];
-        $gastadoPorDependenciaMapa = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioSeleccionadoId) : [];
-        $propioYComprometidoPorDependencia = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesPropioYComprometidoPorDependencia($anioSeleccionadoId) : [];
+        $gastadoPorDependenciaMapa = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioSeleccionadoId, true) : [];
+        $propioYComprometidoPorDependencia = $anioSeleccionadoId > 0 ? $this->modeloGasto->obtenerTotalesPropioYComprometidoPorDependencia($anioSeleccionadoId, true) : [];
 
         // Al entrar desde el dropdown del sidebar por un Dumi específico, se resalta aparte su
         // gastado — reutilizando los mismos mapas de arriba, sin consulta nueva. IMPORTANTE: en la
@@ -646,7 +646,7 @@ class GastoControlador
                     $claveAcumulado = $resuelto['dependencia']['id'] . ':' . $datos['anio_presupuestal_id'];
 
                     if (!array_key_exists($claveAcumulado, $totalesAcumulados)) {
-                        $gastadoPorDependencia = $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($datos['anio_presupuestal_id']);
+                        $gastadoPorDependencia = $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($datos['anio_presupuestal_id'], true);
                         $totalesAcumulados[$claveAcumulado] = $this->calcularGastadoConHerencia($resuelto['dependencia'], $presupuestos, $gastadoPorDependencia);
                     }
 
@@ -1005,7 +1005,7 @@ class GastoControlador
             return '';
         }
 
-        $gastadoPorDependencia = $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($datos['anio_presupuestal_id']);
+        $gastadoPorDependencia = $this->modeloGasto->obtenerTotalesEjecutadosPorDependencia($datos['anio_presupuestal_id'], true);
         $totalActual = $this->calcularGastadoConHerencia($resuelto['dependencia'], $presupuestosDependencia, $gastadoPorDependencia);
 
         if ($idExcluir > 0) {

@@ -290,8 +290,14 @@ class Gasto
      * (gasto automático tipo_automatico = 'techo_hijo') solo se cuenta como "ejecutado" mientras
      * esa hija ya tenga al menos un gasto real registrado. Un techo asignado que la hija todavía
      * no ha empezado a usar no debe descontarse del disponible.
+     *
+     * $incluirBorradores: por defecto los gastos en borrador no cuentan (Dashboard, Techos y
+     * Techos y Metas muestran solo lo enviado). La pantalla de Gastos sí los cuenta (true): ahí la
+     * barra del techo y la validación de "no superar el techo" tienen que ver lo que la dependencia
+     * está armando, que siempre es borrador hasta que lo envía — si no, la barra queda en 0% y
+     * "Enviar" (que exige llegar al techo) nunca se habilita.
      */
-    public function obtenerTotalesEjecutadosPorDependencia(int $anioPresupuestalId): array
+    public function obtenerTotalesEjecutadosPorDependencia(int $anioPresupuestalId, bool $incluirBorradores = false): array
     {
         $consulta = $this->db->prepare(
             "SELECT g.dependencia, COALESCE(SUM(
@@ -308,14 +314,14 @@ class Gasto
                 WHERE anio_presupuestal_id = :anio_con_propio AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')
              ) ep ON ep.dependencia = dh.nombre
              WHERE g.anio_presupuestal_id = :anio_presupuestal_id
-                AND g.estado != 'borrador'
+                AND (:incluir_borradores = 1 OR g.estado != 'borrador')
                 AND NOT EXISTS (
                     SELECT 1 FROM peticiones_archivadas pa
                     WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion IN ('archivada', 'expediente')
                 )
              GROUP BY g.dependencia"
         );
-        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'anio_con_propio' => $anioPresupuestalId]);
+        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'anio_con_propio' => $anioPresupuestalId, 'incluir_borradores' => $incluirBorradores ? 1 : 0]);
 
         $totales = [];
         foreach ($consulta->fetchAll() as $fila) {
@@ -333,8 +339,14 @@ class Gasto
      * obtenerTotalesEjecutadosPorDependencia() para cada dependencia — esto solo lo desglosa, para
      * poder mostrar en la barra de Gastos qué parte es ejecución propia y qué parte es techo ya
      * comprometido a una hija, sin sumar ese segundo monto dos veces.
+     *
+     * $incluirBorradores: por defecto los gastos en borrador no cuentan (Dashboard, Techos y
+     * Techos y Metas muestran solo lo enviado). La pantalla de Gastos sí los cuenta (true): ahí la
+     * barra del techo y la validación de "no superar el techo" tienen que ver lo que la dependencia
+     * está armando, que siempre es borrador hasta que lo envía — si no, la barra queda en 0% y
+     * "Enviar" (que exige llegar al techo) nunca se habilita.
      */
-    public function obtenerTotalesPropioYComprometidoPorDependencia(int $anioPresupuestalId): array
+    public function obtenerTotalesPropioYComprometidoPorDependencia(int $anioPresupuestalId, bool $incluirBorradores = false): array
     {
         $consulta = $this->db->prepare(
             "SELECT g.dependencia,
@@ -349,14 +361,14 @@ class Gasto
                 WHERE anio_presupuestal_id = :anio_con_propio AND (tipo_automatico IS NULL OR tipo_automatico != 'techo_hijo')
              ) ep ON ep.dependencia = dh.nombre
              WHERE g.anio_presupuestal_id = :anio_presupuestal_id
-                AND g.estado != 'borrador'
+                AND (:incluir_borradores = 1 OR g.estado != 'borrador')
                 AND NOT EXISTS (
                     SELECT 1 FROM peticiones_archivadas pa
                     WHERE pa.origen = 'gasto_principal' AND pa.origen_id = g.id AND pa.accion IN ('archivada', 'expediente')
                 )
              GROUP BY g.dependencia"
         );
-        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'anio_con_propio' => $anioPresupuestalId]);
+        $consulta->execute(['anio_presupuestal_id' => $anioPresupuestalId, 'anio_con_propio' => $anioPresupuestalId, 'incluir_borradores' => $incluirBorradores ? 1 : 0]);
 
         $totales = [];
         foreach ($consulta->fetchAll() as $fila) {
