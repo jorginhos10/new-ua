@@ -4464,6 +4464,22 @@ document.addEventListener('DOMContentLoaded', function () {
     var campoFecha = document.getElementById('ver-mensaje-fecha');
     var campoCuerpo = document.getElementById('ver-mensaje-cuerpo');
     var botonResponderMensaje = document.getElementById('boton-responder-mensaje');
+    var campoAvatar = document.getElementById('ver-mensaje-avatar');
+
+    // "2026-10-12 21:59:45" (como viene de la base) → "12 oct 2026, 9:59 p. m."; si no se puede
+    // leer la fecha, se muestra tal cual.
+    function formatearFechaMensaje(texto) {
+        var partes = texto.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+        if (!partes) {
+            return texto;
+        }
+        var fecha = new Date(+partes[1], +partes[2] - 1, +partes[3], +partes[4], +partes[5]);
+        try {
+            return fecha.toLocaleString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+        } catch (error) {
+            return texto;
+        }
+    }
 
     function cerrarVerMensaje() {
         modalVerMensaje.classList.remove('abierto');
@@ -4501,8 +4517,12 @@ document.addEventListener('DOMContentLoaded', function () {
         campoAsunto.textContent = boton.dataset.asunto;
         campoRemitente.textContent = boton.dataset.remitente;
         campoDestinatario.textContent = boton.dataset.destinatario;
-        campoFecha.textContent = boton.dataset.fecha;
+        campoFecha.textContent = formatearFechaMensaje(boton.dataset.fecha || '');
+        campoFecha.setAttribute('datetime', (boton.dataset.fecha || '').replace(' ', 'T'));
         campoCuerpo.textContent = boton.dataset.cuerpo;
+        if (campoAvatar) {
+            campoAvatar.textContent = (boton.dataset.remitente || '?').trim().charAt(0).toUpperCase();
+        }
 
         if (botonResponderMensaje) {
             botonResponderMensaje.href = 'index.php?ruta=mensajes&responder_a=' + encodeURIComponent(boton.dataset.contraparteId || '')
@@ -4531,7 +4551,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     modalVerMensaje.addEventListener('click', function (evento) {
-        if (evento.target === modalVerMensaje) {
+        if (evento.target === modalVerMensaje || evento.target.closest('[data-cerrar-ver-mensaje]')) {
             cerrarVerMensaje();
         }
     });

@@ -163,19 +163,34 @@ if (!empty($_SESSION['usuario_id'])) {
             </header>
 
             <div id="modal-ver-mensaje" class="modal-fondo">
-                <div class="modal-caja">
+                <div class="modal-caja modal-caja-mensaje">
                     <div class="modal-cabecera">
-                        <h2 id="ver-mensaje-asunto"></h2>
+                        <div class="ver-mensaje-titulo">
+                            <span class="ver-mensaje-icono" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 7-10 6L2 7"></path></svg>
+                            </span>
+                            <h2 id="ver-mensaje-asunto"></h2>
+                        </div>
                         <button type="button" id="boton-cerrar-modal-ver-mensaje" class="modal-cerrar" aria-label="Cerrar">&times;</button>
                     </div>
-                    <p class="texto-atenuado">
-                        De <strong id="ver-mensaje-remitente"></strong>
-                        para <strong id="ver-mensaje-destinatario"></strong>
-                        — <span id="ver-mensaje-fecha"></span>
-                    </p>
+                    <div class="ver-mensaje-meta">
+                        <span class="ver-mensaje-avatar" id="ver-mensaje-avatar" aria-hidden="true"></span>
+                        <div class="ver-mensaje-meta-texto">
+                            <strong id="ver-mensaje-remitente"></strong>
+                            <span class="ver-mensaje-meta-detalle">
+                                Para <span id="ver-mensaje-destinatario"></span>
+                                <span class="ver-mensaje-separador" aria-hidden="true">·</span>
+                                <time id="ver-mensaje-fecha"></time>
+                            </span>
+                        </div>
+                    </div>
                     <p class="detalle-mensaje-cuerpo" id="ver-mensaje-cuerpo"></p>
                     <div class="modal-pie">
-                        <a id="boton-responder-mensaje" href="#" class="boton-agregar">Responder</a>
+                        <button type="button" class="boton-secundario" data-cerrar-ver-mensaje>Cerrar</button>
+                        <a id="boton-responder-mensaje" href="#" class="boton-agregar">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 17 4 12 9 7"></polyline><path d="M20 18v-2a4 4 0 0 0-4-4H4"></path></svg>
+                            Responder
+                        </a>
                     </div>
                 </div>
             </div>
