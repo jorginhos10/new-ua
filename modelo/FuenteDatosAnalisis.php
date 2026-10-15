@@ -165,9 +165,13 @@ class FuenteDatosAnalisis
     {
         if ($this->esRepositorio()) {
             $filas = $this->modeloVersion->obtenerTablaDeVersion($this->versionId, 'gastos');
+            // Sin los espejos de techo (tipo_automatico = 'techo_hijo'): no son ejecución, solo
+            // reflejan el techo delegado a una hija — en vivo ya los saca Gasto::obtenerPorAnio(),
+            // pero la versión guarda la tabla cruda.
             $gastos = array_values(array_filter(
                 $filas,
                 static fn (array $g): bool => (int) $g['anio_presupuestal_id'] === $anioPresupuestalId
+                    && ($g['tipo_automatico'] ?? null) !== 'techo_hijo'
             ));
         } else {
             // Datos en vivo (nunca Repositorio — un snapshot congelado ya es su propia verdad
