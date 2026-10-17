@@ -5,8 +5,11 @@
             <div>
                 <h1>Categoría de gasto</h1>
                 <p class="texto-atenuado">
-                    Asigna a cada gasto una de las 36 categorías de actividad a partir de su rubro (y, si el rubro admite
+                    Asigna a cada gasto una de las categorías de actividad a partir de su rubro (y, si el rubro admite
                     varias, del texto de actividad e insumo). Las asignaciones automáticas guardan su confianza.
+                    Las categorías y sus reglas por rubro se administran en
+                    <a href="index.php?ruta=lista-categorias-gasto">Listas &rsaquo; Categorías de gasto</a> y
+                    <a href="index.php?ruta=lista-rubros-categorias-gasto">Rubros por categoría</a>.
                 </p>
             </div>
             <a href="index.php?ruta=configuraciones" class="boton-accion boton-accion-ver">&larr; Volver a Configuraciones</a>

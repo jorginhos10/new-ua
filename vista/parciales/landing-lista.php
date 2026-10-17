@@ -66,6 +66,8 @@ $pestanasListas = [
     'lineas-inversion' => 'Líneas de inversión',
     'sublineas-inversion' => 'Sublíneas de inversión',
     'fuentes-financiacion' => 'Fuentes de financiación',
+    'lista-categorias-gasto' => 'Categorías de gasto',
+    'lista-rubros-categorias-gasto' => 'Rubros por categoría',
 ];
 ?>
 
@@ -109,7 +111,7 @@ $pestanasListas = [
                 <select name="<?= htmlspecialchars($columna['clave']) ?>" <?= !empty($columna['requerido']) ? 'required' : '' ?>>
                     <option value="">Selecciona <?= htmlspecialchars(mb_strtolower($columna['etiqueta'])) ?></option>
                     <?php foreach ($columna['opciones'] as $opcion): ?>
-                    <option value="<?= (int) $opcion['value'] ?>"><?= htmlspecialchars($opcion['label']) ?></option>
+                    <option value="<?= htmlspecialchars((string) $opcion['value']) ?>"><?= htmlspecialchars($opcion['label']) ?></option>
                     <?php endforeach; ?>
                 </select>
                 <?php else: ?>
@@ -140,7 +142,7 @@ $pestanasListas = [
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($filas as $fila): $idFormulario = 'form-' . $ruta . '-' . (int) $fila['id']; ?>
+                    <?php foreach ($filas as $fila): $idFormulario = 'form-' . $ruta . '-' . preg_replace('/[^A-Za-z0-9_-]/', '_', (string) $fila['id']); ?>
                     <tr>
                         <?php foreach ($columnas as $columna): $valor = $fila[$columna['clave']] ?? null; $tipo = $columna['tipo'] ?? 'texto'; ?>
                         <td class="<?= $esColumnaAngosta($columna) ? 'col-angosta' : '' ?>">
@@ -149,7 +151,7 @@ $pestanasListas = [
                             <?php elseif ($tipo === 'fk'): ?>
                                 <select name="<?= htmlspecialchars($columna['clave']) ?>" form="<?= $idFormulario ?>" <?= !empty($columna['requerido']) ? 'required' : '' ?> aria-label="<?= htmlspecialchars($columna['etiqueta']) ?>">
                                     <?php foreach ($columna['opciones'] as $opcion): ?>
-                                    <option value="<?= (int) $opcion['value'] ?>" <?= (int) $opcion['value'] === (int) $valor ? 'selected' : '' ?>><?= htmlspecialchars($opcion['label']) ?></option>
+                                    <option value="<?= htmlspecialchars((string) $opcion['value']) ?>" <?= (string) $opcion['value'] === (string) $valor ? 'selected' : '' ?>><?= htmlspecialchars($opcion['label']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             <?php else: ?>
@@ -172,7 +174,7 @@ $pestanasListas = [
                         <td class="col-angosta">
                             <form method="POST" action="index.php?ruta=<?= htmlspecialchars($ruta) ?>" class="form-toggle">
                                 <input type="hidden" name="accion" value="cambiar_estado">
-                                <input type="hidden" name="id" value="<?= (int) $fila['id'] ?>">
+                                <input type="hidden" name="id" value="<?= htmlspecialchars((string) $fila['id']) ?>">
                                 <button type="submit" class="interruptor <?= $fila['estado'] === 'activo' ? 'interruptor-activo' : '' ?>" aria-label="Cambiar estado" title="<?= $fila['estado'] === 'activo' ? 'Activo (clic para desactivar)' : 'Inactivo (clic para activar)' ?>">
                                     <span class="interruptor-perilla"></span>
                                 </button>
@@ -185,13 +187,13 @@ $pestanasListas = [
                             <div class="acciones-fila">
                                 <form method="POST" action="index.php?ruta=<?= htmlspecialchars($ruta) ?>" id="<?= $idFormulario ?>">
                                     <input type="hidden" name="accion" value="actualizar">
-                                    <input type="hidden" name="id" value="<?= (int) $fila['id'] ?>">
+                                    <input type="hidden" name="id" value="<?= htmlspecialchars((string) $fila['id']) ?>">
                                     <button type="submit" class="boton-accion boton-accion-editar">Guardar</button>
                                 </form>
                                 <?php if ($tieneEliminar): $enUso = !empty($fila['en_uso']); ?>
                                 <form method="POST" action="index.php?ruta=<?= htmlspecialchars($ruta) ?>" onsubmit="return confirm('¿Eliminar este registro? Esta acción no se puede deshacer.');">
                                     <input type="hidden" name="accion" value="eliminar">
-                                    <input type="hidden" name="id" value="<?= (int) $fila['id'] ?>">
+                                    <input type="hidden" name="id" value="<?= htmlspecialchars((string) $fila['id']) ?>">
                                     <button type="submit" class="boton-accion boton-accion-eliminar" <?= $enUso ? 'disabled title="Está en uso; desactívalo en lugar de eliminarlo"' : '' ?>>Eliminar</button>
                                 </form>
                                 <?php endif; ?>

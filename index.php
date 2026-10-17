@@ -44,6 +44,8 @@ require_once __DIR__ . '/controlador/ConvocatoriaControlador.php';
 require_once __DIR__ . '/controlador/PresupuestoFinalControlador.php';
 require_once __DIR__ . '/controlador/SublineaInversionControlador.php';
 require_once __DIR__ . '/controlador/RubroCategoriaControlador.php';
+require_once __DIR__ . '/controlador/CategoriaGastoListaControlador.php';
+require_once __DIR__ . '/controlador/RubroCategoriaGastoListaControlador.php';
 require_once __DIR__ . '/controlador/AnioPresupuestalControlador.php';
 require_once __DIR__ . '/controlador/SedeControlador.php';
 require_once __DIR__ . '/controlador/DependenciaControlador.php';
@@ -113,6 +115,8 @@ $rutaAMenuKey = [
     'presupuesto-final' => 'configuraciones',
     'sublineas-inversion' => 'configuraciones',
     'rubro-categorias' => 'configuraciones',
+    'lista-categorias-gasto' => 'configuraciones',
+    'lista-rubros-categorias-gasto' => 'configuraciones',
     'anios-presupuestales' => 'configuraciones',
     'sedes' => 'configuraciones',
     'dependencias' => 'configuraciones',
@@ -260,6 +264,14 @@ switch ($ruta) {
 
     case 'rubro-categorias':
         (new RubroCategoriaControlador())->index();
+        break;
+
+    case 'lista-categorias-gasto':
+        (new CategoriaGastoListaControlador())->index();
+        break;
+
+    case 'lista-rubros-categorias-gasto':
+        (new RubroCategoriaGastoListaControlador())->index();
         break;
 
     case 'anios-presupuestales':

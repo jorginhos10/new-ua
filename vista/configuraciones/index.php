@@ -42,7 +42,7 @@ require __DIR__ . '/../parciales/encabezado.php';
                         <h2>Categoría de gasto</h2>
                         <?= $flechaModulo ?>
                     </div>
-                    <p class="texto-atenuado">Clasifica los gastos en las 36 categorías de actividad: calcular vacíos o recalcular todo.</p>
+                    <p class="texto-atenuado">Clasifica los gastos en las categorías de actividad: calcular vacíos o recalcular todo. Las categorías se administran en Listas.</p>
                 </a>
                 <a href="index.php?ruta=rubro-categorias" class="tarjeta-modulo">
                     <div class="tarjeta-modulo-cabecera">

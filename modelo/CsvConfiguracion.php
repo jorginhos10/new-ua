@@ -70,7 +70,7 @@ class CsvConfiguracion
      * usuarios.estamento_id) usan ON DELETE SET NULL, que no lanza nada y dejaría la referencia
      * huérfana en silencio si no se valida antes.
      */
-    public static function tieneReferencias(PDO $db, string $tabla, int $id): bool
+    public static function tieneReferencias(PDO $db, string $tabla, int|string $id): bool
     {
         static $cachePorTabla = [];
 

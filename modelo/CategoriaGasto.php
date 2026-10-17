@@ -48,6 +48,68 @@ class CategoriaGasto
         return $nombres;
     }
 
+    // --- Administración (Configuraciones > Listas > Categorías de gasto) ---
+
+    /** Todas, también las inactivas, con cuántos gastos/reglas de rubro las usan (para "en uso"). */
+    public function obtenerTodos(): array
+    {
+        return $this->db->query(
+            'SELECT c.id, c.macro, c.subcategoria, c.tokens, c.orden, c.estado,
+                    (SELECT COUNT(*) FROM gastos g WHERE g.categoria_gasto_id = c.id)
+                    + (SELECT COUNT(*) FROM rubro_categoria_gasto r WHERE r.categoria_id = c.id) AS usos
+             FROM categorias_gasto c
+             ORDER BY c.orden, c.id'
+        )->fetchAll();
+    }
+
+    public function obtenerPorId(string $id): ?array
+    {
+        $consulta = $this->db->prepare('SELECT * FROM categorias_gasto WHERE id = :id');
+        $consulta->execute(['id' => $id]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
+    public function crear(string $id, string $macro, string $subcategoria, string $tokens, int $orden): bool
+    {
+        $consulta = $this->db->prepare(
+            'INSERT INTO categorias_gasto (id, macro, subcategoria, tokens, orden) VALUES (:id, :macro, :subcategoria, :tokens, :orden)'
+        );
+
+        return $consulta->execute(['id' => $id, 'macro' => $macro, 'subcategoria' => $subcategoria, 'tokens' => $tokens, 'orden' => $orden]);
+    }
+
+    public function actualizar(string $id, string $macro, string $subcategoria, string $tokens, int $orden): bool
+    {
+        $consulta = $this->db->prepare(
+            'UPDATE categorias_gasto SET macro = :macro, subcategoria = :subcategoria, tokens = :tokens, orden = :orden WHERE id = :id'
+        );
+
+        return $consulta->execute(['id' => $id, 'macro' => $macro, 'subcategoria' => $subcategoria, 'tokens' => $tokens, 'orden' => $orden]);
+    }
+
+    public function cambiarEstado(string $id): bool
+    {
+        $consulta = $this->db->prepare(
+            "UPDATE categorias_gasto SET estado = IF(estado = 'activo', 'inactivo', 'activo') WHERE id = :id"
+        );
+
+        return $consulta->execute(['id' => $id]);
+    }
+
+    public function eliminar(string $id): bool
+    {
+        $consulta = $this->db->prepare('DELETE FROM categorias_gasto WHERE id = :id');
+
+        return $consulta->execute(['id' => $id]);
+    }
+
+    public function siguienteOrden(): int
+    {
+        return (int) $this->db->query('SELECT COALESCE(MAX(orden), 0) + 1 FROM categorias_gasto')->fetchColumn();
+    }
+
     public function existeCategoria(string $id): bool
     {
         $consulta = $this->db->prepare("SELECT 1 FROM categorias_gasto WHERE id = :id AND estado = 'activo'");

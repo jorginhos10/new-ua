@@ -73,11 +73,6 @@ require __DIR__ . '/../parciales/encabezado.php';
             <input type="file" name="archivo" id="archivo-importar-gastos-fijos" accept=".xlsx">
         </form>
 
-        <div class="gastos-fijos-aviso">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-            <span>Estos gastos <strong>solo se reflejan en Análisis &rsaquo; Análisis de distribución</strong> (módulo Gasto, como "Gasto fijo"). No afectan Gastos, Techos, Techos y Metas, Dashboard ni Articulación PDI.</span>
-        </div>
-
         <?php if ($error !== ''): ?>
         <div class="mensaje-error">
             <?= htmlspecialchars($error) ?>
@@ -190,25 +185,6 @@ require __DIR__ . '/../parciales/encabezado.php';
             font-weight: 600;
             color: var(--color-texto);
             cursor: pointer;
-        }
-
-        .gastos-fijos-aviso {
-            display: flex;
-            align-items: flex-start;
-            gap: 0.6rem;
-            margin: 0.75rem 0 1rem;
-            padding: 0.7rem 0.9rem;
-            border-radius: var(--radio-chico);
-            background: var(--color-primario-suave);
-            color: var(--color-texto-secundario);
-            font-size: 0.85rem;
-            line-height: 1.5;
-        }
-
-        .gastos-fijos-aviso svg {
-            flex-shrink: 0;
-            color: var(--color-primario);
-            margin-top: 0.1rem;
         }
 
         .gastos-fijos-chips {

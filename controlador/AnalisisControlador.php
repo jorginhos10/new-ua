@@ -1507,15 +1507,29 @@ class AnalisisControlador
                 }
             }
         }
-        if ($techoGasto > 0) {
+        // Los gastos fijos (Configuraciones > Gastos fijos) van por fuera del techo: ya suman en el
+        // avance del módulo Gasto (ver obtenerFilasCrudasModulo()), así que también amplían la base
+        // del 100 % — si no, solo por tenerlos la tarjeta se pasaría del techo. Mismo alcance que el
+        // avance: año, snapshot (Repositorio) y dependencia (Usuario).
+        $fijosGasto = $this->obtenerGastosFijosParaAnalisis($anioId, $vista, $snapshotId);
+        if ($vista === 'usuario' && $dependenciaFiltro !== null) {
+            $permitidasFijos = $this->obtenerDependenciasPermitidas($dependenciaFiltro);
+            $fijosGasto = array_filter($fijosGasto, static fn (array $fila): bool => in_array($fila['dependencia'] ?? null, $permitidasFijos, true));
+        }
+        $totalFijosGasto = array_sum(array_map(static fn (array $fila): float => (float) ($fila['valor_total'] ?? 0), $fijosGasto));
+        $baseGasto = $techoGasto + $totalFijosGasto;
+
+        if ($baseGasto > 0) {
             $egresosGasto = (float) ($totalesPorModulo['gasto_principal'] ?? 0);
-            $techos['gasto_principal'] = ['avance' => $egresosGasto, 'techo' => $techoGasto, 'etiqueta' => $etiquetaGasto];
+            $etiquetaBase = $totalFijosGasto > 0 ? $etiquetaGasto . ' + gastos fijos' : $etiquetaGasto;
+            $techos['gasto_principal'] = ['avance' => $egresosGasto, 'techo' => $baseGasto, 'etiqueta' => $etiquetaBase];
             $asignacion['gasto_principal'] = [
-                'porcentaje' => $egresosGasto / $techoGasto * 100,
+                'porcentaje' => $egresosGasto / $baseGasto * 100,
                 // Se compara al centavo, no el porcentaje: sumar muchos montos en float deja
                 // residuos (ej. 100,0000000001 %) que pintaban en rojo un 100,0 exacto.
-                'excedido' => round($egresosGasto, 2) > round($techoGasto, 2),
-                'titulo' => 'Egresos asignados del ' . $etiquetaGasto . ': ' . $monedaCorta($egresosGasto) . ' de ' . $monedaCorta($techoGasto),
+                'excedido' => round($egresosGasto, 2) > round($baseGasto, 2),
+                'titulo' => 'Egresos asignados del ' . $etiquetaBase . ': ' . $monedaCorta($egresosGasto) . ' de ' . $monedaCorta($baseGasto)
+                    . ($totalFijosGasto > 0 ? ' (' . $etiquetaGasto . ' ' . $monedaCorta($techoGasto) . ' + gastos fijos ' . $monedaCorta($totalFijosGasto) . ')' : ''),
             ];
         }
 

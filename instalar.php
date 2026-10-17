@@ -544,6 +544,17 @@ CREATE TABLE IF NOT EXISTS gastos_fijos (
 SQL],
 ];
 
+$pasos[] = [
+    'seccion' => 'Gastos > Categoría de gasto',
+    'que' => 'Categoría PER-01 "Servicios personales" y regla del rubro 2.01 hacia ella (antes "no aplica")',
+    'falta' => fn() => tablaExiste($pdo, 'categorias_gasto')
+        && !(bool) $pdo->query("SELECT 1 FROM categorias_gasto WHERE id = 'PER-01'")->fetchColumn(),
+    'sql' => [
+        "INSERT IGNORE INTO categorias_gasto (id, macro, subcategoria, tokens, orden) VALUES ('PER-01', 'Servicios Personales', 'Servicios personales (nómina, prestaciones y contribuciones)', 'nomina,salario,sueldo,prima,cesantias,vacaciones,bonificacion,horas extra,prestaciones,seguridad social,parafiscales,aportes,personal,planta,catedra,ocasional,supernumerario', 37)",
+        "UPDATE rubro_categoria_gasto SET accion = 'categoria', categoria_id = 'PER-01' WHERE prefijo_codigo = '2.01' AND accion = 'no_aplica'",
+    ],
+];
+
 // --- Instalar -----------------------------------------------------------------------------------
 
 $resultados = null;

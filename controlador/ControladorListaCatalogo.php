@@ -149,11 +149,20 @@ abstract class ControladorListaCatalogo
         return $mensaje;
     }
 
+    /**
+     * Id de la fila que llega por POST: entero en casi todos los catálogos; los que usan una clave
+     * de texto (ej. Categorías de gasto, "EST-01") lo sobreescriben para devolver el string.
+     */
+    protected function idDesdePost(): int|string
+    {
+        return (int) ($_POST['id'] ?? 0);
+    }
+
     private function cambiarEstado(): void
     {
-        $id = (int) ($_POST['id'] ?? 0);
+        $id = $this->idDesdePost();
 
-        if ($id > 0) {
+        if ($id !== 0 && $id !== '') {
             $this->modelo()->cambiarEstado($id);
         }
 
@@ -163,9 +172,9 @@ abstract class ControladorListaCatalogo
 
     private function eliminarFila(): array
     {
-        $id = (int) ($_POST['id'] ?? 0);
+        $id = $this->idDesdePost();
 
-        if ($id <= 0 || $this->modelo()->obtenerPorId($id) === null) {
+        if ($id === 0 || $id === '' || $this->modelo()->obtenerPorId($id) === null) {
             return ['El registro que intentas eliminar no existe.', ''];
         }
 
