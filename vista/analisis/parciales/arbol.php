@@ -119,6 +119,13 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         text-decoration: none;
     }
 
+    /* Rayita vertical entre los dos grupos (Ingresos/Egresos | Árbol/Gráfica). */
+    .arbol-lado-toggle + .arbol-lado-toggle {
+        border-left: 1px solid var(--color-borde);
+        padding-left: 0.75rem;
+        margin-left: 0.35rem;
+    }
+
     .arbol-boton-toggle {
         border: 1px solid var(--color-borde);
         background: var(--color-superficie);
