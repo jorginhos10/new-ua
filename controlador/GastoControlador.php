@@ -24,6 +24,8 @@ require_once __DIR__ . '/../modelo/LectorXlsx.php';
 require_once __DIR__ . '/../modelo/EnvioLote.php';
 require_once __DIR__ . '/../modelo/VistaLoteEnvio.php';
 require_once __DIR__ . '/../modelo/PeticionHistorial.php';
+require_once __DIR__ . '/../modelo/CodigoVerificacionEnvio.php';
+require_once __DIR__ . '/../modelo/Correo.php';
 
 class GastoControlador
 {
@@ -98,6 +100,13 @@ class GastoControlador
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $accion = $_POST['accion'] ?? '';
+
+            // fetch() del modal "Enviar todos" (dependencia superadmin): responde JSON, sin renderizar.
+            if ($accion === 'solicitar_codigo_envio') {
+                $this->solicitarCodigoEnvio();
+
+                return;
+            }
 
             if ($accion === 'actualizar') {
                 [$error, $exito] = $this->actualizar();
@@ -275,7 +284,10 @@ class GastoControlador
         $porcentajeGastadoConTecho = $presupuestoAnio > 0
             ? max(0, min(100 - $porcentajeGastadoPropio - $porcentajeGastadoHeredado, ($totalGastadoHijasConTecho / $presupuestoAnio) * 100))
             : 0.0;
-        $puedeEnviarTodo = $presupuestoAnio > 0 && $totalGastado >= $presupuestoAnio;
+        // La dependencia superadmin puede enviar sin haber llegado a su techo; a cambio, cada envío
+        // pide el código de 6 dígitos que le llega al correo (ver solicitarCodigoEnvio()).
+        $requiereCodigoEnvio = $dependenciaUsuarioEsRaiz;
+        $puedeEnviarTodo = $dependenciaUsuarioEsRaiz || ($presupuestoAnio > 0 && $totalGastado >= $presupuestoAnio);
 
         // Porcentaje a mostrar para el Dumi seleccionado en el dropdown del sidebar — dos casos
         // (ver el bloque de arriba donde se calcula $techoDumiSeleccionado):
@@ -1194,6 +1206,66 @@ class GastoControlador
         return ['', 'Se duplicaron ' . $duplicados . ' gasto(s).'];
     }
 
+    /** Si el usuario en sesión pertenece a la dependencia superadmin (es_raiz_superadmin). */
+    private function usuarioEsDeDependenciaRaiz(?array $usuario): bool
+    {
+        if ($usuario === null || empty($usuario['dependencia_id'])) {
+            return false;
+        }
+        $dependencia = $this->modeloDependencia->obtenerPorId((int) $usuario['dependencia_id']);
+
+        return $dependencia !== null && !empty($dependencia['es_raiz_superadmin']);
+    }
+
+    /**
+     * fetch() del botón "Enviar código a mi correo" del modal "Enviar todos los gastos" — solo
+     * para la dependencia superadmin, que puede enviar sin haber llegado a su techo y por eso
+     * confirma cada envío con un código de 6 dígitos que llega al correo de quien envía (vence en
+     * 10 minutos; pedir uno nuevo invalida el anterior). Responde JSON.
+     */
+    private function solicitarCodigoEnvio(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        $usuario = $this->modeloUsuario->obtenerPorId((int) $_SESSION['usuario_id']);
+        if (!$this->usuarioEsDeDependenciaRaiz($usuario)) {
+            echo json_encode(['exito' => false, 'mensaje' => 'Solo la dependencia superadmin envía con código de verificación.']);
+            return;
+        }
+
+        $correo = trim((string) ($usuario['correo'] ?? ''));
+        if (!filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+            echo json_encode(['exito' => false, 'mensaje' => 'Tu cuenta no tiene un correo válido para recibir el código.']);
+            return;
+        }
+
+        $modeloCodigo = new CodigoVerificacionEnvio();
+        $segundos = $modeloCodigo->segundosDesdeUltimo((int) $usuario['id']);
+        if ($segundos !== null && $segundos < 60) {
+            echo json_encode(['exito' => false, 'mensaje' => 'Ya te enviamos un código. Espera ' . (60 - $segundos) . ' segundos para pedir otro.']);
+            return;
+        }
+
+        $codigo = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $modeloCodigo->invalidarPendientes((int) $usuario['id']);
+        $modeloCodigo->crear((int) $usuario['id'], $codigo, $correo, date('Y-m-d H:i:s', strtotime('+10 minutes')));
+
+        $enviado = (new Correo())->enviar(
+            $correo,
+            'Código para enviar los gastos',
+            'Tu código para confirmar el envío de los gastos en borrador es: ' . $codigo
+                . "\n\nEste código vence en 10 minutos. Si no estás enviando gastos, ignora este mensaje."
+        );
+
+        if (!$enviado) {
+            $modeloCodigo->invalidarPendientes((int) $usuario['id']);
+            echo json_encode(['exito' => false, 'mensaje' => 'No pudimos enviar el correo con el código. Intenta de nuevo en unos minutos.']);
+            return;
+        }
+
+        echo json_encode(['exito' => true, 'mensaje' => 'Te enviamos un código de 6 dígitos a ' . $correo . '.']);
+    }
+
     private function enviarTodo(): array
     {
         $anioId = (int) ($_POST['anio_presupuestal_id'] ?? 0);
@@ -1202,6 +1274,23 @@ class GastoControlador
 
         if ($anioId <= 0 || $dependenciaNombre === '' || $rolDestinatarioId <= 0) {
             return ['Selecciona la dependencia y el rol al que se enviarán los gastos.', ''];
+        }
+
+        // Dependencia superadmin: puede enviar sin haber llegado a su techo, pero cada envío se
+        // confirma con el código de 6 dígitos que se le mandó al correo (ver solicitarCodigoEnvio()).
+        // Se valida antes que nada, para no tocar ningún gasto si el código no sirve.
+        $verificacionEnvio = '';
+        $usuarioRemitente = $this->modeloUsuario->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0));
+        if ($this->usuarioEsDeDependenciaRaiz($usuarioRemitente)) {
+            $codigo = preg_replace('/\D/', '', (string) ($_POST['codigo_verificacion'] ?? ''));
+            if (strlen($codigo) !== 6) {
+                return ['Ingresa el código de 6 dígitos que te enviamos al correo.', ''];
+            }
+            $filaCodigo = (new CodigoVerificacionEnvio())->validarYConsumir((int) $usuarioRemitente['id'], $codigo);
+            if ($filaCodigo === null) {
+                return ['El código no es válido o ya venció. Revisa tu correo o pide uno nuevo (tras ' . CodigoVerificacionEnvio::MAX_INTENTOS . ' intentos fallidos hay que pedir otro).', ''];
+            }
+            $verificacionEnvio = ' · verificado con código enviado a ' . $filaCodigo['correo'];
         }
 
         $errorDependencia = $this->validarDependenciaPermitida($dependenciaNombre);
@@ -1287,7 +1376,7 @@ class GastoControlador
             'techo_numero' => $techoNumero,
         ], $enviados);
 
-        $detalleLote = 'Enviado como lote v' . $lote['version'];
+        $detalleLote = 'Enviado como lote v' . $lote['version'] . $verificacionEnvio;
         $loteHistorialId = $this->modeloHistorial->registrarLote('gasto_principal', 'enviado', $detalleLote, $cantidadEnviados);
         foreach ($enviados as $fila) {
             $this->modeloHistorial->registrar('gasto_principal', (int) $fila['id'], 'enviado', $detalleLote, $loteHistorialId);

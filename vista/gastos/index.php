@@ -578,6 +578,19 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <input type="hidden" id="enviar-todo-gasto-usuario" name="usuario_destinatario_id">
                 </div>
 
+                <?php if (!empty($requiereCodigoEnvio)): ?>
+                <?php // Dependencia superadmin: envía sin llegar al techo, confirmando con un código al correo (ver GastoControlador::solicitarCodigoEnvio()). ?>
+                <div class="campo">
+                    <label for="enviar-todo-gasto-codigo">Código de verificación *</label>
+                    <p class="texto-atenuado" style="margin: 0 0 0.4rem; font-size: 0.82rem;">Como dependencia superadmin puedes enviar sin haber llegado al techo. Para confirmarlo, te enviamos un código de 6 dígitos a tu correo.</p>
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <input type="text" id="enviar-todo-gasto-codigo" name="codigo_verificacion" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" placeholder="000000" required style="width: 9rem; letter-spacing: 0.3em; text-align: center;">
+                        <button type="button" class="boton-secundario" id="boton-solicitar-codigo-envio">Enviar código a mi correo</button>
+                    </div>
+                    <p class="texto-atenuado" id="mensaje-codigo-envio" style="margin: 0.4rem 0 0; font-size: 0.82rem;" aria-live="polite"></p>
+                </div>
+                <?php endif; ?>
+
                 <button type="submit" class="boton-enviar">Enviar todo</button>
             </form>
         </div>
@@ -588,6 +601,40 @@ require __DIR__ . '/../parciales/encabezado.php';
     <script src="publico/js/gastos-categoria.js?v=<?= @filemtime(__DIR__ . '/../../publico/js/gastos-categoria.js') ?: 1 ?>"></script>
     <script type="application/json" id="datos-roles-por-tipo"><?= json_encode($rolesPorTipo, JSON_HEX_TAG | JSON_HEX_AMP) ?></script>
     <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+
+    <?php if (!empty($requiereCodigoEnvio)): ?>
+    <script>
+    (function () {
+        var boton = document.getElementById('boton-solicitar-codigo-envio');
+        var mensaje = document.getElementById('mensaje-codigo-envio');
+        if (!boton || !mensaje) {
+            return;
+        }
+        boton.addEventListener('click', function () {
+            var datos = new FormData();
+            datos.append('accion', 'solicitar_codigo_envio');
+            boton.disabled = true;
+            mensaje.textContent = 'Enviando código…';
+            fetch(<?= json_encode('index.php?ruta=gastos&anio_id=' . (int) $anioSeleccionadoId) ?>, { method: 'POST', body: datos, credentials: 'same-origin' })
+                .then(function (respuesta) { return respuesta.json(); })
+                .then(function (resultado) {
+                    mensaje.textContent = resultado.mensaje || '';
+                    if (resultado.exito) {
+                        document.getElementById('enviar-todo-gasto-codigo').focus();
+                        // Mismo límite que el servidor: un código nuevo cada 60 segundos.
+                        setTimeout(function () { boton.disabled = false; boton.textContent = 'Reenviar código'; }, 60000);
+                    } else {
+                        boton.disabled = false;
+                    }
+                })
+                .catch(function () {
+                    mensaje.textContent = 'No se pudo pedir el código. Intenta de nuevo.';
+                    boton.disabled = false;
+                });
+        });
+    })();
+    </script>
+    <?php endif; ?>
 
     <?php endif; ?>
 

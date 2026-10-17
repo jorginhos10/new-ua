@@ -484,6 +484,26 @@ CREATE TABLE IF NOT EXISTS documentos_versiones_datos (
 SQL],
 ];
 
+$pasos[] = [
+    'seccion' => 'Egresos > Gastos',
+    'que' => 'Tabla codigos_verificacion_envio (código de 6 dígitos al enviar gastos desde la dependencia superadmin)',
+    'falta' => fn() => !tablaExiste($pdo, 'codigos_verificacion_envio'),
+    'sql' => [<<<'SQL'
+CREATE TABLE IF NOT EXISTS codigos_verificacion_envio (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    usuario_id INT NOT NULL,
+    codigo CHAR(6) NOT NULL,
+    correo VARCHAR(255) NOT NULL,
+    expira_en DATETIME NOT NULL,
+    usado TINYINT(1) NOT NULL DEFAULT 0,
+    intentos TINYINT NOT NULL DEFAULT 0,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_codigos_verificacion_envio_usuario (usuario_id, usado),
+    CONSTRAINT fk_codigos_verificacion_envio_usuario FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL],
+];
+
 // --- Instalar -----------------------------------------------------------------------------------
 
 $resultados = null;
