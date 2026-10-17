@@ -293,8 +293,9 @@ class Gasto
      *
      * $criterioPantallaGastos:
      * - false (por defecto): solo lo activo — ni borrador ni lo archivado/enviado a Expediente en
-     *   Peticiones. Hoy solo lo usa el Dashboard.
-     * - true: el criterio de antes del 12-oct, el de Gastos, Techos y Análisis → Techos y Metas — cuenta los borradores
+     *   Peticiones (el filtro del 12-oct). Hoy ninguna pantalla lo usa: el Dashboard pasó a leer
+     *   TechosMetas, que usa true.
+     * - true: el criterio de antes del 12-oct, el de Gastos, Techos, Análisis → Techos y Metas y el Dashboard — cuenta los borradores
      *   y lo archivado, y solo excluye lo enviado a Expediente. Ahí la barra del techo, "Enviar" (que
      *   exige llegar al techo) y la validación de "no superar el techo" tienen que ver lo que la
      *   dependencia está armando, que es borrador hasta que lo envía.
@@ -345,8 +346,9 @@ class Gasto
      *
      * $criterioPantallaGastos:
      * - false (por defecto): solo lo activo — ni borrador ni lo archivado/enviado a Expediente en
-     *   Peticiones. Hoy solo lo usa el Dashboard.
-     * - true: el criterio de antes del 12-oct, el de Gastos, Techos y Análisis → Techos y Metas — cuenta los borradores
+     *   Peticiones (el filtro del 12-oct). Hoy ninguna pantalla lo usa: el Dashboard pasó a leer
+     *   TechosMetas, que usa true.
+     * - true: el criterio de antes del 12-oct, el de Gastos, Techos, Análisis → Techos y Metas y el Dashboard — cuenta los borradores
      *   y lo archivado, y solo excluye lo enviado a Expediente. Ahí la barra del techo, "Enviar" (que
      *   exige llegar al techo) y la validación de "no superar el techo" tienen que ver lo que la
      *   dependencia está armando, que es borrador hasta que lo envía.

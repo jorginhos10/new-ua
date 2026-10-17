@@ -16,6 +16,7 @@ require_once __DIR__ . '/../modelo/AutogestionPorcentaje.php';
 require_once __DIR__ . '/../modelo/Convocatoria.php';
 require_once __DIR__ . '/../modelo/CuentaRegresiva.php';
 require_once __DIR__ . '/../modelo/RelojArenaConsejo.php';
+require_once __DIR__ . '/../modelo/TechosMetas.php';
 
 class DashboardControlador
 {
@@ -47,9 +48,9 @@ class DashboardControlador
             $resumenCostos = $this->obtenerResumenCostos();
             $modeloPorcentajeAutogestion = new AutogestionPorcentaje();
             $topeExtension = $modeloPorcentajeAutogestion->obtenerTopePorModulo('extension');
-            $resumenAutogestion = $this->obtenerResumenIngresos(new IngresoExtension(), $topeExtension);
+            $resumenAutogestion = $this->obtenerResumenIngresos('extension', $topeExtension);
             $topePostgrado = $modeloPorcentajeAutogestion->obtenerTopePorModulo('postgrado');
-            $resumenPostgrado = $this->obtenerResumenIngresos(new IngresoPostgrado(), $topePostgrado);
+            $resumenPostgrado = $this->obtenerResumenIngresos('postgrado', $topePostgrado);
             $mensajesGlobales = (new MensajeGlobal())->listar('administrador');
 
             $relojArena = $this->obtenerRelojArena((new RelojArenaConfiguracion())->obtener());
@@ -125,62 +126,44 @@ class DashboardControlador
     }
 
     /**
-     * Resumen de gastos con la misma cuenta que Techos (TechosControlador): el techo total son los
-     * techos de las unidades directas de la raíz (los techos anidados ya salen de los de su padre,
-     * no se suman otra vez), y lo asignado es lo que calcula calcularAsignadoArbol() sobre
-     * presupuesto_dependencia y el total ejecutado de Gasto.
+     * Resumen de gastos con las mismas cuentas que Análisis → Techos y Metas (bloque "gastos"):
+     * los montos salen de TechosMetas::nodosDelBloque() + totalesDelBloque(), las mismas funciones
+     * de esa pestaña — así la tarjeta y la pestaña siempre cuadran. Los conteos recorren esos
+     * mismos nodos: toda dependencia con techo propio debajo de las raíces (también las anidadas).
      */
     private function obtenerResumenCostos(): array
     {
-        $modeloGasto = new Gasto();
-        $modeloDependencia = new Dependencia();
+        $techosMetas = new TechosMetas();
+        $arbol = $techosMetas->arbolDependencias();
         $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
-
-        $raiz = null;
-        foreach ($modeloDependencia->obtenerTodas() as $dependencia) {
-            if (!empty($dependencia['es_raiz_superadmin'])) {
-                $raiz = $dependencia;
-                break;
-            }
-        }
 
         $resumen = [];
 
         foreach ($aniosActivos as $anioFila) {
             $anioId = (int) $anioFila['id'];
-            $techos = (new PresupuestoDependencia())->obtenerPorAnio($anioId);
-            $ejecutado = $modeloGasto->obtenerTotalesEjecutadosPorDependencia($anioId);
+            $nodos = $techosMetas->nodosDelBloque('gastos', $arbol, $anioId);
+            $totales = $techosMetas->totalesDelBloque('gastos', $nodos, null);
 
-            $techoTotal = 0.0;
-            $asignado = 0.0;
             $conTecho = 0;
             $conAsignacion = 0;
             $sobreTecho = 0;
-
-            if ($raiz !== null) {
-                $mapa = [];
-                foreach ($modeloDependencia->construirArbolDescendientes((int) $raiz['id']) as $nodo) {
-                    $asignado += $this->calcularAsignadoArbol($nodo, $techos, $ejecutado, $mapa);
-
-                    // Techo total: solo las unidades directas, porque los techos anidados salen del de su padre.
-                    $techoTotal += (float) ($techos[(int) $nodo['dependencia']['id']]['techo'] ?? 0);
+            $contar = function (array $nodos) use (&$contar, &$conTecho, &$conAsignacion, &$sobreTecho): void {
+                foreach ($nodos as $nodo) {
+                    // El grupo "Rectoría y Oficinas" es solo visual: se cuentan sus miembros.
+                    if (empty($nodo['esGrupo']) && ($nodo['techo'] ?? 0) > 0) {
+                        $conTecho++;
+                        if ($nodo['asignacion'] > 0) {
+                            $conAsignacion++;
+                        }
+                        if ($nodo['asignacion'] > $nodo['techo']) {
+                            $sobreTecho++;
+                        }
+                    }
+                    $contar($nodo['hijos']);
                 }
-
-                // Conteo: todas las dependencias con techo, también las anidadas.
-                foreach ($techos as $dependenciaId => $fila) {
-                    $techo = (float) ($fila['techo'] ?? 0);
-                    if ($techo <= 0 || !isset($mapa[(int) $dependenciaId])) {
-                        continue;
-                    }
-
-                    $conTecho++;
-                    if ($mapa[(int) $dependenciaId] > 0) {
-                        $conAsignacion++;
-                    }
-                    if ($mapa[(int) $dependenciaId] > $techo) {
-                        $sobreTecho++;
-                    }
-                }
+            };
+            foreach ($nodos as $nodoRaiz) {
+                $contar($nodoRaiz['hijos']);
             }
 
             $trimestres = $this->pacPorTrimestre($anioId);
@@ -192,10 +175,10 @@ class DashboardControlador
                 'proyectos_total' => $proyectosTotal,
                 'proyectos_con_presupuesto' => $proyectosConPresupuesto,
                 'trimestres' => $trimestres,
-                'techo_total' => $techoTotal,
-                'gastado' => $asignado,
-                'disponible' => $techoTotal - $asignado,
-                'porcentaje' => $techoTotal > 0 ? min(100, ($asignado / $techoTotal) * 100) : 0.0,
+                'techo_total' => $totales['techo'],
+                'gastado' => $totales['asignacion'],
+                'disponible' => $totales['restante'],
+                'porcentaje' => min(100, $totales['porcentaje'] ?? 0.0),
                 'dependencias_con_techo' => $conTecho,
                 'dependencias_con_gasto' => $conAsignacion,
                 'dependencias_sobre_techo' => $sobreTecho,
@@ -242,29 +225,6 @@ class DashboardControlador
         return $trimestres;
     }
 
-    /**
-     * Misma regla que TechosControlador::calcularAsignadoArbol(): lo ejecutado del nodo más lo de
-     * los hijos que no tienen techo propio. Un hijo con techo queda fuera de la suma del padre.
-     */
-    private function calcularAsignadoArbol(array $nodo, array $techos, array $ejecutado, array &$mapa): float
-    {
-        $dependencia = $nodo['dependencia'];
-        $asignado = $ejecutado[$dependencia['nombre']] ?? 0.0;
-
-        foreach ($nodo['hijos'] as $nodoHijo) {
-            $techoHijo = $techos[(int) $nodoHijo['dependencia']['id']]['techo'] ?? null;
-            $asignadoHijo = $this->calcularAsignadoArbol($nodoHijo, $techos, $ejecutado, $mapa);
-
-            if ($techoHijo === null || (float) $techoHijo <= 0) {
-                $asignado += $asignadoHijo;
-            }
-        }
-
-        $mapa[(int) $dependencia['id']] = $asignado;
-
-        return $asignado;
-    }
-
     /** @return array<int, string> nombre de cada dependencia por id. */
     private function nombresPorId(Dependencia $modeloDependencia): array
     {
@@ -284,46 +244,41 @@ class DashboardControlador
      * nadie ha configurado ningún tope todavía, $tope llega en 0 y la tarjeta lo indica en vez de
      * mostrar un porcentaje.
      *
-     * El numerador son los ingresos del año (sin archivados) de las dependencias con techo mayor a 0,
-     * igual que el resumen de gastos: no todas las dependencias tienen techo.
+     * Ingresos, disponible y % salen de TechosMetas::nodosDelBloque() + totalesDelBloque() con el
+     * mismo $tope — las mismas funciones del bloque $bloque ('extension'/'postgrado') de Análisis →
+     * Techos y Metas, así la tarjeta y la pestaña cuadran (suma los ingresos de todas las
+     * dependencias que registraron, no solo las que tienen techo de gastos).
      */
-    private function obtenerResumenIngresos(object $modeloIngreso, float $tope): array
+    private function obtenerResumenIngresos(string $bloque, float $tope): array
     {
         $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
         $nombrePorId = $this->nombresPorId(new Dependencia());
+        $techosMetas = new TechosMetas();
+        $arbol = $techosMetas->arbolDependencias();
 
         $resumen = [];
 
         foreach ($aniosActivos as $anioFila) {
             $anioId = (int) $anioFila['id'];
-            $techos = (new PresupuestoDependencia())->obtenerPorAnio($anioId);
-            $ingresoPorDependencia = $modeloIngreso->obtenerTotalesPorDependencia($anioId);
+            $nodos = $techosMetas->nodosDelBloque($bloque, $arbol, $anioId);
+            $totales = $techosMetas->totalesDelBloque($bloque, $nodos, $tope);
 
-            $ingresos = 0.0;
+            // Solo para el texto "N dependencias con techo" de la tarjeta.
             $conTecho = 0;
-            $conIngreso = 0;
-
-            foreach ($techos as $dependenciaId => $fila) {
-                if ((float) ($fila['techo'] ?? 0) <= 0 || !isset($nombrePorId[(int) $dependenciaId])) {
-                    continue;
-                }
-
-                $ingresoDependencia = (float) ($ingresoPorDependencia[$nombrePorId[(int) $dependenciaId]] ?? 0.0);
-                $ingresos += $ingresoDependencia;
-                $conTecho++;
-                if ($ingresoDependencia > 0) {
-                    $conIngreso++;
+            foreach ((new PresupuestoDependencia())->obtenerPorAnio($anioId) as $dependenciaId => $fila) {
+                if ((float) ($fila['techo'] ?? 0) > 0 && isset($nombrePorId[(int) $dependenciaId])) {
+                    $conTecho++;
                 }
             }
 
             $resumen[] = [
                 'anio' => $anioFila['anio'],
                 'tope' => $tope,
-                'ingresos' => $ingresos,
-                'disponible' => $tope - $ingresos,
-                'porcentaje' => $tope > 0 ? min(100, ($ingresos / $tope) * 100) : 0.0,
+                'ingresos' => $totales['ingresos'],
+                'disponible' => $totales['restante'],
+                'porcentaje' => min(100, $totales['porcentaje'] ?? 0.0),
                 'dependencias_con_techo' => $conTecho,
-                'dependencias_con_ingreso' => $conIngreso,
+                'dependencias_con_ingreso' => count($nodos),
             ];
         }
 
