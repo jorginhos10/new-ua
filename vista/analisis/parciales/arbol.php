@@ -167,6 +167,20 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         overflow: auto;
     }
 
+    /* Vista "Gráfica" de Programación presupuestal (arbol-grafica.php): ocupa el mismo alto que el
+       árbol, para que graficos.js (ajustarAlturaGrafica) calcule bien el espacio disponible. */
+    .arbol-grafica-contenedor:not([hidden]) {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .arbol-grafica-contenedor .tabla-scroll {
+        flex: 1;
+        min-height: 0;
+    }
+
     .arbol-tabla {
         width: 100%;
         border-collapse: collapse;
@@ -503,6 +517,11 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
             <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => 'ingresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'ingresos' ? 'activo' : '' ?>">Ingresos</a>
             <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => 'egresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'egresos' ? 'activo' : '' ?>">Egresos</a>
         </div>
+        <?php // Alterna entre el árbol y las gráficas de tabla-real con estos mismos datos (ver arbol-grafica.php). ?>
+        <div class="arbol-lado-toggle" id="arbol-vista-toggle">
+            <button type="button" class="arbol-boton-toggle activo" data-vista-arbol="arbol" aria-pressed="true">Árbol</button>
+            <button type="button" class="arbol-boton-toggle" data-vista-arbol="grafica" aria-pressed="false">Gráfica</button>
+        </div>
         <?php endif; ?>
         <div class="arbol-acciones">
             <?php if ($esSuperAdmin): ?>
@@ -562,6 +581,10 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
             </tbody>
         </table>
     </div>
+
+    <?php if ($tab === 'programacion'): ?>
+    <?php require __DIR__ . '/arbol-grafica.php'; ?>
+    <?php endif; ?>
 </div>
 
 <script>
@@ -1045,3 +1068,50 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 </script>
+
+<?php if ($tab === 'programacion'): ?>
+<script>
+// Toggle "Árbol | Gráfica" de Programación presupuestal: la gráfica es la de tabla-real
+// (arbol-grafica.php) — se abre su contenedor y se dispara su propio botón de vista gráfica, así
+// tabla-real dibuja con su flujo normal. La elección se recuerda por lado (Ingresos/Egresos).
+document.addEventListener('DOMContentLoaded', function () {
+    var toggle = document.getElementById('arbol-vista-toggle');
+    var contenedorGrafica = document.getElementById('arbol-grafica-contenedor');
+    var scrollArbol = document.querySelector('.arbol-tarjeta .arbol-scroll');
+    var accionesArbol = document.querySelector('.arbol-tarjeta .arbol-acciones');
+    if (!toggle || !contenedorGrafica || !scrollArbol) {
+        return;
+    }
+
+    var claveVista = 'analisis_programacion_vista_' + <?= json_encode($lado) ?>;
+    var botones = toggle.querySelectorAll('[data-vista-arbol]');
+
+    function mostrarVista(vista) {
+        var esGrafica = vista === 'grafica';
+        scrollArbol.style.display = esGrafica ? 'none' : '';
+        if (accionesArbol) { accionesArbol.style.display = esGrafica ? 'none' : ''; }
+        contenedorGrafica.hidden = !esGrafica;
+        Array.prototype.forEach.call(botones, function (boton) {
+            var activo = boton.dataset.vistaArbol === vista;
+            boton.classList.toggle('activo', activo);
+            boton.setAttribute('aria-pressed', activo ? 'true' : 'false');
+        });
+
+        var botonTdt = document.getElementById(esGrafica ? 'tdt-boton-vista-grafica' : 'tdt-boton-vista-tabla');
+        if (botonTdt) { botonTdt.click(); }
+
+        try { localStorage.setItem(claveVista, vista); } catch (e) { /* sin localStorage */ }
+    }
+
+    Array.prototype.forEach.call(botones, function (boton) {
+        boton.addEventListener('click', function () { mostrarVista(boton.dataset.vistaArbol); });
+    });
+
+    var vistaGuardada = null;
+    try { vistaGuardada = localStorage.getItem(claveVista); } catch (e) { vistaGuardada = null; }
+    if (vistaGuardada === 'grafica') {
+        mostrarVista('grafica');
+    }
+});
+</script>
+<?php endif; ?>
