@@ -17,6 +17,7 @@ require_once __DIR__ . '/../modelo/GastoUnisalud.php';
 require_once __DIR__ . '/../modelo/SolicitudMonitor.php';
 require_once __DIR__ . '/../modelo/SolicitudArl.php';
 require_once __DIR__ . '/../modelo/Snapshot.php';
+require_once __DIR__ . '/../modelo/GastoFijo.php';
 require_once __DIR__ . '/../modelo/VersionArbol.php';
 require_once __DIR__ . '/../modelo/FuenteDatosAnalisis.php';
 require_once __DIR__ . '/../modelo/PresupuestoInstitucional.php';
@@ -507,12 +508,28 @@ class AnalisisControlador
 
         $modelo = $this->obtenerModeloModulo($origen);
 
+        // Gastos fijos (id negativo, solo en Gasto): se borran de su propia tabla y solo el SA;
+        // nunca se mandan al modelo Gasto.
+        $eliminadosFijos = 0;
+        if ($origen === 'gasto_principal') {
+            $idsFijos = array_filter($ids, static fn (int $id): bool => $id < 0);
+            if (!empty($idsFijos) && $this->esSuperAdmin()) {
+                $modeloFijo = new GastoFijo();
+                foreach ($idsFijos as $idFijo) {
+                    if ($modeloFijo->obtenerPorId(-$idFijo) !== null && $modeloFijo->eliminar(-$idFijo)) {
+                        $eliminadosFijos++;
+                    }
+                }
+            }
+        }
+        $ids = array_values(array_filter($ids, static fn (int $id): bool => $id > 0));
+
         // Igual que Extensión/Postgrado al eliminar un ingreso: primero sus gastos automáticos
         // (por ingreso_id) y LUEGO el ingreso — al revés, la FK ON DELETE SET NULL deja esos
         // gastos huérfanos para siempre.
         $origenGastoPar = array_search($origen, self::PARES_GASTO_INGRESO, true);
 
-        $eliminados = 0;
+        $eliminados = $eliminadosFijos;
         foreach ($ids as $id) {
             if (!method_exists($modelo, 'obtenerPorId') || $modelo->obtenerPorId($id) === null) {
                 continue;
@@ -548,7 +565,8 @@ class AnalisisControlador
         }
 
         $ids = array_map('intval', $decodificado);
-        $ids = array_filter($ids, static fn (int $id): bool => $id > 0);
+        // Los ids negativos son gastos fijos (ver obtenerGastosFijosParaAnalisis()).
+        $ids = array_filter($ids, static fn (int $id): bool => $id !== 0);
 
         return array_values(array_unique($ids));
     }
@@ -1745,6 +1763,11 @@ class AnalisisControlador
             $filas = $this->filtrarSoloActivos($origen, $this->obtenerModeloModulo($origen)->obtenerPorAnio($anioPresupuestalId));
         }
 
+        // Solo aquí (Análisis de distribución) entran los gastos fijos, dentro del módulo Gasto.
+        if ($origen === 'gasto_principal') {
+            $filas = array_merge($filas, $this->obtenerGastosFijosParaAnalisis($anioPresupuestalId, $vista, $snapshotId));
+        }
+
         if ($vista === 'usuario' && $dependenciaFiltro !== null) {
             $permitidas = $this->obtenerDependenciasPermitidas($dependenciaFiltro);
             $filas = array_values(array_filter(
@@ -1898,6 +1921,27 @@ class AnalisisControlador
             unset($fila);
         }
 
+        // Gasto: columna "Tipo" (Gasto / Gasto fijo) justo después de Dependencia. Un gasto fijo
+        // se edita en Configuraciones > Gastos fijos (solo SA), nunca en el módulo Gastos.
+        if ($origen === 'gasto_principal') {
+            $posicion = array_search('dependencia', $resultado['claves'], true);
+            $posicion = $posicion === false ? 0 : $posicion + 1;
+            array_splice($resultado['columnas'], $posicion, 0, ['Tipo']);
+            array_splice($resultado['claves'], $posicion, 0, ['tipo_gasto']);
+            $puedeEditarFijos = $this->esSuperAdmin();
+
+            foreach ($resultado['filas'] as &$fila) {
+                $registro = $registrosPrecargados[$origen . ':' . (int) $fila['origen_id']] ?? [];
+                $esFijo = !empty($registro['es_gasto_fijo']);
+                $fila['tipo_gasto'] = $esFijo ? 'Gasto fijo' : 'Gasto';
+                if ($esFijo) {
+                    $fila['ruta_editar'] = 'index.php?ruta=gastos-fijos&anio_id=' . $anioPresupuestalId . '&editar_id=' . (int) $registro['id_gasto_fijo'];
+                    $fila['puede_editar'] = $puedeEditarFijos;
+                }
+            }
+            unset($fila);
+        }
+
         if ($vista !== 'tiempo_real') {
             foreach ($resultado['filas'] as &$fila) {
                 $fila['puede_editar'] = false;
@@ -1906,6 +1950,39 @@ class AnalisisControlador
         }
 
         return $resultado;
+    }
+
+    /**
+     * Gastos fijos del año (Configuraciones > Gastos fijos) como filas del módulo Gasto, SOLO para
+     * Análisis de distribución. En vivo salen de GastoFijo; en Repositorio, de la tabla
+     * gastos_fijos congelada en el snapshot. Llevan id NEGATIVO (−id) para no chocar con los ids de
+     * `gastos` en la caché "gasto_principal:<id>", Editar y Eliminar; `id_gasto_fijo` guarda el real.
+     * Si la tabla todavía no existe (instalar.php pendiente), no aporta filas en vez de romper.
+     */
+    private function obtenerGastosFijosParaAnalisis(int $anioPresupuestalId, string $vista, ?int $snapshotId): array
+    {
+        if ($vista === 'repositorio') {
+            $filas = $snapshotId !== null
+                ? array_values(array_filter(
+                    (new Snapshot())->obtenerTablaDeSnapshot($snapshotId, 'gastos_fijos'),
+                    static fn (array $fila): bool => (int) ($fila['anio_presupuestal_id'] ?? 0) === $anioPresupuestalId
+                ))
+                : [];
+        } else {
+            try {
+                $filas = (new GastoFijo())->obtenerPorAnio($anioPresupuestalId);
+            } catch (PDOException $excepcion) {
+                $filas = [];
+            }
+        }
+
+        return array_map(static function (array $fila): array {
+            $fila['id_gasto_fijo'] = (int) $fila['id'];
+            $fila['id'] = -(int) $fila['id'];
+            $fila['es_gasto_fijo'] = true;
+
+            return $fila;
+        }, $filas);
     }
 
     private function obtenerModeloModulo(string $origen)

@@ -49,6 +49,7 @@ require_once __DIR__ . '/controlador/SedeControlador.php';
 require_once __DIR__ . '/controlador/DependenciaControlador.php';
 require_once __DIR__ . '/controlador/RelojArenaControlador.php';
 require_once __DIR__ . '/controlador/MensajeGlobalControlador.php';
+require_once __DIR__ . '/controlador/GastoFijoControlador.php';
 require_once __DIR__ . '/controlador/RepositorioControlador.php';
 require_once __DIR__ . '/controlador/AutogestionControlador.php';
 require_once __DIR__ . '/controlador/ExtensionControlador.php';
@@ -119,6 +120,9 @@ $rutaAMenuKey = [
     'variables-macroeconomicas' => 'configuraciones',
     'reloj-arena' => 'configuraciones',
     'mensaje-global' => 'configuraciones',
+    'gastos-fijos' => 'configuraciones',
+    'gastos-fijos-exportar-plantilla' => 'configuraciones',
+    'gastos-fijos-exportar' => 'configuraciones',
 ];
 
 if (
@@ -192,6 +196,18 @@ switch ($ruta) {
 
     case 'mensaje-global':
         (new MensajeGlobalControlador())->index();
+        break;
+
+    case 'gastos-fijos':
+        (new GastoFijoControlador())->index();
+        break;
+
+    case 'gastos-fijos-exportar-plantilla':
+        (new GastoFijoControlador())->exportarPlantilla();
+        break;
+
+    case 'gastos-fijos-exportar':
+        (new GastoFijoControlador())->exportar();
         break;
 
     case 'repositorios':

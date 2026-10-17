@@ -511,6 +511,39 @@ CREATE TABLE IF NOT EXISTS codigos_verificacion_envio (
 SQL],
 ];
 
+$pasos[] = [
+    'seccion' => 'Configuraciones > Gastos fijos',
+    'que' => 'Tabla gastos_fijos (solo se reflejan en Análisis de distribución)',
+    'falta' => fn() => !tablaExiste($pdo, 'gastos_fijos'),
+    'sql' => [<<<'SQL'
+CREATE TABLE IF NOT EXISTS gastos_fijos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    anio_presupuestal_id INT NOT NULL,
+    sede_id INT NOT NULL,
+    dependencia VARCHAR(150) NOT NULL,
+    linea_id INT NOT NULL,
+    motor_id INT NOT NULL,
+    proyecto_id INT NOT NULL,
+    objeto_proyecto_paa VARCHAR(200) NOT NULL DEFAULT '',
+    actividad VARCHAR(255) NOT NULL,
+    rubro_id INT NULL,
+    insumo VARCHAR(200) NOT NULL,
+    cantidad INT NOT NULL,
+    costo_unitario DECIMAL(15,2) NOT NULL,
+    valor_total DECIMAL(15,2) NOT NULL,
+    meses VARCHAR(150) NOT NULL DEFAULT '',
+    categoria_gasto_id VARCHAR(10) NULL,
+    categoria_origen ENUM('manual','automatico','no_aplica') NULL,
+    categoria_confianza DECIMAL(4,3) NULL,
+    usuario_id INT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_gastos_fijos_anio (anio_presupuestal_id),
+    CONSTRAINT fk_gastos_fijos_anio FOREIGN KEY (anio_presupuestal_id) REFERENCES anios_presupuestales(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL],
+];
+
 // --- Instalar -----------------------------------------------------------------------------------
 
 $resultados = null;

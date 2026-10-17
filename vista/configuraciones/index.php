@@ -78,6 +78,15 @@ require __DIR__ . '/../parciales/encabezado.php';
                     </div>
                     <p class="texto-atenuado">Gestiona los porcentajes a gastos, excedentes e inversiones.</p>
                 </a>
+                <?php if ($esSuperAdmin): ?>
+                <a href="index.php?ruta=gastos-fijos" class="tarjeta-modulo">
+                    <div class="tarjeta-modulo-cabecera">
+                        <h2>Gastos fijos</h2>
+                        <?= $flechaModulo ?>
+                    </div>
+                    <p class="texto-atenuado">Gastos fijos por año que solo se reflejan en Análisis de distribución.</p>
+                </a>
+                <?php endif; ?>
             </div>
         </section>
 

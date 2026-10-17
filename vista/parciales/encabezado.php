@@ -161,11 +161,65 @@ if (!empty($_SESSION['usuario_id'])) {
                               <!--  <span class="detalle-usuario">Rol: <?= htmlspecialchars($rolActual) ?></span> -->
                             </div>
                             <a href="index.php?ruta=perfil">Perfil</a>
+                            <a href="#" id="boton-abrir-acerca-de">Acerca de nosotros</a>
                             <a href="index.php?ruta=logout">Cerrar sesión</a>
                         </div>
                     </div>
                 </div>
             </header>
+
+            <?php // Mismo "Acerca de nosotros" de la app FOR-DE-144 (uniatlantico/vista/complementos/header.php). ?>
+            <div id="modal-acerca-de" class="modal-fondo">
+                <div class="modal-caja acerca-de-caja" role="dialog" aria-modal="true" aria-labelledby="acerca-de-titulo">
+                    <button type="button" class="modal-cerrar acerca-de-cerrar" id="boton-cerrar-acerca-de" aria-label="Cerrar">&times;</button>
+                    <div class="acerca-de-cuerpo">
+                        <span class="acerca-de-icono" aria-hidden="true">
+                            <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z"></path></svg>
+                        </span>
+                        <h2 id="acerca-de-titulo">Acerca de nosotros</h2>
+                        <p>
+                            Este software fue diseñado y desarrollado por
+                            <strong>Cloud Control Technology</strong>, por
+                            <strong>Jorge Albeiro Valencia Bolívar</strong>, quien otorga
+                            uso, adquisición y entrega total de propiedad intelectual a la
+                            <strong>Universidad del Atlántico</strong> y todas sus asociaciones,
+                            dependencias y organismos afiliados. La Universidad del
+                            Atlántico es titular y propietaria de todos los derechos sobre
+                            esta plataforma y sus desarrollos derivados.
+                        </p>
+                        <div class="acerca-de-agradecimiento">
+                            Agradecimiento especial a <strong>Gabriel Romero</strong>,
+                            <strong>Shirlene Buelvas</strong> y <strong>Graciela Angulo</strong>
+                            por ser fuente de apoyo e inspiración para las funciones y experiencia
+                            de usuario en los desarrollos que se han venido realizando en la
+                            Oficina de Planeación de la Universidad del Atlántico sede Norte.
+                        </div>
+                    </div>
+                    <div class="acerca-de-pie">
+                        <span class="acerca-de-pie-icono" aria-hidden="true">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"></path><path d="M5 21V10l7-5 7 5v11"></path><path d="M9 21v-6h6v6"></path></svg>
+                        </span>
+                        <span>&copy; 2026 Cloud Control Technology &middot; Universidad del Atlántico</span>
+                    </div>
+                </div>
+            </div>
+            <script>
+            (function () {
+                var modal = document.getElementById('modal-acerca-de');
+                var abrir = document.getElementById('boton-abrir-acerca-de');
+                if (!modal || !abrir) { return; }
+                function cerrar() { modal.classList.remove('abierto'); }
+                abrir.addEventListener('click', function (evento) {
+                    evento.preventDefault();
+                    var dropdown = document.getElementById('menu-usuario-dropdown');
+                    if (dropdown) { dropdown.classList.remove('abierto'); }
+                    modal.classList.add('abierto');
+                });
+                document.getElementById('boton-cerrar-acerca-de').addEventListener('click', cerrar);
+                modal.addEventListener('click', function (evento) { if (evento.target === modal) { cerrar(); } });
+                document.addEventListener('keydown', function (evento) { if (evento.key === 'Escape') { cerrar(); } });
+            })();
+            </script>
 
             <div id="modal-ver-mensaje" class="modal-fondo">
                 <div class="modal-caja modal-caja-mensaje">
