@@ -4962,6 +4962,14 @@ svg.svg-exportar {
     color: var(--color-texto-tenue);
 }
 
+/* Inicio de Consejo Superior: la etiqueta (configurable, por defecto "días") va debajo del anillo. */
+.reloj-arena-etiqueta-externa {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-texto-secundario);
+    text-align: center;
+}
+
 .lista-variables-macro li {
     display: flex;
     justify-content: space-between;

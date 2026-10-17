@@ -67,7 +67,9 @@ class DashboardControlador
                 (new VariableMacroeconomica())->obtenerTodas(),
                 static fn (array $variable): bool => $variable['estado'] === 'activo'
             ));
-            $relojArena = $this->obtenerRelojArena((new RelojArenaConsejo())->obtenerConDefecto());
+            $configuracionRelojConsejo = (new RelojArenaConsejo())->obtenerConDefecto();
+            $relojArena = $this->obtenerRelojArena($configuracionRelojConsejo);
+            $etiquetaRelojConsejo = $configuracionRelojConsejo['etiqueta'] ?? RelojArenaConsejo::ETIQUETA_POR_DEFECTO;
             $mensajesGlobales = (new MensajeGlobal())->listar('consejo_superior');
 
             require __DIR__ . '/../vista/dashboard/consejo.php';

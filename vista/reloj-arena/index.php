@@ -22,7 +22,7 @@
 
     <div class="tarjeta">
         <h1>Reloj de arena del Consejo Superior</h1>
-        <p class="texto-atenuado">Define las fechas del reloj de arena que ven en su inicio los usuarios del Consejo Superior.</p>
+        <p class="texto-atenuado">Define las fechas del reloj de arena que ven en su inicio los usuarios del Consejo Superior, y el texto que aparece debajo del anillo.</p>
 
         <?php if (!empty($errorConsejo)): ?>
             <p class="mensaje-error"><?= htmlspecialchars($errorConsejo) ?></p>
@@ -36,6 +36,7 @@
             <input type="hidden" name="formulario" value="consejo">
             <input type="date" name="fecha_inicio" value="<?= htmlspecialchars($configuracionConsejo['fecha_inicio'] ?? '') ?>" required>
             <input type="date" name="fecha_cierre" value="<?= htmlspecialchars($configuracionConsejo['fecha_cierre'] ?? '') ?>" required>
+            <input type="text" name="etiqueta" value="<?= htmlspecialchars($configuracionConsejo['etiqueta'] ?? RelojArenaConsejo::ETIQUETA_POR_DEFECTO) ?>" maxlength="60" placeholder="días" title="Texto debajo del anillo (por defecto: días)" aria-label="Texto debajo del anillo">
             <button type="submit">Guardar</button>
         </form>
     </div>

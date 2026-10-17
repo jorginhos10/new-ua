@@ -61,9 +61,15 @@ $totalDiapositivas = max(1, count($diapositivasMensaje));
                                     data-offset-final="<?= $offsetFinal ?>"
                                     style="stroke-dasharray: <?= $circunferencia ?>; stroke-dashoffset: <?= $circunferencia ?>;"
                                 ></circle>
-                                <text x="60" y="56" text-anchor="middle" class="reloj-arena-anillo-numero"><?= (int) $relojArena['faltante'] ?></text>
-                                <text x="60" y="76" text-anchor="middle" class="reloj-arena-anillo-etiqueta"><?= htmlspecialchars($relojArena['unidad']) ?></text>
+                                <text x="60" y="60" text-anchor="middle" dominant-baseline="central" class="reloj-arena-anillo-numero"><?= (int) $relojArena['faltante'] ?></text>
                             </svg>
+                            <?php
+                            // La etiqueta va debajo del anillo y se edita en Configuraciones > Reloj de
+                            // arena (por defecto "días"); si faltan menos de dos días el número está en
+                            // horas, así que ahí se muestra la unidad real en vez de la etiqueta.
+                            $esUnidadDias = in_array($relojArena['unidad'], ['día', 'días'], true);
+                            ?>
+                            <span class="reloj-arena-etiqueta-externa"><?= htmlspecialchars($esUnidadDias ? ($etiquetaRelojConsejo ?? 'días') : $relojArena['unidad']) ?></span>
                             <span class="reloj-arena-fechas"><?= htmlspecialchars($relojArena['fecha_inicio']) ?> — <?= htmlspecialchars($relojArena['fecha_cierre']) ?></span>
                             <?php endif; ?>
                         </div>

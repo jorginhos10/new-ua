@@ -137,6 +137,13 @@ SQL],
 ];
 
 $pasos[] = [
+    'seccion' => 'Consejo Superior',
+    'que' => 'Columna reloj_arena_consejo.etiqueta (texto bajo el anillo, por defecto "días")',
+    'falta' => fn() => tablaExiste($pdo, 'reloj_arena_consejo') && !columnaExiste($pdo, 'reloj_arena_consejo', 'etiqueta'),
+    'sql' => ["ALTER TABLE reloj_arena_consejo ADD COLUMN etiqueta VARCHAR(60) NOT NULL DEFAULT 'días' AFTER fecha_cierre"],
+];
+
+$pasos[] = [
     'seccion' => 'Configuraciones > Sedes',
     'que' => 'Columna sedes.nit (01 a 06 para las sedes iniciales)',
     'falta' => fn() => !columnaExiste($pdo, 'sedes', 'nit'),

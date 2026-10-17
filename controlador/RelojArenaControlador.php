@@ -67,6 +67,20 @@ class RelojArenaControlador
             return ['La fecha de cierre debe ser posterior a la fecha de inicio.', ''];
         }
 
+        // Solo el reloj del Consejo Superior tiene etiqueta editable (el texto bajo el anillo).
+        if ($modelo instanceof RelojArenaConsejo) {
+            $etiqueta = trim((string) ($_POST['etiqueta'] ?? ''));
+            if ($etiqueta === '') {
+                $etiqueta = RelojArenaConsejo::ETIQUETA_POR_DEFECTO;
+            }
+            if (mb_strlen($etiqueta) > 60) {
+                return ['La etiqueta no puede pasar de 60 caracteres.', ''];
+            }
+            $modelo->guardar($fechaInicio, $fechaCierre, $etiqueta);
+
+            return ['', 'Fechas y etiqueta guardadas correctamente.'];
+        }
+
         $modelo->guardar($fechaInicio, $fechaCierre);
 
         return ['', 'Fechas guardadas correctamente.'];
