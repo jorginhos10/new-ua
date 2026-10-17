@@ -28,6 +28,11 @@ if (!empty($_SESSION['usuario_id'])) {
         require_once __DIR__ . '/../../modelo/Rol.php';
         $rolCatalogoEncabezado = (new Rol())->obtenerPorId((int) $usuarioEncabezado['rol_id']);
         $rolActual = $rolCatalogoEncabezado['nombre'] ?? $rolActual;
+        // Cuentas de tipo Consejo Superior: su rol "Consulta" se muestra como "Consejo Superior"
+        // (igual que en la pestaña Consejo Superior de Usuarios).
+        if (($_SESSION['usuario_rol'] ?? '') === 'consejo_superior' && $rolActual === 'Consulta') {
+            $rolActual = 'Consejo Superior';
+        }
     }
 }
 $urlActualEncabezado = 'index.php?' . http_build_query($_GET);
