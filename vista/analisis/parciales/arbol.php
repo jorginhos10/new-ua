@@ -21,7 +21,25 @@
  * $tab === 'programacion' — "Proyectos" también usa $modoColumnas 'completo' pero no tiene lados.
  */
 
-function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $padreId, array $columnasExtra = [], bool $mostrarVariacion = false, bool $expandido = true): void
+/** Color de cada grupo raíz (por su posición) — lo comparten el árbol y su gráfica (arbol-grafica.php). */
+function colorGrupoArbol(int $indiceRaiz): string
+{
+    $paleta = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+
+    return $paleta[$indiceRaiz % count($paleta)];
+}
+
+/**
+ * Marcador de nivel, igual en el árbol y en su gráfica: una forma distinta por profundidad
+ * (nivel 0 ■, nivel 1 □, nivel 2 ●, nivel 3 o más ○), del color de su grupo raíz.
+ */
+function marcadorNivelArbol(int $nivel, string $color): string
+{
+    return '<span class="arbol-marcador arbol-marcador-n' . min($nivel, 3) . '" style="--arbol-marcador-color: '
+        . htmlspecialchars($color) . ';" title="Nivel ' . ($nivel + 1) . '" aria-hidden="true"></span>';
+}
+
+function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $padreId, array $columnasExtra = [], bool $mostrarVariacion = false, bool $expandido = true, string $colorGrupo = '#2a78d6'): void
 {
     $tieneHijos = !empty($nodo['hijos']);
     $esTotal = $nodo['esTotal'] ?? false;
@@ -39,14 +57,16 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
     // El flex vive en un <div> interno, nunca en el <td>: un <td> con display:flex deja de ser
     // celda de tabla y descuadra sus bordes/ancho contra el resto de la columna.
     echo '<td class="arbol-celda-etiqueta"><div class="arbol-etiqueta-contenido">';
-    echo '<span class="arbol-sangria" style="width:' . ($nodo['nivel'] * 24) . 'px"></span>';
+    echo '<span class="arbol-sangria" style="width: calc(' . (int) $nodo['nivel'] . ' * var(--arbol-sangria-paso));"></span>';
     if ($tieneHijos) {
         echo '<button type="button" class="arbol-boton-expandir" data-id="' . htmlspecialchars($nodo['id']) . '" title="Contraer/expandir" aria-label="Contraer/expandir" aria-expanded="' . ($expandido ? 'true' : 'false') . '">'
             . '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>'
             . '</button>';
     } else {
-        echo '<span class="arbol-punto" aria-hidden="true"></span>';
+        // Mismo ancho que el botón de despliegue: las hojas quedan alineadas con sus hermanas.
+        echo '<span class="arbol-espaciador" aria-hidden="true"></span>';
     }
+    echo marcadorNivelArbol((int) $nodo['nivel'], $colorGrupo);
     $tituloEtiqueta = $tieneHijos ? 'Clic para contraer/expandir · doble clic para renombrar (solo Tiempo real)' : 'Doble clic para renombrar (solo Tiempo real)';
     echo '<span class="arbol-etiqueta-texto" title="' . $tituloEtiqueta . '">' . htmlspecialchars($nodo['etiqueta']) . '</span>';
     echo '</div></td>';
@@ -73,7 +93,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
     echo '</tr>';
 
     foreach ($nodo['hijos'] as $hijo) {
-        renderFilaArbolAnalisis($hijo, $columnasAnios, $nodo['id'], $columnasExtra, $mostrarVariacion, $expandido);
+        renderFilaArbolAnalisis($hijo, $columnasAnios, $nodo['id'], $columnasExtra, $mostrarVariacion, $expandido, $colorGrupo);
     }
 }
 ?>
@@ -181,11 +201,6 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         min-height: 0;
         display: flex;
         flex-direction: column;
-    }
-
-    .arbol-grafica-contenedor .tabla-scroll {
-        flex: 1;
-        min-height: 0;
     }
 
     .arbol-tabla {
@@ -431,14 +446,46 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         display: none;
     }
 
-    .arbol-tabla {
+    /* Tamaños compartidos por el árbol y su gráfica (arbol-grafica.php): mismo botón de despliegue
+       y misma sangría por nivel en las dos vistas. */
+    .arbol-tabla,
+    .arbol-grafica-filas {
         --arbol-control: 32px;
+        --arbol-sangria-paso: 24px;
     }
 
     /* Táctil: el botón de despliegue crece a un tamaño cómodo para el dedo. */
     @media (pointer: coarse) {
-        .arbol-tabla {
+        .arbol-tabla,
+        .arbol-grafica-filas {
             --arbol-control: 40px;
+        }
+    }
+
+    /* Móvil: menos sangría y relleno para que la descripción no se coma la pantalla. */
+    @media (max-width: 640px) {
+        .arbol-tabla,
+        .arbol-grafica-filas {
+            --arbol-sangria-paso: 12px;
+        }
+
+        .arbol-tabla th,
+        .arbol-tabla td {
+            padding: 0.35rem 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .arbol-tabla .arbol-celda-etiqueta {
+            min-width: 170px;
+        }
+
+        .arbol-topbar {
+            padding: 0.4rem 0.25rem 0.6rem;
+        }
+
+        .arbol-acciones {
+            margin-left: 0;
+            width: 100%;
         }
     }
 
@@ -497,15 +544,45 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
 
     /* Mismo ancho que el botón de despliegue, para que las hojas queden alineadas con sus
        hermanas que sí tienen hijos. */
-    .arbol-punto {
+    .arbol-espaciador {
         display: inline-block;
-        width: 4px;
-        height: 4px;
-        min-width: 4px;
-        border-radius: 50%;
-        background: var(--color-borde-hover);
-        margin: 0 calc((var(--arbol-control) - 4px) / 2);
+        width: var(--arbol-control);
         flex-shrink: 0;
+    }
+
+    /* Marcador de nivel (ver marcadorNivelArbol()): ■ nivel 0, □ nivel 1, ● nivel 2, ○ nivel 3+,
+       del color del grupo raíz — igual en el árbol y en la gráfica. */
+    .arbol-marcador {
+        display: inline-block;
+        flex-shrink: 0;
+        box-sizing: border-box;
+        width: 10px;
+        height: 10px;
+        border: 2px solid var(--arbol-marcador-color);
+    }
+
+    .arbol-marcador-n0 {
+        background: var(--arbol-marcador-color);
+        border-radius: 3px;
+    }
+
+    .arbol-marcador-n1 {
+        background: transparent;
+        border-radius: 3px;
+    }
+
+    .arbol-marcador-n2 {
+        width: 8px;
+        height: 8px;
+        background: var(--arbol-marcador-color);
+        border-radius: 50%;
+    }
+
+    .arbol-marcador-n3 {
+        width: 8px;
+        height: 8px;
+        background: transparent;
+        border-radius: 50%;
     }
 </style>
 
@@ -582,8 +659,8 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
                 <?php if (empty($arbolDatos)): ?>
                 <tr><td colspan="<?= count($columnasAnios) + 1 + count($columnasExtra) + ($mostrarVariacion ? 3 : 0) ?>" class="texto-atenuado arbol-celda-vacia">No hay datos para mostrar.</td></tr>
                 <?php endif; ?>
-                <?php foreach ($arbolDatos as $nodoLinea): ?>
-                <?php renderFilaArbolAnalisis($nodoLinea, $columnasAnios, null, $columnasExtra, $mostrarVariacion, $arbolExpandidoPorDefecto); ?>
+                <?php foreach ($arbolDatos as $indiceRaiz => $nodoLinea): ?>
+                <?php renderFilaArbolAnalisis($nodoLinea, $columnasAnios, null, $columnasExtra, $mostrarVariacion, $arbolExpandidoPorDefecto, colorGrupoArbol((int) $indiceRaiz)); ?>
                 <?php endforeach; ?>
             </tbody>
         </table>
