@@ -935,7 +935,8 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // --- % Participación = valor de la línea / valor de su Gran Grupo (la raíz nivel-0 de la que
+    // --- % Participación: por defecto valor de la línea / Total general (fila "Total", igual que la
+    // gráfica); con el toggle del encabezado, / valor de su Gran Grupo (la raíz nivel-0 de la que
     // cuelga, código "1", "2", "3"...) — para una raíz, eso es ella misma, por eso le queda 100%.
     // Columna siempre visible (a diferencia de Var. %, que depende de "Año anterior"); el título
     // de la cabecera queda corto ("%") para ahorrar espacio, con la explicación larga como tooltip. ---
@@ -947,15 +948,31 @@ document.addEventListener('DOMContentLoaded', function () {
         return actual;
     }
 
+    // Modo del "%" (toggle en su encabezado, guardado por pestaña): 'total' = sobre el Total
+    // general (la fila "Total", igual que la gráfica — por defecto) o 'grupo' = sobre su Gran Grupo.
+    var CLAVE_PORCENTAJE = 'analisis_arbol_porcentaje_modo_' + sufijoClaveArbol;
+    var modoPorcentajeArbol = 'total';
+    try {
+        if (localStorage.getItem(CLAVE_PORCENTAJE) === 'grupo') { modoPorcentajeArbol = 'grupo'; }
+    } catch (error) {
+        // localStorage no disponible: queda el modo por defecto
+    }
+
     function actualizarPorcentajesGrupoArbol() {
+        var celdaTotalGeneral = filaTotalesArbol ? filaTotalesArbol.querySelector('[data-clave="vigente"]') : null;
+        var totalGeneral = celdaTotalGeneral ? parseFloat(celdaTotalGeneral.dataset.valor) : NaN;
+
         Array.prototype.forEach.call(tabla.querySelectorAll('.arbol-celda-porcentaje-grupo'), function (celda) {
             var fila = celda.parentNode;
-            var filaGrupo = filaGrupoRaizArbol(fila);
             var celdaValor = fila.querySelector('[data-clave="vigente"]');
-            var celdaGrupo = filaGrupo ? filaGrupo.querySelector('[data-clave="vigente"]') : null;
             var valor = celdaValor ? parseFloat(celdaValor.dataset.valor) : NaN;
-            var totalGrupo = celdaGrupo ? parseFloat(celdaGrupo.dataset.valor) : NaN;
-            var porcentaje = valor / totalGrupo * 100;
+            var denominador = totalGeneral;
+            if (modoPorcentajeArbol === 'grupo') {
+                var filaGrupo = filaGrupoRaizArbol(fila);
+                var celdaGrupo = filaGrupo ? filaGrupo.querySelector('[data-clave="vigente"]') : null;
+                denominador = celdaGrupo ? parseFloat(celdaGrupo.dataset.valor) : NaN;
+            }
+            var porcentaje = valor / denominador * 100;
 
             celda.classList.remove('variacion-na');
             if (!isFinite(porcentaje)) {
@@ -967,6 +984,32 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // Encabezado "%" como toggle (mismo estilo que el de la columna "a corte"): el texto dice el
+    // modo activo y un clic alterna, recalcula y guarda la elección.
+    var encabezadoPorcentajeArbol = tabla.querySelector('thead tr:first-child th.porcentaje-grupo');
+
+    function pintarEncabezadoPorcentajeArbol() {
+        if (!encabezadoPorcentajeArbol) { return; }
+        var esTotal = modoPorcentajeArbol === 'total';
+        encabezadoPorcentajeArbol.textContent = esTotal ? '% total' : '% grupo';
+        encabezadoPorcentajeArbol.title = (esTotal
+            ? 'Porcentaje de cada línea sobre el Total general (como en la gráfica)'
+            : 'Porcentaje de cada línea sobre el total de su Gran Grupo (1, 2, 3...)')
+            + ' · clic para alternar';
+        encabezadoPorcentajeArbol.classList.toggle('mostrando-porcentaje', !esTotal);
+    }
+
+    if (encabezadoPorcentajeArbol) {
+        encabezadoPorcentajeArbol.classList.add('arbol-encabezado-alternable');
+        encabezadoPorcentajeArbol.addEventListener('click', function () {
+            modoPorcentajeArbol = modoPorcentajeArbol === 'total' ? 'grupo' : 'total';
+            try { localStorage.setItem(CLAVE_PORCENTAJE, modoPorcentajeArbol); } catch (error) { /* no persiste */ }
+            pintarEncabezadoPorcentajeArbol();
+            actualizarPorcentajesGrupoArbol();
+        });
+    }
+
+    pintarEncabezadoPorcentajeArbol();
     actualizarVariacionesArbol();
     actualizarPorcentajesGrupoArbol();
 
