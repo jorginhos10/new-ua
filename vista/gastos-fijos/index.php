@@ -24,102 +24,318 @@ $totalAnio = array_sum(array_map(static fn (array $g): float => (float) $g['valo
 require __DIR__ . '/../parciales/encabezado.php';
 ?>
 
-    <div class="tarjeta">
-        <div class="tarjeta-encabezado" style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
-            <div>
-                <h1 style="margin: 0;">Gastos fijos</h1>
-                <p class="texto-atenuado" style="margin: 0.25rem 0 0;">Solo se reflejan en Análisis &gt; Análisis de distribución (módulo Gasto). No afectan Gastos, Techos, Techos y Metas, Dashboard ni Articulación PDI.</p>
-            </div>
-            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                <form method="GET" action="index.php">
-                    <input type="hidden" name="ruta" value="gastos-fijos">
-                    <select name="anio_id" onchange="this.form.submit()" aria-label="Año presupuestal">
-                        <?php foreach ($aniosActivos as $anioOpcion): ?>
-                        <option value="<?= (int) $anioOpcion['id'] ?>" <?= (int) $anioOpcion['id'] === $anioSeleccionadoId ? 'selected' : '' ?>><?= htmlspecialchars((string) $anioOpcion['anio']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </form>
-                <a class="icono-boton" href="index.php?ruta=gastos-fijos-exportar-plantilla" title="Descargar plantilla">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                </a>
-                <button type="button" class="icono-boton" id="boton-importar-gastos-fijos" title="Importar plantilla">
-                    <svg class="svg-importar" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-                </button>
-                <a class="icono-boton" href="index.php?ruta=gastos-fijos-exportar&amp;anio_id=<?= (int) $anioSeleccionadoId ?>" title="Exportar a Excel">
-                    <svg class="svg-exportar" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                </a>
-                <button type="button" class="boton-agregar" id="boton-abrir-modal-gasto">+ Agregar gasto fijo</button>
-            </div>
-        </div>
+    <div class="tarjeta gastos-fijos">
+        <?php
+        // Misma barra estándar que Gastos (vista/parciales/barra-modulo.php): volver a
+        // Configuraciones · título + año · píldoras de íconos (buscar · plantilla/importar/exportar)
+        // · acción principal.
+        $anioTextoActual = '';
+        foreach ($aniosActivos as $anioOpcion) {
+            if ((int) $anioOpcion['id'] === $anioSeleccionadoId) {
+                $anioTextoActual = (string) $anioOpcion['anio'];
+            }
+        }
+        ob_start();
+        ?>
+        <form method="GET" action="index.php" class="gastos-fijos-anio">
+            <input type="hidden" name="ruta" value="gastos-fijos">
+            <select name="anio_id" onchange="this.form.submit()" aria-label="Año presupuestal" title="Año presupuestal">
+                <?php foreach ($aniosActivos as $anioOpcion): ?>
+                <option value="<?= (int) $anioOpcion['id'] ?>" <?= (int) $anioOpcion['id'] === $anioSeleccionadoId ? 'selected' : '' ?>><?= htmlspecialchars((string) $anioOpcion['anio']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </form>
+        <?php
+        $barraTituloExtra = ob_get_clean();
+        $barraTitulo = 'Gastos fijos';
+        $barraEstado = 'consulta';
+        $barraRutaVolver = 'index.php?ruta=configuraciones';
+        $barraTextoVolver = 'Volver a Configuraciones';
+        $barraGruposIconos = [
+            'basico' => [],
+            'especifico' => [],
+            'datos' => [
+                ['icono' => 'plantilla', 'etiqueta' => 'Descargar plantilla (.xlsx)', 'tipo' => 'a', 'href' => 'index.php?ruta=gastos-fijos-exportar-plantilla'],
+                ['id' => 'boton-importar-gastos-fijos', 'icono' => 'importar', 'etiqueta' => 'Importar gastos fijos (.xlsx)'],
+                ['icono' => 'exportar', 'etiqueta' => 'Exportar gastos fijos (.xlsx)', 'tipo' => 'a', 'href' => 'index.php?ruta=gastos-fijos-exportar&anio_id=' . (int) $anioSeleccionadoId, 'disabled' => empty($gastosFijos), 'titulo_disabled' => 'No hay gastos fijos para exportar en este año'],
+            ],
+        ];
+        $barraBuscar = empty($gastosFijos) ? null : '[data-buscar-gastos-fijos]';
+        $barraBotonEnviar = null;
+        $barraBotonPrincipal = ['id' => 'boton-abrir-modal-gasto', 'etiqueta' => '+ Agregar gasto fijo'];
+        require __DIR__ . '/../parciales/barra-modulo.php';
+
+        $dependenciasDistintas = count(array_unique(array_column($gastosFijos, 'dependencia')));
+        ?>
 
         <form method="POST" action="index.php?ruta=gastos-fijos&amp;anio_id=<?= (int) $anioSeleccionadoId ?>" enctype="multipart/form-data" id="form-importar-gastos-fijos" style="display: none;">
             <input type="hidden" name="accion" value="importar">
             <input type="file" name="archivo" id="archivo-importar-gastos-fijos" accept=".xlsx">
         </form>
 
+        <div class="gastos-fijos-aviso">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <span>Estos gastos <strong>solo se reflejan en Análisis &rsaquo; Análisis de distribución</strong> (módulo Gasto, como "Gasto fijo"). No afectan Gastos, Techos, Techos y Metas, Dashboard ni Articulación PDI.</span>
+        </div>
+
         <?php if ($error !== ''): ?>
-        <p class="mensaje-error"><?= htmlspecialchars($error) ?></p>
-        <?php if (!empty($erroresFila)): ?>
-        <ul class="lista-errores-importacion">
-            <?php foreach ($erroresFila as $errorFila): ?>
-            <li><?= htmlspecialchars($errorFila) ?></li>
-            <?php endforeach; ?>
-        </ul>
-        <?php endif; ?>
+        <div class="mensaje-error">
+            <?= htmlspecialchars($error) ?>
+            <?php if (!empty($erroresFila)): ?>
+            <ul class="lista-errores-importacion">
+                <?php foreach ($erroresFila as $errorFila): ?>
+                <li><?= htmlspecialchars($errorFila) ?></li>
+                <?php endforeach; ?>
+            </ul>
+            <?php endif; ?>
+        </div>
         <?php endif; ?>
         <?php if ($exito !== ''): ?>
         <p class="mensaje-exito"><?= htmlspecialchars($exito) ?></p>
         <?php endif; ?>
 
-        <p class="texto-atenuado"><?= count($gastosFijos) ?> gasto(s) fijo(s) · Total $<?= number_format($totalAnio, 2, ',', '.') ?></p>
+        <?php if (empty($gastosFijos)): ?>
+        <div class="gastos-fijos-vacio">
+            <span class="gastos-fijos-vacio-icono" aria-hidden="true">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="12" y1="14" x2="12" y2="18"></line><line x1="10" y1="16" x2="14" y2="16"></line></svg>
+            </span>
+            <h2>Aún no hay gastos fijos para <?= htmlspecialchars($anioTextoActual) ?></h2>
+            <p class="texto-atenuado">Regístralos uno a uno con el mismo formulario de Gastos, o cárgalos en bloque desde la plantilla de Excel.</p>
+            <div class="gastos-fijos-vacio-acciones">
+                <button type="button" class="boton-agregar" onclick="document.getElementById('boton-abrir-modal-gasto').click();">+ Agregar gasto fijo</button>
+                <a class="boton-secundario" href="index.php?ruta=gastos-fijos-exportar-plantilla">Descargar plantilla</a>
+                <button type="button" class="boton-secundario" onclick="document.getElementById('boton-importar-gastos-fijos').click();">Importar Excel</button>
+            </div>
+        </div>
+        <?php else: ?>
+        <div class="chips-gasto gastos-fijos-chips">
+            <span class="chip-gasto chip-gasto-techo-total">Total <?= htmlspecialchars($anioTextoActual) ?>: $<?= number_format($totalAnio, 2, ',', '.') ?></span>
+            <span class="chip-gasto chip-gasto-propio"><?= count($gastosFijos) ?> gasto<?= count($gastosFijos) === 1 ? '' : 's' ?> fijo<?= count($gastosFijos) === 1 ? '' : 's' ?></span>
+            <span class="chip-gasto chip-gasto-propio"><?= $dependenciasDistintas ?> dependencia<?= $dependenciasDistintas === 1 ? '' : 's' ?></span>
+        </div>
 
-        <div class="tabla-scroll">
+        <div class="tabla-scroll gastos-fijos-tabla" data-buscar-gastos-fijos>
             <table class="tabla-usuarios">
                 <thead>
                     <tr>
                         <th>Dependencia</th>
-                        <th>Sede</th>
                         <th>Proyecto PDI</th>
-                        <th>Actividad</th>
+                        <th>Actividad / insumo</th>
                         <th>Rubro</th>
-                        <th>Insumo</th>
-                        <th>Cantidad</th>
-                        <th>Costo unitario</th>
-                        <th>Valor total</th>
+                        <th class="celda-numero">Cantidad × costo</th>
+                        <th class="celda-numero">Valor total</th>
                         <th>Meses</th>
-                        <th>Acciones</th>
+                        <th class="celda-acciones"><span class="sr-solo">Acciones</span></th>
                     </tr>
                 </thead>
                 <tbody>
-                    <?php if (empty($gastosFijos)): ?>
-                    <tr><td colspan="11" class="texto-atenuado">No hay gastos fijos para este año.</td></tr>
-                    <?php endif; ?>
                     <?php foreach ($gastosFijos as $gastoFijo): ?>
-                    <tr>
-                        <td><?= htmlspecialchars(Dependencia::nombreVisible($gastoFijo['dependencia'])) ?></td>
-                        <td><?= htmlspecialchars($gastoFijo['sede_codigo'] . ' - ' . $gastoFijo['sede_nombre']) ?></td>
-                        <td><?= htmlspecialchars($gastoFijo['proyecto_codigo'] . ' - ' . $gastoFijo['proyecto_nombre']) ?></td>
-                        <td><?= htmlspecialchars($gastoFijo['actividad']) ?></td>
-                        <td><?= htmlspecialchars($gastoFijo['rubro_id'] !== null ? $gastoFijo['rubro_codigo'] . ' - ' . $gastoFijo['rubro_descripcion'] : '—') ?></td>
-                        <td><?= htmlspecialchars($gastoFijo['insumo']) ?></td>
-                        <td><?= (int) $gastoFijo['cantidad'] ?></td>
-                        <td>$<?= number_format((float) $gastoFijo['costo_unitario'], 2, ',', '.') ?></td>
-                        <td>$<?= number_format((float) $gastoFijo['valor_total'], 2, ',', '.') ?></td>
-                        <td><?= htmlspecialchars(implode(', ', array_map(static fn ($mes) => $nombresMeses[(int) $mes] ?? $mes, array_filter(explode(',', (string) $gastoFijo['meses']), 'strlen')))) ?></td>
-                        <td style="white-space: nowrap;">
-                            <a class="boton-accion boton-accion-editar" href="index.php?ruta=gastos-fijos&amp;anio_id=<?= (int) $anioSeleccionadoId ?>&amp;editar_id=<?= (int) $gastoFijo['id'] ?>">Editar</a>
-                            <form method="POST" action="index.php?ruta=gastos-fijos&amp;anio_id=<?= (int) $anioSeleccionadoId ?>" style="display: inline;" onsubmit="return confirm('¿Eliminar este gasto fijo? No se puede deshacer.');">
+                    <tr class="<?= $editando && (int) $valores['id'] === (int) $gastoFijo['id'] ? 'fila-editando' : '' ?>">
+                        <td>
+                            <strong><?= htmlspecialchars(Dependencia::nombreVisible($gastoFijo['dependencia'])) ?></strong>
+                            <span class="gastos-fijos-secundario"><?= htmlspecialchars($gastoFijo['sede_codigo'] . ' - ' . $gastoFijo['sede_nombre']) ?></span>
+                        </td>
+                        <td><span class="gastos-fijos-recortado" title="<?= htmlspecialchars($gastoFijo['proyecto_codigo'] . ' - ' . $gastoFijo['proyecto_nombre']) ?>"><?= htmlspecialchars($gastoFijo['proyecto_codigo'] . ' - ' . $gastoFijo['proyecto_nombre']) ?></span></td>
+                        <td>
+                            <?= htmlspecialchars($gastoFijo['actividad']) ?>
+                            <span class="gastos-fijos-secundario"><?= htmlspecialchars($gastoFijo['insumo']) ?></span>
+                        </td>
+                        <td><span class="gastos-fijos-recortado" title="<?= htmlspecialchars($gastoFijo['rubro_id'] !== null ? $gastoFijo['rubro_codigo'] . ' - ' . $gastoFijo['rubro_descripcion'] : '—') ?>"><?= htmlspecialchars($gastoFijo['rubro_id'] !== null ? $gastoFijo['rubro_codigo'] . ' - ' . $gastoFijo['rubro_descripcion'] : '—') ?></span></td>
+                        <td class="celda-numero">
+                            <?= (int) $gastoFijo['cantidad'] ?> × $<?= number_format((float) $gastoFijo['costo_unitario'], 2, ',', '.') ?>
+                        </td>
+                        <td class="celda-numero"><strong>$<?= number_format((float) $gastoFijo['valor_total'], 2, ',', '.') ?></strong></td>
+                        <td>
+                            <span class="gastos-fijos-meses">
+                                <?php foreach (array_filter(explode(',', (string) $gastoFijo['meses']), 'strlen') as $mes): ?>
+                                <span class="gastos-fijos-mes"><?= htmlspecialchars($nombresMeses[(int) $mes] ?? $mes) ?></span>
+                                <?php endforeach; ?>
+                            </span>
+                        </td>
+                        <td class="celda-acciones">
+                            <a class="boton-icono-accion" href="index.php?ruta=gastos-fijos&amp;anio_id=<?= (int) $anioSeleccionadoId ?>&amp;editar_id=<?= (int) $gastoFijo['id'] ?>" title="Editar" aria-label="Editar">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                            </a>
+                            <form method="POST" action="index.php?ruta=gastos-fijos&amp;anio_id=<?= (int) $anioSeleccionadoId ?>" onsubmit="return confirm('¿Eliminar este gasto fijo? No se puede deshacer.');">
                                 <input type="hidden" name="accion" value="eliminar">
                                 <input type="hidden" name="id" value="<?= (int) $gastoFijo['id'] ?>">
-                                <button type="submit" class="boton-accion boton-accion-eliminar">Eliminar</button>
+                                <button type="submit" class="boton-icono-accion gastos-fijos-eliminar" title="Eliminar" aria-label="Eliminar">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path></svg>
+                                </button>
                             </form>
                         </td>
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="5"><strong>Total</strong></td>
+                        <td class="celda-numero"><strong>$<?= number_format($totalAnio, 2, ',', '.') ?></strong></td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
+        <?php endif; ?>
     </div>
+
+    <style>
+        .gastos-fijos-anio select {
+            padding: 0.3rem 1.8rem 0.3rem 0.75rem;
+            border: 1px solid var(--color-borde);
+            border-radius: 999px;
+            background-color: var(--color-superficie);
+            font: inherit;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--color-texto);
+            cursor: pointer;
+        }
+
+        .gastos-fijos-aviso {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.6rem;
+            margin: 0.75rem 0 1rem;
+            padding: 0.7rem 0.9rem;
+            border-radius: var(--radio-chico);
+            background: var(--color-primario-suave);
+            color: var(--color-texto-secundario);
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+
+        .gastos-fijos-aviso svg {
+            flex-shrink: 0;
+            color: var(--color-primario);
+            margin-top: 0.1rem;
+        }
+
+        .gastos-fijos-chips {
+            margin: 0 0 0.85rem;
+        }
+
+        .gastos-fijos-vacio {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 0.4rem;
+            padding: 2.5rem 1rem;
+            border: 1px dashed var(--color-borde);
+            border-radius: var(--radio);
+        }
+
+        .gastos-fijos-vacio-icono {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: var(--color-primario-suave);
+            color: var(--color-primario);
+            margin-bottom: 0.4rem;
+        }
+
+        .gastos-fijos-vacio h2 {
+            margin: 0;
+            font-size: 1.1rem;
+        }
+
+        .gastos-fijos-vacio p {
+            margin: 0 0 0.6rem;
+            max-width: 460px;
+        }
+
+        .gastos-fijos-vacio-acciones {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .gastos-fijos-tabla td {
+            vertical-align: top;
+        }
+
+        .gastos-fijos-tabla tbody tr:hover {
+            background: var(--color-fondo);
+        }
+
+        .gastos-fijos-tabla tr.fila-editando {
+            background: var(--color-primario-suave);
+        }
+
+        .gastos-fijos-tabla .celda-numero {
+            text-align: right;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .gastos-fijos-tabla .celda-acciones {
+            width: 1%;
+            white-space: nowrap;
+        }
+
+        .gastos-fijos-tabla .celda-acciones form {
+            display: inline;
+        }
+
+        .gastos-fijos-tabla tfoot td {
+            border-top: 2px solid var(--color-borde-hover);
+            background: var(--color-fondo);
+        }
+
+        .gastos-fijos-secundario {
+            display: block;
+            font-size: 0.78rem;
+            color: var(--color-texto-tenue);
+            margin-top: 0.15rem;
+        }
+
+        .gastos-fijos-recortado {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            overflow: hidden;
+            max-width: 260px;
+        }
+
+        .gastos-fijos-meses {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.2rem;
+            max-width: 200px;
+        }
+
+        .gastos-fijos-mes {
+            padding: 0.05rem 0.4rem;
+            border-radius: 999px;
+            background: var(--color-gris-fondo);
+            color: var(--color-gris-texto);
+            font-size: 0.72rem;
+        }
+
+        .gastos-fijos-eliminar:hover {
+            color: var(--color-error-texto);
+        }
+
+        .sr-solo {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+            clip: rect(0 0 0 0);
+        }
+
+        @media (max-width: 640px) {
+            .gastos-fijos-recortado {
+                max-width: 180px;
+            }
+        }
+    </style>
 
     <div id="modal-gasto" class="modal-fondo<?= $editando ? ' abierto' : '' ?>">
         <div class="modal-caja">
