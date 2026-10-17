@@ -31,7 +31,7 @@ function celdaFiltroUsuario(int $indice): string
 
         <div class="pestanas">
             <a href="index.php?ruta=usuarios&tab=administradores" class="pestana<?= $tab === 'administradores' ? ' activa' : '' ?>">Administradores</a>
-            <a href="index.php?ruta=usuarios&tab=consejo-superior" class="pestana<?= $tab === 'consejo-superior' ? ' activa' : '' ?>">Consulta</a>
+            <a href="index.php?ruta=usuarios&tab=consejo-superior" class="pestana<?= $tab === 'consejo-superior' ? ' activa' : '' ?>">Consejo Superior</a>
             <a href="index.php?ruta=usuarios&tab=invitados" class="pestana<?= $tab === 'invitados' ? ' activa' : '' ?>">Formulador</a>
         </div>
 
@@ -145,7 +145,7 @@ function celdaFiltroUsuario(int $indice): string
             </section>
         <?php elseif ($tab === 'consejo-superior'): ?>
             <section class="panel-pestana">
-                <h2>Consulta</h2>
+                <h2>Consejo Superior</h2>
                 <div class="tabla-scroll">
                 <table class="tabla-usuarios">
                     <thead>
@@ -173,9 +173,10 @@ function celdaFiltroUsuario(int $indice): string
                             <td><?= htmlspecialchars($miembro['correo']) ?></td>
                             <td>
                                 <?php if (!empty($miembro['rol_catalogo'])): ?>
+                                <?php $rolVisibleMiembro = $miembro['rol_catalogo'] === 'Consulta' ? 'Consejo Superior' : $miembro['rol_catalogo']; ?>
                                 <div class="celda-rol-nombre">
-                                    <span class="icono-rol" style="background-color: <?= htmlspecialchars($miembro['rol_color'] ?? '#0071e3') ?>;"><?= htmlspecialchars(mb_strtoupper(mb_substr($miembro['rol_catalogo'], 0, 1))) ?></span>
-                                    <?= htmlspecialchars($miembro['rol_catalogo']) ?>
+                                    <span class="icono-rol" style="background-color: <?= htmlspecialchars($miembro['rol_color'] ?? '#0071e3') ?>;"><?= htmlspecialchars(mb_strtoupper(mb_substr($rolVisibleMiembro, 0, 1))) ?></span>
+                                    <?= htmlspecialchars($rolVisibleMiembro) ?>
                                 </div>
                                 <?php else: ?>
                                 —
@@ -229,7 +230,7 @@ function celdaFiltroUsuario(int $indice): string
                         <?php endforeach; ?>
                         <?php if (empty($consejoSuperior)): ?>
                         <tr>
-                            <td colspan="6">No hay miembros de Consulta registrados.</td>
+                            <td colspan="6">No hay miembros del Consejo Superior registrados.</td>
                         </tr>
                         <?php endif; ?>
                     </tbody>
@@ -379,7 +380,7 @@ function celdaFiltroUsuario(int $indice): string
                     <select id="admin-rol" name="rol_id">
                         <option value="">Selecciona un rol</option>
                         <?php foreach ($roles as $rolCatalogo): ?>
-                        <option value="<?= (int) $rolCatalogo['id'] ?>" <?= ($tab === 'consejo-superior' && $rolCatalogo['nombre'] === 'Consulta') ? 'selected' : '' ?>><?= htmlspecialchars($rolCatalogo['nombre']) ?></option>
+                        <option value="<?= (int) $rolCatalogo['id'] ?>" <?= ($tab === 'consejo-superior' && $rolCatalogo['nombre'] === 'Consulta') ? 'selected' : '' ?>><?= htmlspecialchars(($tab === 'consejo-superior' && $rolCatalogo['nombre'] === 'Consulta') ? 'Consejo Superior' : $rolCatalogo['nombre']) ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
@@ -554,7 +555,7 @@ function celdaFiltroUsuario(int $indice): string
                 </div>
                 <?php else: ?>
                 <p class="texto-atenuado">
-                    El rol y la dependencia de esta cuenta son fijos (<?= $tab === 'consejo-superior' ? 'Consulta' : 'Formulador' ?>) —
+                    El rol y la dependencia de esta cuenta son fijos (<?= $tab === 'consejo-superior' ? 'Consejo Superior' : 'Formulador' ?>) —
                     aquí solo se ajusta qué ve en el menú lateral.
                 </p>
                 <?php endif; ?>

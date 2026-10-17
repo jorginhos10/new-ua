@@ -547,6 +547,77 @@ class PresupuestoInstitucional
         }
     }
 
+    /**
+     * Edición puntual desde el árbol (doble clic del superadmin en Tiempo real): cambia el valor
+     * de una línea hoja para un año — $campo 'valor_final' (columnas de año) o 'valor_corte'
+     * (columna "a corte" del año anterior) — y recalcula los totales del lado, igual que una
+     * importación. Las filas de total no se editan: siempre son la suma de sus hijas.
+     * Devuelve '' si se guardó, o el mensaje de error.
+     */
+    public function actualizarValorLinea(string $tipo, string $codigo, int $anio, string $campo, float $valor, int $usuarioId): string
+    {
+        if (!in_array($campo, ['valor_final', 'valor_corte'], true)) {
+            return 'Columna no válida.';
+        }
+
+        $linea = $this->obtenerLineaPorCodigo($tipo, $codigo);
+        if ($linea === null) {
+            return 'La línea ya no existe.';
+        }
+        if ((bool) $linea['es_total']) {
+            return 'Las filas de total se calculan solas a partir de sus hijas.';
+        }
+
+        $this->db->beginTransaction();
+
+        try {
+            $this->db->prepare(
+                "INSERT INTO presupuesto_institucional_valores (linea_id, anio, valor_final, valor_corte)
+                 VALUES (:linea_id, :anio, :valor_final, :valor_corte)
+                 ON DUPLICATE KEY UPDATE $campo = VALUES($campo)"
+            )->execute([
+                'linea_id' => (int) $linea['id'],
+                'anio' => $anio,
+                'valor_final' => $campo === 'valor_final' ? $valor : 0,
+                'valor_corte' => $campo === 'valor_corte' ? $valor : null,
+            ]);
+            $this->db->prepare('UPDATE presupuesto_institucional_lineas SET actualizado_por = :usuario WHERE id = :id')
+                ->execute(['usuario' => $usuarioId, 'id' => (int) $linea['id']]);
+            $this->recalcularTotales($tipo);
+            $this->db->commit();
+        } catch (Throwable $excepcion) {
+            $this->db->rollBack();
+
+            throw $excepcion;
+        }
+
+        return '';
+    }
+
+    /** Renombra (descripción) una línea de cualquier nivel desde el árbol. '' si se guardó, o el error. */
+    public function renombrarLinea(string $tipo, string $codigo, string $descripcion, int $usuarioId): string
+    {
+        if ($this->obtenerLineaPorCodigo($tipo, $codigo) === null) {
+            return 'La línea ya no existe.';
+        }
+
+        $this->db->prepare(
+            'UPDATE presupuesto_institucional_lineas SET descripcion = :descripcion, actualizado_por = :usuario
+             WHERE tipo = :tipo AND codigo = :codigo'
+        )->execute(['descripcion' => $descripcion, 'usuario' => $usuarioId, 'tipo' => $tipo, 'codigo' => $codigo]);
+
+        return '';
+    }
+
+    private function obtenerLineaPorCodigo(string $tipo, string $codigo): ?array
+    {
+        $consulta = $this->db->prepare('SELECT id, es_total FROM presupuesto_institucional_lineas WHERE tipo = :tipo AND codigo = :codigo');
+        $consulta->execute(['tipo' => $tipo, 'codigo' => $codigo]);
+        $fila = $consulta->fetch();
+
+        return $fila !== false ? $fila : null;
+    }
+
     /** Como guardarLote(), pero para un lado sin pareja ingreso/egreso — hoy solo 'proyecto'. */
     public function guardarLoteUnico(string $tipo, array $lineas, int $usuarioId): void
     {

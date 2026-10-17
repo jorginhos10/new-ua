@@ -118,7 +118,7 @@ class UsuarioControlador
     {
         [$rolCuenta, $nombreHoja] = match ($tab) {
             'invitados' => ['invitado', 'Formulador'],
-            'consejo-superior' => ['consejo_superior', 'Consulta'],
+            'consejo-superior' => ['consejo_superior', 'Consejo Superior'],
             default => ['administrador', 'Administradores'],
         };
 
@@ -129,7 +129,8 @@ class UsuarioControlador
             $filas[] = [
                 (string) $usuario['nombre'],
                 (string) $usuario['correo'],
-                $esSuperAdmin ? 'Superadmin' : (string) ($usuario['rol_catalogo'] ?? ''),
+                // En la pestaña Consejo Superior el rol "Consulta" se muestra como "Consejo Superior".
+                $esSuperAdmin ? 'Superadmin' : (($tab === 'consejo-superior' && ($usuario['rol_catalogo'] ?? '') === 'Consulta') ? 'Consejo Superior' : (string) ($usuario['rol_catalogo'] ?? '')),
                 $esSuperAdmin ? 'Superadmin' : Dependencia::nombreVisible($usuario['dependencia_nombre'] ?? ''),
                 (string) ($usuario['estamento_nombre'] ?? ''),
                 (string) $usuario['creado_en'],

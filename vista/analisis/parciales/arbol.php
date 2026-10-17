@@ -863,7 +863,51 @@ document.addEventListener('DOMContentLoaded', function () {
     actualizarVariacionesArbol();
     actualizarPorcentajesGrupoArbol();
 
-    Array.prototype.forEach.call(tabla.querySelectorAll('.arbol-fila.nivel-2 td.arbol-celda-valor'), function (celda) {
+    // Programación presupuestal y Proyectos (SA, Tiempo real): lo editado con doble clic se guarda
+    // en la BD (ver AnalisisControlador::editarArbolPresupuesto()). Articulación PDI sale de los
+    // gastos, así que ahí la edición sigue siendo solo de presentación.
+    var arbolGuardaEnBd = <?= json_encode(in_array($tab, ['programacion', 'proyectos'], true) && $vista === 'tiempo_real' && AccesoAnalisis::actual()['clase'] === 'superadmin') ?>;
+
+    // Manda un cambio al servidor; si falla, avisa y llama a revertir() para deshacerlo en pantalla.
+    function guardarCambioArbol(campos, revertir) {
+        var datos = new FormData();
+        Object.keys(campos).forEach(function (nombre) {
+            datos.append(nombre, campos[nombre]);
+        });
+        fetch(window.location.href, { method: 'POST', body: datos, credentials: 'same-origin' })
+            .then(function (respuesta) { return respuesta.json(); })
+            .then(function (resultado) {
+                if (!resultado.ok) {
+                    throw new Error(resultado.error || 'No se pudo guardar.');
+                }
+            })
+            .catch(function (error) {
+                alert('No se guardó el cambio: ' + error.message);
+                revertir();
+            });
+    }
+
+    function aplicarValorCeldaArbol(celda, valor) {
+        celda.dataset.valor = valor;
+        celda.textContent = formatoMonedaArbol(valor);
+
+        var filaProyecto = celda.closest('.arbol-fila');
+        if (filaProyecto && filaProyecto.dataset.padre) {
+            recalcularAncestroArbol(filaProyecto.dataset.padre);
+        }
+        recalcularTotalesGeneralesArbol();
+        actualizarTodasCeldasCorteArbol();
+        actualizarVariacionesArbol();
+        actualizarPorcentajesGrupoArbol();
+    }
+
+    // En el árbol presupuestal se editan las hojas de cualquier nivel (los totales son la suma de
+    // sus hijas); en Articulación PDI, los proyectos (nivel 2), como antes.
+    var selectorCeldasEditables = arbolGuardaEnBd
+        ? '.arbol-fila:not(.arbol-fila-expandible):not(.arbol-fila-total) td.arbol-celda-valor'
+        : '.arbol-fila.nivel-2 td.arbol-celda-valor';
+
+    Array.prototype.forEach.call(tabla.querySelectorAll(selectorCeldasEditables), function (celda) {
         celda.addEventListener('dblclick', function () {
             if (rolVistaArbol !== 'admin' || celda.querySelector('input')) {
                 return;
@@ -888,17 +932,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (isNaN(nuevoValor)) {
                     nuevoValor = valorActual;
                 }
-                celda.dataset.valor = nuevoValor;
-                celda.textContent = formatoMonedaArbol(nuevoValor);
+                aplicarValorCeldaArbol(celda, nuevoValor);
 
-                var filaProyecto = celda.closest('.arbol-fila');
-                if (filaProyecto && filaProyecto.dataset.padre) {
-                    recalcularAncestroArbol(filaProyecto.dataset.padre);
+                var fila = celda.closest('.arbol-fila');
+                if (arbolGuardaEnBd && nuevoValor !== valorActual && fila) {
+                    guardarCambioArbol(
+                        { accion: 'editar_valor_arbol', id: fila.dataset.id, clave: celda.dataset.clave, valor: nuevoValor },
+                        function () { aplicarValorCeldaArbol(celda, valorActual); }
+                    );
                 }
-                recalcularTotalesGeneralesArbol();
-                actualizarTodasCeldasCorteArbol();
-                actualizarVariacionesArbol();
-                actualizarPorcentajesGrupoArbol();
             }
 
             input.addEventListener('blur', confirmar);
@@ -957,7 +999,8 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
-    // --- Renombrar (Tiempo real, cualquier nivel): solo de presentación, no toca sumas. ---
+    // --- Renombrar (Tiempo real, cualquier nivel): no toca sumas. En el árbol presupuestal se
+    // guarda en la BD (arbolGuardaEnBd); en Articulación PDI es solo de presentación. ---
     Array.prototype.forEach.call(tabla.querySelectorAll('.arbol-etiqueta-texto'), function (etiqueta) {
         etiqueta.addEventListener('dblclick', function (evento) {
             if (rolVistaArbol !== 'admin' || etiqueta.querySelector('input')) {
@@ -979,6 +1022,14 @@ document.addEventListener('DOMContentLoaded', function () {
             function confirmarNombre() {
                 var nuevoTexto = input.value.trim();
                 etiqueta.textContent = nuevoTexto !== '' ? nuevoTexto : textoOriginal;
+
+                var fila = etiqueta.closest('.arbol-fila');
+                if (arbolGuardaEnBd && nuevoTexto !== '' && nuevoTexto !== textoOriginal && fila) {
+                    guardarCambioArbol(
+                        { accion: 'renombrar_linea_arbol', id: fila.dataset.id, descripcion: nuevoTexto },
+                        function () { etiqueta.textContent = textoOriginal; }
+                    );
+                }
             }
 
             input.addEventListener('blur', confirmarNombre);

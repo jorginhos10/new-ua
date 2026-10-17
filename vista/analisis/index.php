@@ -35,6 +35,8 @@ $paramsTab = match ($tab) {
 };
 $error = $error ?? '';
 $exito = $exito ?? '';
+// `usuarios.es_super_admin` (el SA): solo renderizarArbol() lo pasa; las demás pestañas lo calculan aquí.
+$esSuperAdmin = $esSuperAdmin ?? ((int) ((new Usuario())->obtenerPorId((int) ($_SESSION['usuario_id'] ?? 0))['es_super_admin'] ?? 0) === 1);
 
 $anioLabelActivo = (new AnioPresupuestal())->obtenerActivos()[0]['anio'] ?? date('Y');
 
@@ -338,6 +340,19 @@ require __DIR__ . '/../parciales/encabezado.php';
                 <svg class="svg-exportar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </a>
         </div>
+        <?php endif; ?>
+
+        <?php $etiquetaSnapshot = AnalisisControlador::etiquetaSnapshotPestana($tab, $lado); ?>
+        <?php if ($esSuperAdmin && $vista === 'tiempo_real' && $etiquetaSnapshot !== null): ?>
+        <?php // Solo SA: congela esta pestaña (ver AnalisisControlador::crearSnapshotPestana()). ?>
+        <form method="POST" action="<?= htmlspecialchars(analisisUrl($tab, 'tiempo_real', $paramsTab)) ?>" class="analisis-grupo-datos" title="Snapshot"
+              onsubmit="var nombre = prompt(<?= htmlspecialchars(json_encode('Nombre del snapshot de ' . $etiquetaSnapshot . ':'), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($etiquetaSnapshot . ' ' . date('d/m/Y H:i')), ENT_QUOTES) ?>); if (nombre === null) { return false; } this.elements.nombre.value = nombre; return true;">
+            <input type="hidden" name="accion" value="crear_snapshot_pestana">
+            <input type="hidden" name="nombre" value="">
+            <button type="submit" class="analisis-icono-boton" title="Tomar snapshot de <?= htmlspecialchars($etiquetaSnapshot) ?> (queda en Repositorio)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+            </button>
+        </form>
         <?php endif; ?>
 
         <?php if (AccesoAnalisis::actual()['clase'] === 'superadmin' && !in_array($tab, ['actas'], true)): ?>

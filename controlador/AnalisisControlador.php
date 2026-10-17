@@ -122,6 +122,12 @@ class AnalisisControlador
             return;
         }
 
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['accion'] ?? '', ['editar_valor_arbol', 'renombrar_linea_arbol'], true)) {
+            $this->editarArbolPresupuesto($tab, $vista, $lado);
+
+            return;
+        }
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $this->procesarPost($tab, $vista);
 
@@ -255,6 +261,128 @@ class AnalisisControlador
         return $usuarioActual !== null && (int) ($usuarioActual['es_super_admin'] ?? 0) === 1;
     }
 
+    /** Nombre por defecto del snapshot de cada pestaña (el SA lo puede cambiar al crearlo). */
+    public static function etiquetaSnapshotPestana(string $tab, string $lado): ?string
+    {
+        return match ($tab) {
+            'presentacion' => 'Documentos',
+            'programacion' => 'Programación presupuestal — ' . ($lado === 'egresos' ? 'Egresos' : 'Ingresos'),
+            'proyectos' => 'Proyectos de Inversión',
+            'pdi' => 'Articulación PDI',
+            'techos' => 'Techos y Metas',
+            'analisis' => 'Análisis de distribución',
+            default => null,
+        };
+    }
+
+    /**
+     * Botón de cámara de la franja superior (solo SA, solo Tiempo real): congela la pestaña que se
+     * está viendo con el mismo mecanismo de versiones que ya usa ?ruta=repositorios para ella —
+     * así aparece luego en el selector de la vista Repositorio de esa misma pestaña.
+     */
+    private function crearSnapshotPestana(string $tab, string $lado): array
+    {
+        if (!$this->esSuperAdmin()) {
+            return ['Solo el SA puede crear snapshots.', ''];
+        }
+
+        $etiqueta = self::etiquetaSnapshotPestana($tab, $lado);
+        if ($etiqueta === null) {
+            return ['Esta pestaña no tiene snapshots.', ''];
+        }
+
+        $nombre = trim((string) ($_POST['nombre'] ?? ''));
+        if ($nombre === '') {
+            $nombre = $etiqueta . ' ' . date('Y-m-d H:i:s');
+        }
+        $nombre = mb_substr($nombre, 0, 150);
+        $usuarioId = (int) $_SESSION['usuario_id'];
+
+        try {
+            match ($tab) {
+                'presentacion' => (new VersionDocumentos())->crear($nombre, $usuarioId),
+                'programacion' => (new PresupuestoInstitucional())->crearVersion($lado === 'egresos' ? 'egreso' : 'ingreso', $nombre, $usuarioId),
+                'proyectos' => (new PresupuestoInstitucional())->crearVersion('proyecto', $nombre, $usuarioId),
+                'pdi' => (new VersionArbol())->crear('articulacion_pdi', $nombre, $usuarioId),
+                'techos' => (new VersionTechos())->crear($nombre, $usuarioId),
+                'analisis' => (new Snapshot())->crear($nombre, $usuarioId),
+            };
+        } catch (Throwable $excepcion) {
+            return ['No se pudo crear el snapshot: ' . $excepcion->getMessage(), ''];
+        }
+
+        return ['', 'Snapshot "' . $nombre . '" de ' . $etiqueta . ' creado. Ya se puede elegir en la vista Repositorio.'];
+    }
+
+    /**
+     * POST por fetch desde el doble clic del árbol de Programación presupuestal / Proyectos (solo
+     * SA, solo Tiempo real): guarda en la BD el valor o el nombre editado de una línea. $_POST:
+     * 'id' (data-id de la fila, "<tipo>-<código>"), y 'clave' + 'valor' (editar_valor_arbol) o
+     * 'descripcion' (renombrar_linea_arbol). Responde JSON, sin redirigir.
+     */
+    private function editarArbolPresupuesto(string $tab, string $vista, string $lado): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        $responder = static function (int $codigoHttp, string $error): void {
+            http_response_code($codigoHttp);
+            echo json_encode(['ok' => $error === '', 'error' => $error]);
+        };
+
+        if (!$this->esSuperAdmin()) {
+            $responder(403, 'Solo el SA puede editar el árbol.');
+
+            return;
+        }
+
+        if (!in_array($tab, ['programacion', 'proyectos'], true) || $vista !== 'tiempo_real') {
+            $responder(400, 'Esta vista no se puede editar.');
+
+            return;
+        }
+
+        $tipo = $tab === 'proyectos' ? 'proyecto' : ($lado === 'egresos' ? 'egreso' : 'ingreso');
+        $idFila = (string) ($_POST['id'] ?? '');
+        if (!str_starts_with($idFila, $tipo . '-')) {
+            $responder(400, 'Fila no válida.');
+
+            return;
+        }
+        $codigo = substr($idFila, strlen($tipo) + 1);
+        $usuarioId = (int) $_SESSION['usuario_id'];
+        $modelo = new PresupuestoInstitucional();
+
+        try {
+            if ($_POST['accion'] === 'renombrar_linea_arbol') {
+                $descripcion = trim((string) ($_POST['descripcion'] ?? ''));
+                if ($descripcion === '' || mb_strlen($descripcion) > 255) {
+                    $responder(400, 'El nombre no puede quedar vacío ni pasar de 255 caracteres.');
+
+                    return;
+                }
+                $error = $modelo->renombrarLinea($tipo, $codigo, $descripcion, $usuarioId);
+            } else {
+                $anioVigente = (new AnioPresupuestal())->obtenerActivos()[0]['anio'] ?? (int) date('Y');
+                $anioPorClave = $this->resolverAniosPorClave((int) $anioVigente);
+                $clave = (string) ($_POST['clave'] ?? '');
+                $valor = $_POST['valor'] ?? '';
+                if (!isset($anioPorClave[$clave]) || !is_numeric($valor)) {
+                    $responder(400, 'Columna o valor no válido.');
+
+                    return;
+                }
+                $campo = $clave === 'anterior_corte' ? 'valor_corte' : 'valor_final';
+                $error = $modelo->actualizarValorLinea($tipo, $codigo, $anioPorClave[$clave], $campo, round((float) $valor, 2), $usuarioId);
+            }
+        } catch (Throwable $excepcion) {
+            $responder(500, 'No se pudo guardar en la base de datos.');
+
+            return;
+        }
+
+        $responder($error === '' ? 200 : 400, $error);
+    }
+
     /**
      * POST por fetch desde el botón "Listas desplegadas" del árbol (solo SA): guarda si las listas
      * de esta pestaña salen desplegadas o recogidas para todos. Responde JSON, sin redirigir.
@@ -291,6 +419,10 @@ class AnalisisControlador
 
         if (in_array($tab, ['programacion', 'proyectos'], true) && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'limpiar_arbol') {
             [$error, $exito] = $this->limpiarArbolPresupuesto($tab, $lado);
+        }
+
+        if ($vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'crear_snapshot_pestana') {
+            [$error, $exito] = $this->crearSnapshotPestana($tab, $lado);
         }
 
         if ($tab === 'analisis' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'eliminar_celda') {
@@ -861,8 +993,9 @@ class AnalisisControlador
         }
 
         $tab = 'techos';
-        $error = '';
-        $exito = '';
+        $error = $_SESSION['analisis_flash_error'] ?? '';
+        $exito = $_SESSION['analisis_flash_exito'] ?? '';
+        unset($_SESSION['analisis_flash_error'], $_SESSION['analisis_flash_exito']);
         $tituloPagina = 'Análisis · Techos y Metas';
 
         require __DIR__ . '/../vista/analisis/index.php';
@@ -953,7 +1086,6 @@ class AnalisisControlador
             if (AnalisisPresentacion::esActas($enlace)) {
                 continue;
             }
-            $enlace['url_incrustada'] = AnalisisPresentacion::urlIncrustada($enlace['url']);
             $enlace['url_descarga'] = AnalisisPresentacion::urlDescarga($enlace['url']);
             $enlace['tipo_documento'] = AnalisisPresentacion::tipoDocumento($enlace['url']);
             $totalDocumentos++;

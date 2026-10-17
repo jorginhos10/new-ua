@@ -11,14 +11,13 @@
  * y una descripción automática (ver AnalisisPresentacion::tipoDocumento()) — nunca las escribe el
  * admin a mano, solo el nombre y el enlace. La cuadrícula es responsiva: más o menos columnas según
  * el ancho disponible y la cantidad de tarjetas (CSS grid auto-fill). Al hacer clic en un documento
- * se abre incrustado con el visor de Office en una ventana que, a propósito, solo se cierra con la
- * X — no al hacer clic afuera ni con Escape, a diferencia de los demás modales de la app, porque
- * aquí se puede estar navegando varias diapositivas o páginas y un clic afuera por accidente no
- * debe botar la vista.
+ * (de cualquier tipo) se abre su enlace en una ventana emergente del navegador, con la sesión de
+ * Microsoft 365 de quien lo mira — sin iframe ni visor: SharePoint no deja incrustar sus páginas
+ * desde otro dominio (los PDF quedaban bloqueados) y el visor generaba conflictos con el resto.
  *
  * Variables esperadas (ver AnalisisControlador::renderizarPresentacion()): $enlacesPresentacion
  * (cada uno con id, nombre, url, miniatura_url, orden, y para los que no son Actas también
- * url_incrustada, url_descarga, tipo_documento, actualizado_en, actualizado_por_nombre),
+ * url_descarga, tipo_documento, actualizado_en, actualizado_por_nombre),
  * $totalDocumentos (cuenta solo documentos, sin Actas), $puedeEditarPresentacion,
  * $mensajesPresentacion, $vista. El mensaje que
  * explica la sección es un mensaje global más (misma tabla y editor que Configuraciones > Mensajes
@@ -240,9 +239,9 @@ function botonesExtraTarjetaPresentacion(string $urlDescarga): string
         cursor: pointer;
     }
 
-    /* Para la tarjeta de usuario (clic = abrir visor): el botón interno ocupa toda la tarjeta menos
-       el botón flotante "Descargar", que va aparte para no quedar
-       anidado dentro de otro botón. */
+    /* Para la tarjeta de usuario (clic = abrir en ventana emergente): el enlace interno ocupa toda
+       la tarjeta menos el botón flotante "Descargar", que va aparte para no quedar anidado dentro
+       de otro enlace. */
     .presentacion-tarjeta-disparador {
         display: flex;
         flex-direction: column;
@@ -260,7 +259,7 @@ function botonesExtraTarjetaPresentacion(string $urlDescarga): string
 
     /* Fila inferior, alineada con la descripción: a la izquierda el texto, a la derecha el
        botón "Descargar" — aparte del clic en la miniatura (o en el
-       cuerpo, en la tarjeta de usuario), que abre el visor incrustado. */
+       cuerpo, en la tarjeta de usuario), que abre el documento en una ventana emergente. */
     .presentacion-tarjeta-pie {
         display: flex;
         align-items: center;
@@ -352,7 +351,7 @@ function botonesExtraTarjetaPresentacion(string $urlDescarga): string
         flex: 1;
     }
 
-    /* En la tarjeta de usuario, .presentacion-tarjeta-pie queda afuera del botón, como pie real de
+    /* En la tarjeta de usuario, .presentacion-tarjeta-pie queda afuera del enlace, como pie real de
        la tarjeta — sin esto, el padding inferior de .presentacion-tarjeta-cuerpo (que ahí solo
        envuelve el nombre) dejaba un hueco entre el nombre y la descripción. */
     .presentacion-tarjeta-disparador .presentacion-tarjeta-cuerpo {
@@ -471,46 +470,6 @@ function botonesExtraTarjetaPresentacion(string $urlDescarga): string
         padding: 2rem 1rem;
     }
 
-    #presentacion-visor-modal {
-        padding: 0.75rem;
-    }
-
-    .presentacion-visor-caja {
-        width: 100%;
-        max-width: none;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        padding: 0;
-        overflow: hidden;
-    }
-
-    .presentacion-visor-cabecera {
-        margin: 0;
-        padding: 0.45rem 0.8rem;
-        border-radius: var(--radio) var(--radio) 0 0;
-    }
-
-    .presentacion-visor-cabecera h2 {
-        font-size: 0.9rem;
-    }
-
-    .presentacion-visor-cabecera .modal-cerrar {
-        font-size: 1.2rem;
-        padding: 0 0.4rem;
-    }
-
-    .presentacion-visor-marco {
-        flex: 1;
-        min-height: 0;
-    }
-
-    .presentacion-visor-marco iframe {
-        display: block;
-        width: 100%;
-        height: 100%;
-        border: 0;
-    }
 </style>
 
 <div class="tarjeta presentacion-analisis">
@@ -585,9 +544,9 @@ function botonesExtraTarjetaPresentacion(string $urlDescarga): string
                 </div>
                 <?php else: ?>
                 <div class="presentacion-tarjeta">
-                    <button type="button" class="presentacion-tarjeta-miniatura" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada'] ?? '') ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>" title="Ver">
+                    <a class="presentacion-tarjeta-miniatura" href="<?= htmlspecialchars($enlace['url']) ?>" target="_blank" rel="noopener" data-abrir-ventana title="Abrir">
                         <?= miniaturaTarjetaPresentacion($enlace['tipo_documento'], $enlace['miniatura_url'] ?? null) ?>
-                    </button>
+                    </a>
                     <div class="presentacion-tarjeta-cuerpo">
                         <input type="text" class="presentacion-tarjeta-campo-nombre" data-campo="nombre" name="nombre_enlace" value="<?= htmlspecialchars($enlace['nombre']) ?>" form="form-enlace-<?= (int) $enlace['id'] ?>" maxlength="150" required aria-label="Nombre del enlace">
                         <input type="text" class="presentacion-tarjeta-campo-url" data-campo="url" name="url_enlace" value="<?= htmlspecialchars($enlace['url']) ?>" form="form-enlace-<?= (int) $enlace['id'] ?>" required aria-label="Dirección del enlace">
@@ -655,12 +614,12 @@ function botonesExtraTarjetaPresentacion(string $urlDescarga): string
                 </a>
                 <?php else: ?>
                 <div class="presentacion-tarjeta">
-                    <button type="button" class="presentacion-tarjeta-disparador" data-abrir-visor data-src="<?= htmlspecialchars($enlace['url_incrustada'] ?? '') ?>" data-externo="<?= htmlspecialchars($enlace['url']) ?>" data-titulo="<?= htmlspecialchars($enlace['nombre']) ?>">
+                    <a class="presentacion-tarjeta-disparador" href="<?= htmlspecialchars($enlace['url']) ?>" target="_blank" rel="noopener" data-abrir-ventana>
                         <span class="presentacion-tarjeta-miniatura"><?= miniaturaTarjetaPresentacion($enlace['tipo_documento'], $enlace['miniatura_url'] ?? null) ?></span>
                         <span class="presentacion-tarjeta-cuerpo">
                             <span class="presentacion-tarjeta-nombre" title="<?= htmlspecialchars($enlace['nombre']) ?>"><?= htmlspecialchars($enlace['nombre']) ?></span>
                         </span>
-                    </button>
+                    </a>
                     <div class="presentacion-tarjeta-pie">
                         <p class="presentacion-tarjeta-descripcion"><?= htmlspecialchars($enlace['tipo_documento']['descripcion']) ?></p>
                         <?= botonesExtraTarjetaPresentacion($enlace['url_descarga']) ?>
@@ -673,18 +632,6 @@ function botonesExtraTarjetaPresentacion(string $urlDescarga): string
         <?php endif; ?>
 
         <?php endif; ?>
-    </div>
-</div>
-
-<div id="presentacion-visor-modal" class="modal-fondo">
-    <div class="modal-caja presentacion-visor-caja">
-        <div class="modal-cabecera presentacion-visor-cabecera">
-            <h2 id="presentacion-visor-titulo"></h2>
-            <button type="button" class="modal-cerrar" id="presentacion-visor-cerrar" aria-label="Cerrar">&times;</button>
-        </div>
-        <div class="presentacion-visor-marco">
-            <iframe id="presentacion-visor-iframe" src="" title="Visor de documento" allowfullscreen referrerpolicy="no-referrer"></iframe>
-        </div>
     </div>
 </div>
 
@@ -742,9 +689,9 @@ function botonesExtraTarjetaPresentacion(string $urlDescarga): string
     });
 })();
 
-// Ventana emergente del navegador (no el visor incrustado), centrada y al 90% de la pantalla — para
-// los documentos que no se dejan incrustar (PDF de SharePoint). Devuelve false si el navegador la
-// bloquea, para que quien llama caiga a otra pestaña.
+// Ventana emergente del navegador, centrada y al 90% de la pantalla, para cualquier documento.
+// Devuelve false si el navegador la bloquea: entonces el clic sigue el href con target="_blank"
+// (otra pestaña).
 function abrirVentanaPresentacion(url) {
     var ancho = Math.round(screen.availWidth * 0.9);
     var alto = Math.round(screen.availHeight * 0.9);
@@ -759,68 +706,11 @@ function abrirVentanaPresentacion(url) {
 }
 
 
-(function () {
-    var modal = document.getElementById('presentacion-visor-modal');
-    var iframe = document.getElementById('presentacion-visor-iframe');
-    var titulo = document.getElementById('presentacion-visor-titulo');
-    var botonCerrar = document.getElementById('presentacion-visor-cerrar');
-
-    if (!modal || !iframe) {
-        return;
-    }
-
-    var teclasNavegacion = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '];
-
-    var enfocarVisor = function () {
-        iframe.focus();
-        try { iframe.contentWindow.focus(); } catch (e) {}
-    };
-
-    document.querySelectorAll('[data-abrir-visor]').forEach(function (boton) {
-        boton.addEventListener('click', function () {
-            // Sin url incrustable (un PDF de SharePoint/OneDrive, ver
-            // AnalisisPresentacion::urlIncrustada()): se abre en una ventana emergente, con la
-            // sesión de Microsoft 365 de quien lo mira, en vez de mostrar el bloqueo dentro del visor.
-            if (!boton.dataset.src) {
-                if (boton.dataset.externo && !abrirVentanaPresentacion(boton.dataset.externo)) {
-                    window.open(boton.dataset.externo, '_blank', 'noopener');
-                }
-                return;
-            }
-            iframe.src = boton.dataset.src;
-            titulo.textContent = boton.dataset.titulo || '';
-            modal.classList.add('abierto');
-            // No esperar solo a 'load' para darle el foco (ver más abajo): así la primera flecha
-            // que toque la persona ya le llega al visor, no se pierde moviendo el foco recién ahí.
-            enfocarVisor();
-        });
-    });
-
-    // A propósito, esta ventana solo se cierra con la X: ni clic afuera ni Escape (a diferencia de
-    // los demás modales de la app) — se puede estar navegando el documento y un clic o tecla fuera
-    // de lugar no debe botar la vista.
-    if (botonCerrar) {
-        botonCerrar.addEventListener('click', function () {
-            modal.classList.remove('abierto');
-            iframe.src = '';
-        });
-    }
-
-    // El visor de Office está en otro dominio: el navegador solo le entrega las flechas cuando
-    // tiene el foco (no se le pueden reenviar teclas desde aquí). Se le da el foco al cargar y
-    // cada vez que se toca una tecla de navegación fuera de un campo de texto, mientras el visor
-    // está abierto.
-    iframe.addEventListener('load', enfocarVisor);
-    document.addEventListener('keydown', function (evento) {
-        if (!modal.classList.contains('abierto')) {
-            return;
-        }
-        var destino = evento.target;
-        var escribiendo = destino && (destino.tagName === 'INPUT' || destino.tagName === 'TEXTAREA' || destino.tagName === 'SELECT' || destino.isContentEditable);
-        if (!escribiendo && teclasNavegacion.indexOf(evento.key) !== -1) {
+document.querySelectorAll('[data-abrir-ventana]').forEach(function (enlace) {
+    enlace.addEventListener('click', function (evento) {
+        if (abrirVentanaPresentacion(enlace.href)) {
             evento.preventDefault();
-            enfocarVisor();
         }
     });
-})();
+});
 </script>
