@@ -112,9 +112,10 @@ class SolicitudMonitor
      * Función de respaldo: las solicitudes creadas antes de agregar la columna `valor` (o
      * cualquier fila que por algún motivo haya quedado en NULL) la recalculan al vuelo en vez de
      * mostrar un valor vacío — crear()/actualizar() ya la guardan calculada, así que esto solo
-     * cubre datos viejos o casos borde, no el camino normal.
+     * cubre datos viejos o casos borde, no el camino normal. Pública: Análisis de distribución la
+     * aplica también a las filas crudas de un snapshot (Repositorio), que no pasan por obtenerPorAnio().
      */
-    private function aplicarRespaldoValor(array $fila): array
+    public function aplicarRespaldoValor(array $fila): array
     {
         if ($fila['valor'] === null || $fila['valor'] === '') {
             $totalMonitores = (int) $fila['monitores_semestre1'] + (int) $fila['monitores_semestre2'];

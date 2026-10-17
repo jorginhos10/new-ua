@@ -1771,6 +1771,14 @@ class AnalisisControlador
                     static fn (array $fila): bool => ($fila['tipo_automatico'] ?? null) !== 'techo_hijo'
                 ));
             }
+
+            // Monitores: las filas crudas del snapshot pueden traer `valor` vacío (solicitudes de antes
+            // de esa columna); en vivo SolicitudMonitor::obtenerPorAnio() lo recalcula y aquí no pasaba
+            // por ahí, así que el módulo salía en $0 / "Sin registros". Mismo respaldo que en vivo.
+            if ($origen === 'monitores') {
+                $modeloMonitor = new SolicitudMonitor();
+                $filas = array_map(static fn (array $fila): array => $modeloMonitor->aplicarRespaldoValor($fila), $filas);
+            }
         } else {
             // Datos en vivo (Tiempo real/Usuario, nunca Repositorio — un snapshot congelado ya es
             // su propia verdad histórica): ver filtrarSoloActivos().
