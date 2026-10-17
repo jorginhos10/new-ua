@@ -524,7 +524,7 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
             <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => 'ingresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'ingresos' ? 'activo' : '' ?>">Ingresos</a>
             <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => 'egresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'egresos' ? 'activo' : '' ?>">Egresos</a>
         </div>
-        <?php // Alterna entre el árbol y las gráficas de tabla-real con estos mismos datos (ver arbol-grafica.php). ?>
+        <?php // Alterna entre el árbol y su gráfica jerárquica (ver arbol-grafica.php). ?>
         <div class="arbol-lado-toggle" id="arbol-vista-toggle">
             <button type="button" class="arbol-boton-toggle activo" data-vista-arbol="arbol" aria-pressed="true">Árbol</button>
             <button type="button" class="arbol-boton-toggle" data-vista-arbol="grafica" aria-pressed="false">Gráfica</button>
@@ -1078,9 +1078,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
 <?php if ($tab === 'programacion'): ?>
 <script>
-// Toggle "Árbol | Gráfica" de Programación presupuestal: la gráfica es la de tabla-real
-// (arbol-grafica.php) — se abre su contenedor y se dispara su propio botón de vista gráfica, así
-// tabla-real dibuja con su flujo normal. La elección se recuerda por lado (Ingresos/Egresos).
+// Toggle "Árbol | Gráfica" de Programación presupuestal: alterna entre el árbol y la gráfica
+// jerárquica de arbol-grafica.php. La elección se recuerda por lado (Ingresos/Egresos).
 document.addEventListener('DOMContentLoaded', function () {
     var toggle = document.getElementById('arbol-vista-toggle');
     var contenedorGrafica = document.getElementById('arbol-grafica-contenedor');
@@ -1103,9 +1102,6 @@ document.addEventListener('DOMContentLoaded', function () {
             boton.classList.toggle('activo', activo);
             boton.setAttribute('aria-pressed', activo ? 'true' : 'false');
         });
-
-        var botonTdt = document.getElementById(esGrafica ? 'tdt-boton-vista-grafica' : 'tdt-boton-vista-tabla');
-        if (botonTdt) { botonTdt.click(); }
 
         try { localStorage.setItem(claveVista, vista); } catch (e) { /* sin localStorage */ }
     }

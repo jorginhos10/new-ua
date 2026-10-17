@@ -1,143 +1,201 @@
 <?php
 /**
- * Vista "Gráfica" de Programación presupuestal (Ingresos/Egresos): el mismo árbol que pinta
- * arbol.php, aplanado a una fila por hoja, alimentando el motor de gráficas de tabla-real
- * (publico/js/tabla-real/: KPIs, barras/torta por dimensión, Pareto en "Proyecto PDI", filtro por
- * clic en barra). Mismo markup mínimo que vista/analisis/parciales/tabla-modulo.php, sin
- * Editar/Eliminar. La tabla plana nunca se muestra: el toggle "Árbol | Gráfica" de arbol.php abre
- * este contenedor y activa directo la vista de gráfica (#tdt-boton-vista-grafica).
+ * Vista "Gráfica" de Programación presupuestal (Ingresos/Egresos): UNA sola gráfica de barras con
+ * todos los niveles del árbol (grupos, subgrupos y líneas), en el mismo orden y con la misma
+ * lógica que arbol.php — cada fila muestra el valor que ese nodo ya tiene en el árbol (un total es
+ * la suma de sus hijas, calculada por PresupuestoInstitucional), nunca se vuelve a sumar, así que
+ * no hay doble conteo. El total de arriba es solo la suma de las raíces, igual que la fila "Total"
+ * del árbol. Usa las mismas clases visuales de las gráficas de tabla-real (grafica-panel,
+ * grafica-fila-barra, grafica-stat…) para verse igual que el resto de gráficas de Análisis.
  *
  * Variables esperadas (las mismas de arbol.php): $arbolDatos, $columnasAnios, $lado.
  */
 
-require_once __DIR__ . '/../../../modelo/FilasTabla.php';
+$etiquetaAnioGrafica = (string) ($columnasAnios[0]['etiqueta'] ?? '');
+$paletaGrafica = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
 
-$esEgresosGrafica = $lado === 'egresos';
-$etiquetaValorGrafica = 'Valor ' . ($columnasAnios[0]['etiqueta'] ?? '');
-
-$columnasGrafica = ['Código', 'Grupo', 'Subgrupo', 'Descripción'];
-$clavesGrafica = ['codigo', 'grupo', 'subgrupo', 'descripcion'];
-if ($esEgresosGrafica) {
-    $columnasGrafica[] = 'Proyecto PDI';
-    $clavesGrafica[] = 'proyecto';
+$totalGrafica = 0.0;
+foreach ($arbolDatos as $raizGrafica) {
+    $totalGrafica += (float) ($raizGrafica['valores']['vigente'] ?? 0.0);
 }
-$columnasGrafica[] = 'Indexación';
-$clavesGrafica[] = 'indexacion';
-$columnasGrafica[] = $etiquetaValorGrafica;
-$clavesGrafica[] = 'valor';
 
-// Una fila por hoja (nodo sin hijas y que no es total), con su Grupo (raíz) y Subgrupo (nivel 1).
+// Escala común para todas las barras: la raíz más grande — así una hija siempre se ve más corta
+// que su padre y las barras de distintos grupos son comparables entre sí.
+$maximoGrafica = 0.0;
+foreach ($arbolDatos as $raizGrafica) {
+    $maximoGrafica = max($maximoGrafica, abs((float) ($raizGrafica['valores']['vigente'] ?? 0.0)));
+}
+$maximoGrafica = $maximoGrafica > 0 ? $maximoGrafica : 1.0;
+
+// Filas en orden de árbol (profundidad primero): [id, padre, nivel, etiqueta, valor, color, tieneHijos].
 $filasGrafica = [];
-$aplanarGrafica = function (array $nodos, ?string $grupo, ?string $subgrupo) use (&$aplanarGrafica, &$filasGrafica): void {
-    foreach ($nodos as $nodo) {
-        $nombre = trim(($nodo['codigo'] ?? '') . ' - ' . $nodo['etiqueta'], ' -');
-        $grupoNodo = $grupo ?? $nombre;
-        $subgrupoNodo = $grupo === null ? null : ($subgrupo ?? $nombre);
-
-        if (!empty($nodo['hijos'])) {
-            $aplanarGrafica($nodo['hijos'], $grupoNodo, $subgrupoNodo);
-            continue;
+$lineasGrafica = 0;
+$recorrerGrafica = function (array $nodos, ?string $padre, int $nivel, ?string $color) use (&$recorrerGrafica, &$filasGrafica, &$lineasGrafica, $paletaGrafica): void {
+    foreach ($nodos as $indice => $nodo) {
+        $colorNodo = $color ?? $paletaGrafica[$indice % count($paletaGrafica)];
+        $tieneHijos = !empty($nodo['hijos']);
+        if (!$tieneHijos && empty($nodo['esTotal'])) {
+            $lineasGrafica++;
         }
-        if (!empty($nodo['esTotal'])) {
-            continue;
-        }
-
         $filasGrafica[] = [
-            'origen_id' => count($filasGrafica) + 1,
-            'puede_editar' => false,
-            'codigo' => (string) ($nodo['codigo'] ?? ''),
-            'grupo' => $grupoNodo,
-            'subgrupo' => $subgrupoNodo ?? $grupoNodo,
-            'descripcion' => (string) $nodo['etiqueta'],
-            'proyecto' => trim((string) ($nodo['proyectosPdi'] ?? '')) !== '' ? (string) $nodo['proyectosPdi'] : '(Sin proyecto PDI)',
-            'indexacion' => trim((string) ($nodo['indexacion'] ?? '')) !== '' ? (string) $nodo['indexacion'] : '(Sin indexación)',
+            'id' => (string) $nodo['id'],
+            'padre' => $padre,
+            'nivel' => $nivel,
+            'etiqueta' => trim(($nodo['codigo'] ?? '') . ' - ' . $nodo['etiqueta'], ' -'),
             'valor' => (float) ($nodo['valores']['vigente'] ?? 0.0),
+            'color' => $colorNodo,
+            'tieneHijos' => $tieneHijos,
         ];
+        if ($tieneHijos) {
+            $recorrerGrafica($nodo['hijos'], (string) $nodo['id'], $nivel + 1, $colorNodo);
+        }
     }
 };
-$aplanarGrafica($arbolDatos, null, null);
+$recorrerGrafica($arbolDatos, null, 0, null);
 ?>
 <div class="arbol-grafica-contenedor" id="arbol-grafica-contenedor" hidden>
     <?php if (empty($filasGrafica)): ?>
     <p class="texto-atenuado">No hay datos para graficar.</p>
     <?php else: ?>
-    <div class="tabla-topbar">
-        <div class="tabla-acciones">
-            <div class="grupo-iconos grupo-basico" data-grupo="basico">
-                <div class="buscar-envoltorio">
-                    <button type="button" class="icono-boton" id="tdt-boton-buscar" title="Buscar">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                    </button>
-                    <div class="combo-envoltorio combo-buscar" id="tdt-combo-buscar">
-                        <div class="combo-fantasma" aria-hidden="true"></div>
-                        <input type="text" id="tdt-campo-buscar" class="combo-input" placeholder="Buscar…" autocomplete="off">
+    <div class="tabla-grafica-kpis arbol-grafica-kpis">
+        <div class="grafica-stat">
+            <p class="grafica-stat-etiqueta">Total <?= htmlspecialchars($etiquetaAnioGrafica) ?></p>
+            <p class="grafica-stat-valor">$<?= number_format($totalGrafica, 2, ',', '.') ?></p>
+        </div>
+        <div class="grafica-stat">
+            <p class="grafica-stat-etiqueta">Grupos</p>
+            <p class="grafica-stat-valor"><?= count($arbolDatos) ?></p>
+        </div>
+        <div class="grafica-stat">
+            <p class="grafica-stat-etiqueta">Líneas</p>
+            <p class="grafica-stat-valor"><?= $lineasGrafica ?></p>
+        </div>
+    </div>
+
+    <div class="grafica-panel arbol-grafica-panel">
+        <div class="grafica-panel-cabecera">
+            <div>
+                <h3 class="grafica-panel-titulo">Programación <?= htmlspecialchars($etiquetaAnioGrafica) ?> — <?= $lado === 'egresos' ? 'Egresos' : 'Ingresos' ?></h3>
+                <p class="grafica-panel-subtitulo">Cada barra es el valor de esa fila en el árbol (los totales ya incluyen a sus hijas; no se suman dos veces). Clic en un grupo para plegar o desplegar.</p>
+            </div>
+        </div>
+        <div class="grafica-panel-cuerpo arbol-grafica-cuerpo">
+            <div class="grafica-barras-filas arbol-grafica-filas">
+                <?php foreach ($filasGrafica as $fila): ?>
+                <?php
+                $porcentajeFila = $totalGrafica != 0.0 ? $fila['valor'] / $totalGrafica * 100 : 0.0;
+                $anchoFila = max(0.5, min(100, abs($fila['valor']) / $maximoGrafica * 100));
+                ?>
+                <div class="grafica-fila-barra arbol-grafica-fila nivel-<?= (int) $fila['nivel'] ?><?= $fila['tieneHijos'] ? ' con-hijos' : '' ?>"
+                     data-id="<?= htmlspecialchars($fila['id']) ?>"<?= $fila['padre'] !== null ? ' data-padre="' . htmlspecialchars($fila['padre']) . '"' : '' ?>
+                     title="<?= htmlspecialchars($fila['etiqueta'] . ': $' . number_format($fila['valor'], 2, ',', '.') . ' (' . number_format($porcentajeFila, 1, ',', '.') . '% del total)') ?>"
+                     <?= $fila['tieneHijos'] ? 'tabindex="0" role="button" aria-expanded="true"' : '' ?>>
+                    <span class="grafica-barra-etiqueta" style="padding-left: <?= (int) $fila['nivel'] * 18 ?>px;">
+                        <?php if ($fila['tieneHijos']): ?><span class="arbol-grafica-flecha" aria-hidden="true">▾</span><?php endif; ?>
+                        <?= htmlspecialchars($fila['etiqueta']) ?>
+                    </span>
+                    <div class="grafica-barra-pista">
+                        <div class="grafica-barra-relleno" style="width: <?= number_format($anchoFila, 2, '.', '') ?>%; background: <?= htmlspecialchars($fila['color']) ?>;"></div>
                     </div>
+                    <span class="grafica-barra-valor">$<?= number_format($fila['valor'], 2, ',', '.') ?> (<?= number_format($porcentajeFila, 1, ',', '.') ?>%)</span>
                 </div>
-                <button type="button" class="icono-boton" id="tdt-boton-filtrar" title="Filtrar">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                </button>
-                <?php // Los usa el toggle "Árbol | Gráfica" de arbol.php; la tabla plana no se muestra. ?>
-                <button type="button" id="tdt-boton-vista-tabla" hidden aria-hidden="true"></button>
-                <button type="button" id="tdt-boton-vista-grafica" hidden aria-hidden="true"></button>
+                <?php endforeach; ?>
             </div>
         </div>
     </div>
 
-    <script type="application/json" id="tdt-filas"><?= json_encode(FilasTabla::paraJson($filasGrafica, $clavesGrafica), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?></script>
-    <div class="tabla-scroll">
-        <table class="tabla-dev-datos" id="tabla-programacion-<?= htmlspecialchars($lado) ?>" data-origen="programacion_<?= htmlspecialchars($lado) ?>" data-estado="analisis">
-            <colgroup>
-                <col style="width: 34px;">
-                <?php foreach ($columnasGrafica as $indice => $columna): ?>
-                <col id="tdt-col-<?= $indice ?>" style="width: 180px;">
-                <?php endforeach; ?>
-            </colgroup>
-            <thead>
-                <tr class="fila-encabezados">
-                    <th class="col-seleccion"><input type="checkbox" id="tdt-seleccionar-todo" title="Seleccionar todo"></th>
-                    <?php foreach ($columnasGrafica as $indice => $columna): ?>
-                    <th>
-                        <span class="encabezado-columna" data-indice="<?= $indice ?>"><?= htmlspecialchars($columna) ?></span>
-                    </th>
-                    <?php endforeach; ?>
-                </tr>
-                <tr class="fila-filtros">
-                    <th></th>
-                    <?php foreach ($columnasGrafica as $indice => $columna): ?>
-                    <th>
-                        <div class="combo-envoltorio combo-filtro combo-filtro-columna" data-indice="<?= $indice ?>">
-                            <div class="combo-fantasma" aria-hidden="true"></div>
-                            <input type="text" class="filtro-columna combo-input" data-indice="<?= $indice ?>" placeholder="Filtrar…" autocomplete="off">
-                        </div>
-                    </th>
-                    <?php endforeach; ?>
-                </tr>
-            </thead>
-            <tbody></tbody>
-            <tfoot>
-                <tr class="fila-totales-tdt">
-                    <td class="col-seleccion">Total</td>
-                    <?php foreach ($columnasGrafica as $columna): ?>
-                    <td></td>
-                    <?php endforeach; ?>
-                </tr>
-            </tfoot>
-        </table>
+    <style>
+        .arbol-grafica-kpis {
+            margin-bottom: 0.6rem;
+        }
 
-        <div class="tabla-grafica" id="tdt-grafica" hidden>
-            <div class="tabla-grafica-kpis" id="tdt-grafica-kpis"></div>
-            <div class="tabla-grafica-paneles" id="tdt-grafica-paneles"></div>
-        </div>
+        .arbol-grafica-panel {
+            flex: 1;
+            min-height: 0;
+            cursor: default;
+        }
 
-        <div class="grafica-tooltip" id="tdt-grafica-tooltip"></div>
-    </div>
+        .arbol-grafica-cuerpo {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+        }
+
+        .arbol-grafica-filas {
+            --grafica-ancho-etiqueta-defecto: 380px;
+        }
+
+        .arbol-grafica-fila {
+            cursor: default;
+        }
+
+        .arbol-grafica-fila.con-hijos {
+            cursor: pointer;
+        }
+
+        /* Raíces en negrita y barras completas; cada nivel más abajo, un poco más tenue. */
+        .arbol-grafica-fila.nivel-0 .grafica-barra-etiqueta,
+        .arbol-grafica-fila.nivel-0 .grafica-barra-valor {
+            font-weight: 700;
+            color: var(--color-texto);
+        }
+
+        .arbol-grafica-fila.nivel-1 .grafica-barra-relleno { opacity: 0.85; }
+        .arbol-grafica-fila.nivel-2 .grafica-barra-relleno { opacity: 0.7; }
+        .arbol-grafica-fila.nivel-3 .grafica-barra-relleno,
+        .arbol-grafica-fila.nivel-4 .grafica-barra-relleno { opacity: 0.55; }
+
+        .arbol-grafica-flecha {
+            display: inline-block;
+            width: 1em;
+            transition: transform var(--transicion);
+        }
+
+        .arbol-grafica-fila.plegado .arbol-grafica-flecha {
+            transform: rotate(-90deg);
+        }
+
+        .arbol-grafica-fila.oculta-por-padre {
+            display: none;
+        }
+    </style>
 
     <script>
-    var tdtColumnas = <?= json_encode($columnasGrafica, JSON_UNESCAPED_UNICODE) ?>;
-    var tdtNamespace = <?= json_encode('programacion_' . $lado) ?>;
+    // Plegar/desplegar en la gráfica, como en el árbol: ocultar un nodo oculta a todos sus
+    // descendientes; al desplegar, solo reaparecen los que no tienen un ancestro plegado.
+    (function () {
+        var filas = Array.prototype.slice.call(document.querySelectorAll('.arbol-grafica-fila'));
+        var porId = {};
+        filas.forEach(function (fila) { porId[fila.dataset.id] = fila; });
+
+        function tieneAncestroPlegado(fila) {
+            var padre = fila.dataset.padre ? porId[fila.dataset.padre] : null;
+            while (padre) {
+                if (padre.classList.contains('plegado')) { return true; }
+                padre = padre.dataset.padre ? porId[padre.dataset.padre] : null;
+            }
+            return false;
+        }
+
+        function alternar(fila) {
+            var plegar = !fila.classList.contains('plegado');
+            fila.classList.toggle('plegado', plegar);
+            fila.setAttribute('aria-expanded', plegar ? 'false' : 'true');
+            filas.forEach(function (otra) {
+                otra.classList.toggle('oculta-por-padre', tieneAncestroPlegado(otra));
+            });
+        }
+
+        filas.filter(function (fila) { return fila.classList.contains('con-hijos'); }).forEach(function (fila) {
+            fila.addEventListener('click', function () { alternar(fila); });
+            fila.addEventListener('keydown', function (evento) {
+                if (evento.key === 'Enter' || evento.key === ' ') {
+                    evento.preventDefault();
+                    alternar(fila);
+                }
+            });
+        });
+    })();
     </script>
-    <script src="publico/js/tabla-real/nucleo.js?v=<?= filemtime(__DIR__ . '/../../../publico/js/tabla-real/nucleo.js') ?>"></script>
-    <script src="publico/js/tabla-real/tabla.js?v=<?= filemtime(__DIR__ . '/../../../publico/js/tabla-real/tabla.js') ?>"></script>
-    <script src="publico/js/tabla-real/graficos.js?v=<?= filemtime(__DIR__ . '/../../../publico/js/tabla-real/graficos.js') ?>"></script>
     <?php endif; ?>
 </div>
