@@ -226,6 +226,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <p class="grupo-menu">Documentación</p>
             <a href="publico/documentos/ficha-tecnica.docx">Ficha técnica</a>
             <a href="publico/documentos/esencia-del-software.docx">¿Para qué sirve?</a>
+            <a href="#" data-abrir-acerca-de>Acerca de nosotros</a>
     <?php elseif ($tipoCuentaActual === 'consejo_superior'): ?>
             <?php
             // "Consulta" ya no es un enlace fijo: es una opción más de config/menu_items.php,
@@ -266,6 +267,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <p class="grupo-menu">Documentación</p>
             <a href="publico/documentos/ficha-tecnica.docx">Ficha técnica</a>
             <a href="publico/documentos/esencia-del-software.docx">¿Para qué sirve?</a>
+            <a href="#" data-abrir-acerca-de>Acerca de nosotros</a>
     <?php else: ?>
             <p class="grupo-menu">Resumen</p>
             <a href="index.php">Inicio</a>
@@ -274,6 +276,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <p class="grupo-menu">Documentación</p>
             <a href="publico/documentos/ficha-tecnica.docx">Ficha técnica</a>
             <a href="publico/documentos/esencia-del-software.docx">¿Para qué sirve?</a>
+            <a href="#" data-abrir-acerca-de>Acerca de nosotros</a>
     <?php endif; ?>
         </nav>
 </aside>

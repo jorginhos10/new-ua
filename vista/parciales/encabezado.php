@@ -161,7 +161,7 @@ if (!empty($_SESSION['usuario_id'])) {
                               <!--  <span class="detalle-usuario">Rol: <?= htmlspecialchars($rolActual) ?></span> -->
                             </div>
                             <a href="index.php?ruta=perfil">Perfil</a>
-                            <a href="#" id="boton-abrir-acerca-de">Acerca de nosotros</a>
+                            <a href="#" id="boton-abrir-acerca-de" data-abrir-acerca-de>Acerca de nosotros</a>
                             <a href="index.php?ruta=logout">Cerrar sesión</a>
                         </div>
                     </div>
@@ -206,10 +206,14 @@ if (!empty($_SESSION['usuario_id'])) {
             <script>
             (function () {
                 var modal = document.getElementById('modal-acerca-de');
-                var abrir = document.getElementById('boton-abrir-acerca-de');
-                if (!modal || !abrir) { return; }
+                if (!modal) { return; }
                 function cerrar() { modal.classList.remove('abierto'); }
-                abrir.addEventListener('click', function (evento) {
+                // Cualquier enlace con data-abrir-acerca-de lo abre (menú del usuario y la sección
+                // "Documentación" del menú lateral); delegado en el documento porque el menú lateral
+                // se dibuja después de este script.
+                document.addEventListener('click', function (evento) {
+                    var enlace = evento.target.closest('[data-abrir-acerca-de]');
+                    if (!enlace) { return; }
                     evento.preventDefault();
                     var dropdown = document.getElementById('menu-usuario-dropdown');
                     if (dropdown) { dropdown.classList.remove('abierto'); }
