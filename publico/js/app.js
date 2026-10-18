@@ -1025,6 +1025,9 @@ document.addEventListener('DOMContentLoaded', function () {
             asignar('editar-egreso-insumo', gasto.insumo);
             asignar('editar-egreso-cantidad', gasto.cantidad);
             asignar('editar-egreso-costo_unitario', gasto.costo_unitario);
+            asignar('editar-egreso-categoria_gasto_id', gasto.categoria_gasto_id || '');
+            asignar('editar-egreso-categoria_origen', gasto.categoria_origen || '');
+            asignar('editar-egreso-categoria_confianza', gasto.categoria_confianza || '');
 
             var campoContratoTexto = document.getElementById('editar-egreso-objeto_proyecto_paa_buscador');
             var campoContratoId = document.getElementById('editar-egreso-objeto_proyecto_paa');

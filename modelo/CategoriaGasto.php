@@ -50,16 +50,53 @@ class CategoriaGasto
 
     // --- Administración (Configuraciones > Listas > Categorías de gasto) ---
 
-    /** Todas, también las inactivas, con cuántos gastos/reglas de rubro las usan (para "en uso"). */
+    /**
+     * Todas, también las inactivas, con cuántos gastos/reglas de rubro las usan (para "en uso"):
+     * gastos principales y los egresos de Extensión, Postgrado y Unisalud. Si esas tres tablas aún
+     * no tienen la columna (instalar.php sin correr), cuenta solo los gastos principales.
+     */
     public function obtenerTodos(): array
     {
-        return $this->db->query(
-            'SELECT c.id, c.macro, c.subcategoria, c.tokens, c.orden, c.estado,
-                    (SELECT COUNT(*) FROM gastos g WHERE g.categoria_gasto_id = c.id)
+        $usosAutogestion = '(SELECT COUNT(*) FROM gastos_extension ge WHERE ge.categoria_gasto_id = c.id)
+                    + (SELECT COUNT(*) FROM gastos_postgrado gp WHERE gp.categoria_gasto_id = c.id)
+                    + (SELECT COUNT(*) FROM gastos_unisalud gu WHERE gu.categoria_gasto_id = c.id)';
+        $consulta = static fn (string $extra): string => 'SELECT c.id, c.macro, c.subcategoria, c.tokens, c.orden, c.estado,
+                    (SELECT COUNT(*) FROM gastos g WHERE g.categoria_gasto_id = c.id)' . $extra . '
                     + (SELECT COUNT(*) FROM rubro_categoria_gasto r WHERE r.categoria_id = c.id) AS usos
              FROM categorias_gasto c
-             ORDER BY c.orden, c.id'
-        )->fetchAll();
+             ORDER BY c.orden, c.id';
+
+        try {
+            return $this->db->query($consulta(' + ' . $usosAutogestion))->fetchAll();
+        } catch (PDOException $excepcion) {
+            return $this->db->query($consulta(''))->fetchAll();
+        }
+    }
+
+    /**
+     * Valida la "Categoría de gasto" que llega de un formulario (categoria_gasto_id +
+     * categoria_origen + categoria_confianza) y la deja lista para guardar. Vacía = sin categoría.
+     * Lo usan los egresos de Extensión, Postgrado y Unisalud (Gastos hace lo mismo en su controlador).
+     *
+     * @return array{0: array{categoria_gasto_id: ?string, categoria_origen: ?string, categoria_confianza: ?float}, 1: string} [campos, error]
+     */
+    public function normalizarSeleccion(array $datos): array
+    {
+        $categoriaId = trim((string) ($datos['categoria_gasto_id'] ?? ''));
+        if ($categoriaId === '') {
+            return [['categoria_gasto_id' => null, 'categoria_origen' => null, 'categoria_confianza' => null], ''];
+        }
+
+        if (!$this->existeCategoria($categoriaId)) {
+            return [[], 'La categoría de gasto seleccionada no existe.'];
+        }
+
+        $origen = ($datos['categoria_origen'] ?? '') === 'automatico' ? 'automatico' : 'manual';
+        $confianza = $origen === 'automatico' && is_numeric($datos['categoria_confianza'] ?? null)
+            ? round(min(1.0, max(0.0, (float) $datos['categoria_confianza'])), 3)
+            : null;
+
+        return [['categoria_gasto_id' => $categoriaId, 'categoria_origen' => $origen, 'categoria_confianza' => $confianza], ''];
     }
 
     public function obtenerPorId(string $id): ?array
@@ -118,44 +155,126 @@ class CategoriaGasto
         return $consulta->fetchColumn() !== false;
     }
 
-    /** modo 'vacios': solo gastos sin categoría. modo 'todo': todos (sobrescribe manuales). */
+    /**
+     * Tablas de gasto que clasifica el lote de Configuraciones > Categoría de gasto (clave = tabla,
+     * valor = rótulo para el resumen). También es la lista blanca que valida el controlador.
+     */
+    public const TABLAS_CLASIFICABLES = [
+        'gastos' => 'Gastos principales',
+        'gastos_extension' => 'Extensión',
+        'gastos_postgrado' => 'Postgrado',
+        'gastos_unisalud' => 'Unisalud',
+    ];
+
+    /**
+     * modo 'vacios': solo gastos sin categoría. modo 'todo': todos (sobrescribe manuales). Cada gasto
+     * lleva su `tabla` (los ids se repiten entre tablas). Las tablas de autogestión se omiten si aún
+     * no tienen las columnas de categoría (instalar.php sin correr). A las filas de autogestión sin
+     * `rubro_id` (p. ej. Excedentes automáticos, que solo guardan `rubro_texto`) se les resuelve el
+     * código de rubro comparando ese texto con la descripción de la lista de rubros.
+     */
     public function gastosParaClasificar(string $modo): array
     {
         $condicion = $modo === 'vacios' ? 'WHERE g.categoria_gasto_id IS NULL' : '';
+        $rubroPorDescripcion = null;
+        $gastos = [];
 
-        return $this->db->query(
-            "SELECT g.id, g.actividad, g.insumo, g.rubro_texto, g.tipo_automatico, g.categoria_gasto_id, g.categoria_origen,
-                    r.codigo AS rubro_codigo
-             FROM gastos g
-             LEFT JOIN rubros r ON r.id = g.rubro_id
-             $condicion
-             ORDER BY g.id"
-        )->fetchAll();
+        foreach (array_keys(self::TABLAS_CLASIFICABLES) as $tabla) {
+            try {
+                $filas = $this->db->query(
+                    "SELECT g.id, g.actividad, g.insumo, g.rubro_texto, g.tipo_automatico, g.categoria_gasto_id, g.categoria_origen,
+                            r.codigo AS rubro_codigo
+                     FROM $tabla g
+                     LEFT JOIN rubros r ON r.id = g.rubro_id
+                     $condicion
+                     ORDER BY g.id"
+                )->fetchAll();
+            } catch (PDOException $excepcion) {
+                if ($tabla === 'gastos') {
+                    throw $excepcion;
+                }
+
+                continue;
+            }
+
+            foreach ($filas as $fila) {
+                if ($tabla !== 'gastos' && empty($fila['rubro_codigo']) && trim((string) ($fila['rubro_texto'] ?? '')) !== '') {
+                    $rubroPorDescripcion ??= $this->rubrosPorDescripcionNormalizada();
+                    $fila['rubro_codigo'] = $rubroPorDescripcion[self::normalizarTexto((string) $fila['rubro_texto'])] ?? null;
+                }
+
+                $fila['tabla'] = $tabla;
+                $gastos[] = $fila;
+            }
+        }
+
+        return $gastos;
     }
 
+    /** descripción normalizada => código de rubro (el primero si se repite). */
+    private function rubrosPorDescripcionNormalizada(): array
+    {
+        $mapa = [];
+        foreach ($this->db->query('SELECT codigo, descripcion FROM rubros ORDER BY codigo')->fetchAll() as $rubro) {
+            $clave = self::normalizarTexto((string) $rubro['descripcion']);
+            if ($clave !== '' && !isset($mapa[$clave])) {
+                $mapa[$clave] = $rubro['codigo'];
+            }
+        }
+
+        return $mapa;
+    }
+
+    /** Minúsculas, sin tildes ni signos y con espacios colapsados (igual criterio que el motor del navegador). */
+    private static function normalizarTexto(string $texto): string
+    {
+        $texto = mb_strtolower($texto, 'UTF-8');
+        $texto = strtr($texto, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n']);
+
+        return trim((string) preg_replace('/\s+/', ' ', (string) preg_replace('/[^a-z0-9\s]/', ' ', $texto)));
+    }
+
+    /** Gastos con categoría elegida a mano, sumando las 4 tablas (las de autogestión sin columna cuentan 0). */
     public function contarManuales(): int
     {
-        return (int) $this->db->query("SELECT COUNT(*) FROM gastos WHERE categoria_origen = 'manual'")->fetchColumn();
+        $total = 0;
+        foreach (array_keys(self::TABLAS_CLASIFICABLES) as $tabla) {
+            try {
+                $total += (int) $this->db->query("SELECT COUNT(*) FROM $tabla WHERE categoria_origen = 'manual'")->fetchColumn();
+            } catch (PDOException $excepcion) {
+                if ($tabla === 'gastos') {
+                    throw $excepcion;
+                }
+            }
+        }
+
+        return $total;
     }
 
     /**
-     * Guarda el resultado del motor. Solo acepta origen 'automatico' (con categoría existente) o
-     * 'no_aplica' (sin categoría). Todo o nada.
+     * Guarda el resultado del motor. Cada item lleva su `tabla` (una de TABLAS_CLASIFICABLES; sin ella,
+     * 'gastos'). Solo acepta origen 'automatico' (con categoría existente) o 'no_aplica' (sin
+     * categoría). Todo o nada.
      */
     public function guardarClasificacion(array $items): int
     {
         $this->db->beginTransaction();
 
         try {
-            $consulta = $this->db->prepare(
-                'UPDATE gastos
-                 SET categoria_gasto_id = :categoria_gasto_id, categoria_origen = :categoria_origen, categoria_confianza = :categoria_confianza
-                 WHERE id = :id'
-            );
-
+            $consultas = [];
             $guardados = 0;
             foreach ($items as $item) {
-                $consulta->execute([
+                $tabla = (string) ($item['tabla'] ?? 'gastos');
+                if (!isset(self::TABLAS_CLASIFICABLES[$tabla])) {
+                    throw new InvalidArgumentException('Tabla no válida: ' . $tabla);
+                }
+
+                $consultas[$tabla] ??= $this->db->prepare(
+                    "UPDATE $tabla
+                     SET categoria_gasto_id = :categoria_gasto_id, categoria_origen = :categoria_origen, categoria_confianza = :categoria_confianza
+                     WHERE id = :id"
+                );
+                $consultas[$tabla]->execute([
                     'id' => (int) $item['id'],
                     'categoria_gasto_id' => $item['categoria_gasto_id'],
                     'categoria_origen' => $item['categoria_origen'],

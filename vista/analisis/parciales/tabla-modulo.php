@@ -8,7 +8,7 @@
  *
  * Variables esperadas: $columnas, $clavesFila, $filasCompletas, $anchosColumna,
  * $indicesOcultosPorDefecto, $origenActivo, $vista, $error, $pestanasGastoIngreso (null, o
- * ['egresos' => origen, 'ingresos' => origen, 'activo'] para Extensión/Postgrado — mismas
+ * ['egresos' => origen, 'ingresos' => origen, 'activo'] para Extensión/Postgrado/Unisalud — mismas
  * pestañas que peticiones-tipo-detalle).
  */
 
@@ -21,6 +21,7 @@ $etiquetasModuloTabla = [
     'gasto_postgrado' => 'Postgrado',
     'ingreso_postgrado' => 'Postgrado',
     'gasto_unisalud' => 'Unisalud',
+    'ingreso_unisalud' => 'Unisalud',
     'monitores' => 'Monitores',
     'arl' => 'ARL',
 ];

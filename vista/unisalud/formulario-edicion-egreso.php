@@ -104,6 +104,12 @@
         <input type="text" id="editar-egreso-insumo" name="insumo" placeholder="Diligenciar" required>
     </div>
 
+    <?php
+    $prefijoCategoria = 'editar-egreso-';
+    $categoriaSeleccionada = '';
+    require __DIR__ . '/../gastos/parciales/selector-categoria-gasto.php';
+    ?>
+
     <div class="campo">
         <label for="editar-egreso-cantidad">Cantidad *</label>
         <input type="number" id="editar-egreso-cantidad" name="cantidad" min="1" step="1" required>

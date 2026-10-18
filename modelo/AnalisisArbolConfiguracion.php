@@ -57,6 +57,39 @@ class AnalisisArbolConfiguracion
         ]);
     }
 
+    /**
+     * Código de PP (p. ej. "1.0") que el admin ligó a una tarjeta de Análisis de distribución (fila
+     * `distribucion`: el botón Ingresos), o null si no hay (o si la columna aún no existe: instalar.php).
+     */
+    public function obtenerCodigoPp(string $pestana): ?string
+    {
+        try {
+            $consulta = $this->db->prepare('SELECT codigo_pp FROM analisis_arbol_configuracion WHERE pestana = :pestana');
+            $consulta->execute(['pestana' => $pestana]);
+            $fila = $consulta->fetch();
+        } catch (Throwable $excepcion) {
+            return null;
+        }
+
+        return ($fila !== false && !empty($fila['codigo_pp'])) ? (string) $fila['codigo_pp'] : null;
+    }
+
+    /** null = quitar la relación. */
+    public function guardarCodigoPp(string $pestana, ?string $codigoPp, int $usuarioId): bool
+    {
+        $consulta = $this->db->prepare(
+            'INSERT INTO analisis_arbol_configuracion (pestana, codigo_pp, actualizado_por)
+             VALUES (:pestana, :codigo_pp, :usuario_id)
+             ON DUPLICATE KEY UPDATE codigo_pp = VALUES(codigo_pp), actualizado_por = VALUES(actualizado_por)'
+        );
+
+        return $consulta->execute([
+            'pestana' => $pestana,
+            'codigo_pp' => $codigoPp,
+            'usuario_id' => $usuarioId,
+        ]);
+    }
+
     public function guardarExpandido(string $pestana, bool $expandido, int $usuarioId): bool
     {
         $consulta = $this->db->prepare(

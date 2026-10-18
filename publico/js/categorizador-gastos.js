@@ -134,7 +134,39 @@
             };
         }
 
-        return { clasificar: clasificar, normalizar: normalizar };
+        // Para filas SIN código de rubro (p. ej. los Excedentes automáticos de autogestión, que solo
+        // guardan rubro_texto): puntúa todas las categorías del catálogo con sus tokens contra
+        // actividad + insumo + rubro_texto. Asigna la mejor solo con al menos MINIMO_COINCIDENCIAS_TEXTO
+        // coincidencias y sin empate; la confianza es media fija para que se note que salió del texto.
+        var MINIMO_COINCIDENCIAS_TEXTO = 2;
+
+        function clasificarPorTexto(gasto) {
+            var texto = normalizar([gasto.actividad, gasto.insumo, gasto.rubro_texto].join(' '));
+            var mejor = null;
+            var empate = false;
+
+            Object.keys(categorias).forEach(function (id) {
+                var coincidencias = contarCoincidencias(texto, categorias[id].tokens);
+                if (coincidencias === 0) {
+                    return;
+                }
+
+                if (mejor === null || coincidencias > mejor.coincidencias) {
+                    mejor = { categoriaId: id, coincidencias: coincidencias };
+                    empate = false;
+                } else if (coincidencias === mejor.coincidencias) {
+                    empate = true;
+                }
+            });
+
+            if (mejor === null || empate || mejor.coincidencias < MINIMO_COINCIDENCIAS_TEXTO) {
+                return { categoriaId: null, origen: null, confianza: null, razon: 'sin_texto' };
+            }
+
+            return { categoriaId: mejor.categoriaId, origen: 'automatico', confianza: 0.6, razon: 'texto_sin_rubro' };
+        }
+
+        return { clasificar: clasificar, clasificarPorTexto: clasificarPorTexto, normalizar: normalizar };
     }
 
     global.CategorizadorGastos = { crearMotor: crearMotor, normalizar: normalizar };

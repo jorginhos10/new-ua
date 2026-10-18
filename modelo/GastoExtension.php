@@ -277,9 +277,9 @@ class GastoExtension
     {
         $consulta = $this->db->prepare(
             'INSERT INTO gastos_extension
-                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, autogestion_id, insumo, cantidad, costo_unitario, valor_total, meses, usuario_id, capitulo_control)
+                (sede_id, anio_presupuestal_id, categoria, dependencia, linea_id, motor_id, proyecto_id, objeto_proyecto_paa, actividad, rubro_id, autogestion_id, insumo, cantidad, costo_unitario, valor_total, meses, usuario_id, capitulo_control, categoria_gasto_id, categoria_origen, categoria_confianza)
              VALUES
-                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :autogestion_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses, :usuario_id, :capitulo_control)'
+                (:sede_id, :anio_presupuestal_id, :categoria, :dependencia, :linea_id, :motor_id, :proyecto_id, :objeto_proyecto_paa, :actividad, :rubro_id, :autogestion_id, :insumo, :cantidad, :costo_unitario, :valor_total, :meses, :usuario_id, :capitulo_control, :categoria_gasto_id, :categoria_origen, :categoria_confianza)'
         );
 
         return $consulta->execute([
@@ -301,6 +301,9 @@ class GastoExtension
             'meses' => $datos['meses'],
             'usuario_id' => $datos['usuario_id'] ?? null,
             'capitulo_control' => $datos['capitulo_control'] ?? null,
+            'categoria_gasto_id' => $datos['categoria_gasto_id'] ?? null,
+            'categoria_origen' => $datos['categoria_origen'] ?? null,
+            'categoria_confianza' => $datos['categoria_confianza'] ?? null,
         ]);
     }
 
@@ -321,7 +324,7 @@ class GastoExtension
                 dependencia = :dependencia, linea_id = :linea_id, motor_id = :motor_id, proyecto_id = :proyecto_id,
                 objeto_proyecto_paa = :objeto_proyecto_paa, actividad = :actividad, rubro_id = :rubro_id,
                 autogestion_id = :autogestion_id, insumo = :insumo, cantidad = :cantidad,
-                costo_unitario = :costo_unitario, valor_total = :valor_total, meses = :meses
+                costo_unitario = :costo_unitario, valor_total = :valor_total, meses = :meses, categoria_gasto_id = :categoria_gasto_id, categoria_origen = :categoria_origen, categoria_confianza = :categoria_confianza
              WHERE id = :id AND tipo_automatico IS NULL"
         );
 
@@ -343,6 +346,9 @@ class GastoExtension
             'costo_unitario' => $datos['costo_unitario'],
             'valor_total' => $datos['cantidad'] * $datos['costo_unitario'],
             'meses' => $datos['meses'],
+            'categoria_gasto_id' => $datos['categoria_gasto_id'] ?? null,
+            'categoria_origen' => $datos['categoria_origen'] ?? null,
+            'categoria_confianza' => $datos['categoria_confianza'] ?? null,
         ]);
     }
 
@@ -370,7 +376,7 @@ class GastoExtension
                 dependencia = :dependencia, linea_id = :linea_id, motor_id = :motor_id, proyecto_id = :proyecto_id,
                 objeto_proyecto_paa = :objeto_proyecto_paa, actividad = :actividad, rubro_id = :rubro_id,
                 autogestion_id = :autogestion_id, insumo = :insumo, cantidad = :cantidad,
-                costo_unitario = :costo_unitario, valor_total = :valor_total, meses = :meses, tipo_automatico = NULL
+                costo_unitario = :costo_unitario, valor_total = :valor_total, meses = :meses, categoria_gasto_id = :categoria_gasto_id, categoria_origen = :categoria_origen, categoria_confianza = :categoria_confianza, tipo_automatico = NULL
              WHERE id = :id AND tipo_automatico IS NOT NULL"
         );
 
@@ -392,6 +398,9 @@ class GastoExtension
             'costo_unitario' => $datos['costo_unitario'],
             'valor_total' => $datos['cantidad'] * $datos['costo_unitario'],
             'meses' => $datos['meses'],
+            'categoria_gasto_id' => $datos['categoria_gasto_id'] ?? null,
+            'categoria_origen' => $datos['categoria_origen'] ?? null,
+            'categoria_confianza' => $datos['categoria_confianza'] ?? null,
         ]);
     }
 

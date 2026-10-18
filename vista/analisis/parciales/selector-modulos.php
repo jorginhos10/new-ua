@@ -1,16 +1,17 @@
 <?php
 /**
  * Selector de módulo de la pestaña "Análisis de distribución": tarjeta propia a la izquierda de
- * la tabla (ver vista/analisis/index.php), con una mini-tarjeta por cada origen con techo (Gasto,
- * Extensión, Postgrado, Unisalud, Monitores, ARL). Clic en una mini-tarjeta
- * recarga la pestaña con ese origen activo.
+ * la tabla (ver vista/analisis/index.php), en tres secciones: Presupuesto (Ingresos, Gastos,
+ * Inversiones), Autogestión (Extensión, Postgrado) y Unidad de salud (Unisalud). Monitores y ARL ya
+ * no tienen tarjeta. Clic en una mini-tarjeta de módulo recarga la pestaña con ese origen activo;
+ * Ingresos e Inversiones llevan a Programación presupuestal (Ingresos) y a Proyectos de Inversión.
  *
  * Cada tarjeta muestra el total (sin decimales; el valor exacto va en el title), arriba a la
  * derecha el % de asignación de egresos ($asignacionPorModulo) y, cuando aplica, una barra que
  * hace de separador entre el nombre y los valores: Gasto = avance contra su techo
  * ($techosPorModulo; roja si lo supera); Autogestión = distribución de sus egresos en Gastos /
  * Inversiones / Excedentes ($distribucionPorModulo). Ver
- * AnalisisControlador::obtenerIndicadoresSelector(). Extensión y Postgrado ($paresGastoIngreso)
+ * AnalisisControlador::obtenerIndicadoresSelector(). Extensión, Postgrado y Unisalud ($paresGastoIngreso)
  * muestran Egresos e Ingresos como dos filas clicables — cada una lleva directo a esa pestaña de
  * la tabla (ver tabla-modulo.php). Todas las tarjetas tienen la misma altura mínima.
  *
@@ -24,14 +25,16 @@ $asignacionPorModulo = $asignacionPorModulo ?? [];
 $distribucionPorModulo = $distribucionPorModulo ?? [];
 $clasesDistribucion = ['Gastos' => 'gastos', 'Inversiones' => 'inversiones', 'Excedentes' => 'excedentes', 'Otros' => 'otros'];
 
-$etiquetasModuloSelector = [
-    'gasto_principal' => 'Gastos',
-    'gasto_extension' => 'Extensión',
-    'gasto_postgrado' => 'Postgrado',
-    'gasto_unisalud' => 'Unisalud',
-    'monitores' => 'Monitores',
-    'arl' => 'ARL',
+// Tres secciones. 'ingresos_pp' e 'inversiones_pp' no son orígenes de la tabla: son tarjetas-enlace
+// a Programación presupuestal (Ingresos) y a Proyectos de Inversión, con la misma cifra que su
+// landing (ver AnalisisControlador::obtenerTarjetasPresupuesto()).
+$seccionesSelector = [
+    'Presupuesto' => ['ingresos_pp' => 'Ingresos', 'gasto_principal' => 'Gastos', 'inversiones_pp' => 'Inversiones'],
+    'Autogestión' => ['gasto_extension' => 'Extensión', 'gasto_postgrado' => 'Postgrado'],
+    'Unidad de salud' => ['gasto_unisalud' => 'Unisalud'],
 ];
+$tarjetasPresupuesto = $tarjetasPresupuesto ?? null;
+$puedeConfigurarIngresosPp = $puedeConfigurarIngresosPp ?? false;
 
 $extraSelector = [];
 if ($vista === 'repositorio' && !empty($snapshotIdActual)) {
@@ -191,7 +194,7 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
         color: var(--color-texto-tenue);
     }
 
-    /* Extensión / Postgrado: una fila clicable por lado. */
+    /* Extensión / Postgrado / Unisalud: una fila clicable por lado. */
     .analisis-selector-lados {
         display: flex;
         flex-direction: column;
@@ -248,11 +251,85 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
         font-size: 0.78rem;
         text-align: right;
     }
+
+    .analisis-selector-titulo:not(:first-child) {
+        margin-top: 0.5rem;
+    }
+
+    /* Tarjetas Ingresos / Inversiones (enlace al landing de PP o Proyectos). */
+    .analisis-selector-enlace {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .analisis-selector-enlace:hover {
+        text-decoration: none;
+    }
+
+    .analisis-selector-sub {
+        font-size: 0.7rem;
+        color: var(--color-texto-tenue);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .analisis-selector-config {
+        position: absolute;
+        top: 0.3rem;
+        right: 0.35rem;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: var(--color-texto-tenue);
+        cursor: pointer;
+        line-height: 1;
+    }
+
+    .analisis-selector-config:hover {
+        color: var(--color-primario);
+    }
 </style>
 
 <nav class="tarjeta analisis-selector" aria-label="Módulos">
-    <h3 class="analisis-selector-titulo">Módulo</h3>
-    <?php foreach ($etiquetasModuloSelector as $origenOpcion => $etiqueta): ?>
+    <?php foreach ($seccionesSelector as $tituloSeccion => $tarjetasSeccion): ?>
+    <h3 class="analisis-selector-titulo"><?= htmlspecialchars($tituloSeccion) ?></h3>
+    <?php foreach ($tarjetasSeccion as $origenOpcion => $etiqueta): ?>
+    <?php if ($origenOpcion === 'ingresos_pp' || $origenOpcion === 'inversiones_pp'): ?>
+    <?php
+    $tarjeta = $tarjetasPresupuesto[$origenOpcion === 'ingresos_pp' ? 'ingresos' : 'inversiones'] ?? ['estado' => 'sin_version', 'valor' => null, 'url' => null];
+    $valorTarjeta = $tarjeta['estado'] === 'ok' ? (float) $tarjeta['valor'] : null;
+    $subtitulo = match ($tarjeta['estado']) {
+        'ok' => $origenOpcion === 'ingresos_pp' ? $tarjeta['codigo'] . ' · ' . $tarjeta['nombre'] : 'Proyectos de Inversión',
+        'sin_configurar' => 'Sin configurar',
+        'sin_version' => 'Sin versión guardada',
+        'no_existe' => 'El código ' . $tarjeta['codigo'] . ' no existe en PP',
+        default => '',
+    };
+    $tituloTarjeta = ($origenOpcion === 'ingresos_pp' ? 'Programación presupuestal (Ingresos)' : 'Proyectos de Inversión')
+        . ($vista === 'usuario' ? ' — no se filtra por dependencia' : '')
+        . ($tarjeta['url'] === null ? ' — sin acceso a esa pestaña' : '');
+    $etiquetaEnlace = $tarjeta['url'] !== null ? 'a href="' . htmlspecialchars($tarjeta['url']) . '"' : 'div';
+    ?>
+    <div class="analisis-selector-item<?= $valorTarjeta === null ? ' vacio' : '' ?>">
+        <<?= $etiquetaEnlace ?> class="analisis-selector-enlace" title="<?= htmlspecialchars($tituloTarjeta) ?>">
+            <span class="analisis-selector-cabecera">
+                <span class="analisis-selector-nombre"><?= htmlspecialchars($etiqueta) ?></span>
+            </span>
+            <span class="analisis-selector-sub" title="<?= htmlspecialchars($subtitulo) ?>"><?= htmlspecialchars($subtitulo) ?></span>
+            <span class="analisis-selector-valor"<?= $valorTarjeta !== null ? ' title="' . htmlspecialchars($monedaExacta($valorTarjeta)) . '"' : '' ?>><?= $valorTarjeta !== null ? $monedaCorta($valorTarjeta) : '—' ?></span>
+        </<?= $tarjeta['url'] !== null ? 'a' : 'div' ?>>
+        <?php if ($origenOpcion === 'ingresos_pp' && $puedeConfigurarIngresosPp): ?>
+        <button type="button" class="analisis-selector-config" id="ingresos-pp-abrir" title="Elegir el código de Ingresos de PP de este botón (solo SA)" aria-label="Configurar Ingresos">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+        <?php endif; ?>
+    </div>
+    <?php continue; ?>
+    <?php endif; ?>
     <?php
     $origenIngresoPar = $paresGastoIngreso[$origenOpcion] ?? null;
     $totalEgresosModulo = (float) ($totalesPorModulo[$origenOpcion] ?? 0.0);
@@ -330,4 +407,9 @@ $urlOrigen = static fn (string $origen): string => analisisUrl('analisis', $vist
     </div>
     <?php endif; ?>
     <?php endforeach; ?>
+    <?php endforeach; ?>
 </nav>
+
+<?php if ($puedeConfigurarIngresosPp): ?>
+<?php require __DIR__ . '/ingresos-pp-config.php'; ?>
+<?php endif; ?>

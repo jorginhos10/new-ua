@@ -99,6 +99,37 @@ class PresupuestoInstitucional
         return $consulta->fetchAll();
     }
 
+    /**
+     * Resumen plano de un lado para un año: cada línea por código con su descripción y valor, y el
+     * total (suma de las raíces, la misma cifra de la fila Total de su pestaña). Lee la versión
+     * congelada si se pasa $versionId (Repositorio) o las tablas en vivo si es null — la misma fuente
+     * que usa su landing. Lo usan las tarjetas Ingresos/Inversiones de Análisis de distribución.
+     *
+     * @return array{lineas: array<string, array{descripcion: string, valor: float}>, total: float}
+     */
+    public function resumenPorCodigo(string $tipo, int $anio, ?int $versionId = null): array
+    {
+        $arbol = $versionId !== null
+            ? $this->obtenerArbolConValoresDeVersion($versionId, [$anio])
+            : $this->obtenerArbolConValores($tipo, [$anio]);
+
+        $lineas = [];
+        $total = 0.0;
+        foreach ($arbol as $raiz) {
+            $total += (float) ($raiz['valores'][$anio] ?? 0.0);
+        }
+
+        $recorrer = static function (array $nodos) use (&$recorrer, &$lineas, $anio): void {
+            foreach ($nodos as $nodo) {
+                $lineas[$nodo['codigo']] = ['descripcion' => (string) $nodo['etiqueta'], 'valor' => (float) ($nodo['valores'][$anio] ?? 0.0)];
+                $recorrer($nodo['hijos'] ?? []);
+            }
+        };
+        $recorrer($arbol);
+
+        return ['lineas' => $lineas, 'total' => $total];
+    }
+
     /** codigo => descripcion de las líneas en vivo de un lado. */
     public function nombresPorCodigo(string $tipo): array
     {

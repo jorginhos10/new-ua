@@ -5,8 +5,9 @@
             <div>
                 <h1>Categoría de gasto</h1>
                 <p class="texto-atenuado">
-                    Asigna a cada gasto una de las categorías de actividad a partir de su rubro (y, si el rubro admite
-                    varias, del texto de actividad e insumo). Las asignaciones automáticas guardan su confianza.
+                    Asigna a cada gasto (Gastos principales, Extensión, Postgrado y Unisalud) una de las categorías de
+                    actividad a partir de su rubro (y, si el rubro admite varias, del texto de actividad e insumo). Las
+                    asignaciones automáticas guardan su confianza.
                     Las categorías y sus reglas por rubro se administran en
                     <a href="index.php?ruta=lista-categorias-gasto">Listas &rsaquo; Categorías de gasto</a> y
                     <a href="index.php?ruta=lista-rubros-categorias-gasto">Rubros por categoría</a>.
@@ -38,6 +39,7 @@
     (function () {
         var URL_BASE = 'index.php?ruta=categorias-gasto';
         var TAMANO_LOTE = 300;
+        var NOMBRES_MODULOS = <?= json_encode(CategoriaGasto::TABLAS_CLASIFICABLES, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
         var botones = [document.getElementById('boton-calcular-vacios'), document.getElementById('boton-recalcular-todo')];
         var estado = document.getElementById('estado-categorias');
         var tabla = document.getElementById('tabla-resumen-categorias');
@@ -90,11 +92,23 @@
                 var datos = await respuesta.json();
                 var motor = CategorizadorGastos.crearMotor(datos.catalogo, datos.mapeo);
 
-                var conteo = { total: datos.gastos.length, asignados: 0, noAplica: 0, sinAsignar: 0, confianzaAlta: 0, confianzaMedia: 0, confianzaBaja: 0 };
+                var conteo = { total: datos.gastos.length, asignados: 0, noAplica: 0, sinAsignar: 0, confianzaAlta: 0, confianzaMedia: 0, confianzaBaja: 0, porTexto: 0 };
                 var lote = [];
+                var porModulo = {};
 
                 datos.gastos.forEach(function (gasto) {
+                    var modulo = porModulo[gasto.tabla] || (porModulo[gasto.tabla] = { procesados: 0, asignados: 0 });
+                    modulo.procesados++;
+
                     var r = motor.clasificar(gasto);
+                    // Extensión/Postgrado/Unisalud: una fila sin código de rubro (p. ej. Excedentes automáticos)
+                    // se clasifica por su texto contra los tokens del catálogo.
+                    var porTexto = false;
+                    if (r.origen === null && gasto.tabla !== 'gastos' && !gasto.rubro_codigo) {
+                        r = motor.clasificarPorTexto(gasto);
+                        porTexto = r.origen !== null;
+                    }
+
                     if (r.origen === null) {
                         conteo.sinAsignar++;
                         return;
@@ -103,11 +117,13 @@
                         conteo.noAplica++;
                     } else {
                         conteo.asignados++;
+                        modulo.asignados++;
+                        if (porTexto) { conteo.porTexto++; }
                         if (r.confianza >= 0.65) { conteo.confianzaAlta++; }
                         else if (r.confianza >= 0.4) { conteo.confianzaMedia++; }
                         else { conteo.confianzaBaja++; }
                     }
-                    lote.push({ id: gasto.id, categoria_id: r.categoriaId, origen: r.origen, confianza: r.confianza });
+                    lote.push({ id: gasto.id, tabla: gasto.tabla, categoria_id: r.categoriaId, origen: r.origen, confianza: r.confianza });
                 });
 
                 var guardados = 0;
@@ -119,16 +135,22 @@
                 estado.textContent = modo === 'todo'
                     ? 'Recalculo completo: ' + guardados + ' gastos actualizados.'
                     : 'Vacíos calculados: ' + guardados + ' gastos actualizados.';
-                mostrarResumen([
+                var filasResumen = [
                     ['Gastos procesados', conteo.total],
                     ['Asignados por el motor', conteo.asignados],
                     ['   confianza alta (≥ 65 %)', conteo.confianzaAlta],
                     ['   confianza media (40–64 %)', conteo.confianzaMedia],
                     ['   confianza baja (< 40 %)', conteo.confianzaBaja],
+                    ['   por texto, sin rubro (Extensión/Postgrado/Unisalud)', conteo.porTexto],
                     ['No aplican (asignación de techo o nómina)', conteo.noAplica],
                     ['Sin asignar (rubro sin mapeo)', conteo.sinAsignar],
                     ['Manuales sobrescritos', modo === 'todo' ? datos.resumen.manuales : 0]
-                ]);
+                ];
+                Object.keys(NOMBRES_MODULOS).forEach(function (tabla) {
+                    var modulo = porModulo[tabla] || { procesados: 0, asignados: 0 };
+                    filasResumen.push([NOMBRES_MODULOS[tabla] + ': procesados / asignados', modulo.procesados + ' / ' + modulo.asignados]);
+                });
+                mostrarResumen(filasResumen);
             } catch (error) {
                 estado.textContent = 'No se completó el proceso: ' + error.message;
             } finally {

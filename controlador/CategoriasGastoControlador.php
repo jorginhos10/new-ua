@@ -5,7 +5,8 @@ require_once __DIR__ . '/../modelo/CategoriaGasto.php';
 /**
  * ?ruta=categorias-gasto (Configuraciones, mismo permiso de menú). Página con los dos lotes
  * ("Calcular vacíos" y "Recalcular todo") y dos endpoints JSON: `datos` (catálogo, mapeo y gastos
- * a clasificar) y `guardar` (recibe el resultado del motor y lo valida antes de escribir).
+ * a clasificar, de Gastos principales, Extensión, Postgrado y Unisalud) y `guardar` (recibe el
+ * resultado del motor, con la tabla de cada gasto, y lo valida antes de escribir).
  */
 class CategoriasGastoControlador
 {
@@ -64,11 +65,12 @@ class CategoriasGastoControlador
         $validados = [];
         foreach ($items as $item) {
             $id = (int) ($item['id'] ?? 0);
+            $tabla = (string) ($item['tabla'] ?? 'gastos');
             $origen = $item['origen'] ?? '';
             $categoriaId = $item['categoria_id'] ?? null;
             $confianza = $item['confianza'] ?? null;
 
-            if ($id <= 0 || !in_array($origen, ['automatico', 'no_aplica'], true)) {
+            if ($id <= 0 || !isset(CategoriaGasto::TABLAS_CLASIFICABLES[$tabla]) || !in_array($origen, ['automatico', 'no_aplica'], true)) {
                 $this->responderJson(['ok' => false, 'error' => 'Hay un gasto con datos inválidos.'], 400);
 
                 return;
@@ -90,6 +92,7 @@ class CategoriasGastoControlador
 
             $validados[] = [
                 'id' => $id,
+                'tabla' => $tabla,
                 'categoria_gasto_id' => $categoriaId,
                 'categoria_origen' => $origen,
                 'categoria_confianza' => $confianza === null ? null : round((float) $confianza, 3),

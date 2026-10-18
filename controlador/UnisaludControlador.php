@@ -7,6 +7,7 @@ require_once __DIR__ . '/../modelo/Linea.php';
 require_once __DIR__ . '/../modelo/Motor.php';
 require_once __DIR__ . '/../modelo/Proyecto.php';
 require_once __DIR__ . '/../modelo/Rubro.php';
+require_once __DIR__ . '/../modelo/CategoriaGasto.php';
 require_once __DIR__ . '/../modelo/ContratoComun.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/Sede.php';
@@ -266,6 +267,11 @@ class UnisaludControlador
         $aniosActivos = $this->modeloAnio->obtenerActivos();
         $sedes = $this->modeloSede->obtenerTodas();
         $categoriasEgreso = self::CATEGORIAS_EGRESO;
+        // "Categoría de gasto" (subcategorías de actividad) con su sugerencia automática: mismo catálogo y
+        // motor que Gastos (publico/js/gastos-categoria.js). Distinta de $categoriasEgreso (Costos/Inversión/...).
+        $categoriaGasto = new CategoriaGasto();
+        $catalogoCategoriasGasto = $categoriaGasto->obtenerCatalogo();
+        $mapeoCategoriasGasto = $categoriaGasto->obtenerMapeo();
         $roles = $this->modeloRol->obtenerTodos();
         $usuariosPorDependenciaYRol = $this->modeloUsuario->obtenerMapaPorDependenciaYRol();
 
@@ -1347,6 +1353,14 @@ class UnisaludControlador
         $datos['cantidad'] = (int) $datos['cantidad'];
         $datos['costo_unitario'] = (float) $datos['costo_unitario'];
         $datos['usuario_id'] = (int) ($_SESSION['usuario_id'] ?? 0);
+
+        [$camposCategoriaGasto, $errorCategoriaGasto] = (new CategoriaGasto())->normalizarSeleccion($datos);
+
+        if ($errorCategoriaGasto !== '') {
+            return [[], $errorCategoriaGasto];
+        }
+
+        $datos = array_merge($datos, $camposCategoriaGasto);
 
         return [$datos, ''];
     }

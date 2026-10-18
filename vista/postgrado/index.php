@@ -618,6 +618,12 @@ require __DIR__ . '/../parciales/encabezado.php';
                     <input type="text" id="insumo" name="insumo" placeholder="Diligenciar" required>
                 </div>
 
+                <?php
+                $prefijoCategoria = '';
+                $categoriaSeleccionada = '';
+                require __DIR__ . '/../gastos/parciales/selector-categoria-gasto.php';
+                ?>
+
                 <div class="campo">
                     <label for="cantidad">Cantidad *</label>
                     <input type="number" id="cantidad" name="cantidad" min="1" step="1" required>
@@ -777,6 +783,9 @@ require __DIR__ . '/../parciales/encabezado.php';
         </div>
     </div>
 
+    <script type="application/json" id="datos-categorias-gasto"><?= json_encode(['catalogo' => $catalogoCategoriasGasto, 'mapeo' => $mapeoCategoriasGasto], JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
+    <script src="publico/js/categorizador-gastos.js?v=<?= @filemtime(__DIR__ . '/../../publico/js/categorizador-gastos.js') ?: 1 ?>"></script>
+    <script src="publico/js/gastos-categoria.js?v=<?= @filemtime(__DIR__ . '/../../publico/js/gastos-categoria.js') ?: 1 ?>"></script>
     <script type="application/json" id="datos-usuarios-por-dependencia-rol"><?= json_encode($usuariosPorDependenciaYRol, JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?></script>
 
     <?php if ($modoEdicion): ?>

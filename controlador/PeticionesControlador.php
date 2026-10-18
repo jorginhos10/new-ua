@@ -755,6 +755,15 @@ class PeticionesControlador
             $columnas = ['Dependencia', 'Valor total', $columnaCategoria, 'Sede', 'Rubro', 'Actividad', 'Insumo', 'Proyecto PDI', 'Meses', 'Línea estratégica', 'Motor de desarrollo', 'Objeto/Proyecto (PAA)', 'Cantidad', 'Costo unitario', 'Techo presupuestal'];
             $claves = ['dependencia', 'valor_total', $claveCategoria, 'sede', 'rubro', 'actividad', 'insumo', 'proyecto', 'meses', 'linea', 'motor', 'objeto_proyecto_paa', 'cantidad', 'costo_unitario', 'techo'];
 
+            // Los egresos de Extensión/Postgrado/Unisalud también tienen "Categoría de gasto" (además de su
+            // "Categoría"). Va AL FINAL, no junto a "Categoría": los anchos y columnas ocultas que cada usuario
+            // guarda en el navegador son por posición y así no se corren. Sigue visible por defecto
+            // (COLUMNAS_GASTO_VISIBLES) y graficos.js la usa como dimensión por su nombre.
+            if ($origen !== 'gasto_principal') {
+                $columnas[] = 'Categoría de gasto';
+                $claves[] = 'categoria_gasto';
+            }
+
             return [
                 'columnas' => $columnas,
                 'claves' => $claves,
@@ -1422,7 +1431,7 @@ class PeticionesControlador
                 $fila['actividad'] = $gastoOriginal['actividad'] ?? '—';
                 $fila['insumo'] = $gastoOriginal['insumo'] ?? '—';
                 $fila['categoria'] = $gastoOriginal['categoria'] ?? '—';
-                if ($item['origen'] === 'gasto_principal') {
+                if (in_array($item['origen'], self::ORIGENES_GASTO, true)) {
                     $fila['categoria_gasto'] = $this->rotularCategoriaGasto($gastoOriginal, $nombresCategoriaGasto);
                 }
                 $fila['cantidad'] = isset($gastoOriginal['cantidad']) ? (float) $gastoOriginal['cantidad'] : $fila['cantidad'];

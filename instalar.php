@@ -90,6 +90,13 @@ $pasos[] = [
 ];
 
 $pasos[] = [
+    'seccion' => 'Análisis > Análisis de distribución',
+    'que' => 'Columna analisis_arbol_configuracion.codigo_pp (código de Ingresos de PP ligado al botón Ingresos)',
+    'falta' => fn() => !columnaExiste($pdo, 'analisis_arbol_configuracion', 'codigo_pp'),
+    'sql' => ['ALTER TABLE analisis_arbol_configuracion ADD COLUMN codigo_pp VARCHAR(50) NULL AFTER fecha_corte'],
+];
+
+$pasos[] = [
     'seccion' => 'Análisis > Articulación PDI',
     'que' => 'Tabla analisis_pdi_ajustes (valores fijados por el SA y proyecto que absorbe la diferencia contra PP)',
     'falta' => fn() => !tablaExiste($pdo, 'analisis_pdi_ajustes'),
@@ -378,6 +385,33 @@ $pasos[] = [
     'falta' => fn() => !columnaExiste($pdo, 'gastos', 'categoria_confianza'),
     'sql' => ['ALTER TABLE gastos ADD COLUMN categoria_confianza DECIMAL(4, 3) NULL'],
 ];
+
+// "Categoría de gasto" también en los egresos de Extensión, Postgrado y Unisalud (mismas 3 columnas
+// que gastos). Cada paso solo aparece si la tabla existe y le falta la columna.
+foreach (['gastos_extension', 'gastos_postgrado', 'gastos_unisalud'] as $tablaAutogestionCategoria) {
+    $pasos[] = [
+        'seccion' => 'Autogestión > Categoría de gasto',
+        'que' => 'Columna ' . $tablaAutogestionCategoria . '.categoria_gasto_id',
+        'falta' => fn() => tablaExiste($pdo, $tablaAutogestionCategoria) && !columnaExiste($pdo, $tablaAutogestionCategoria, 'categoria_gasto_id'),
+        'sql' => [
+            'ALTER TABLE ' . $tablaAutogestionCategoria . ' ADD COLUMN categoria_gasto_id VARCHAR(10) NULL, ADD KEY idx_' . $tablaAutogestionCategoria . '_categoria_gasto (categoria_gasto_id), ADD CONSTRAINT fk_' . $tablaAutogestionCategoria . '_categoria_gasto FOREIGN KEY (categoria_gasto_id) REFERENCES categorias_gasto (id)',
+        ],
+    ];
+
+    $pasos[] = [
+        'seccion' => 'Autogestión > Categoría de gasto',
+        'que' => 'Columna ' . $tablaAutogestionCategoria . '.categoria_origen',
+        'falta' => fn() => tablaExiste($pdo, $tablaAutogestionCategoria) && !columnaExiste($pdo, $tablaAutogestionCategoria, 'categoria_origen'),
+        'sql' => ['ALTER TABLE ' . $tablaAutogestionCategoria . " ADD COLUMN categoria_origen ENUM('manual', 'automatico', 'no_aplica') NULL"],
+    ];
+
+    $pasos[] = [
+        'seccion' => 'Autogestión > Categoría de gasto',
+        'que' => 'Columna ' . $tablaAutogestionCategoria . '.categoria_confianza',
+        'falta' => fn() => tablaExiste($pdo, $tablaAutogestionCategoria) && !columnaExiste($pdo, $tablaAutogestionCategoria, 'categoria_confianza'),
+        'sql' => ['ALTER TABLE ' . $tablaAutogestionCategoria . ' ADD COLUMN categoria_confianza DECIMAL(4, 3) NULL'],
+    ];
+}
 
 $pasos[] = [
     'seccion' => 'Análisis > Documentos',

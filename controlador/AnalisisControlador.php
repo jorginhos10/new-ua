@@ -55,7 +55,7 @@ class AnalisisControlador
 
     private const VISTAS_VALIDAS = ['tiempo_real', 'repositorio', 'usuario'];
 
-    private const ORIGENES_ANALISIS = ['gasto_principal', 'gasto_extension', 'ingreso_extension', 'gasto_postgrado', 'ingreso_postgrado', 'gasto_unisalud', 'monitores', 'arl'];
+    private const ORIGENES_ANALISIS = ['gasto_principal', 'gasto_extension', 'ingreso_extension', 'gasto_postgrado', 'ingreso_postgrado', 'gasto_unisalud', 'ingreso_unisalud', 'monitores', 'arl'];
 
     /** Egresos de Autogestión que pertenecen a un ítem de autogestion_items => su `modulo`. */
     private const MODULO_AUTOGESTION_POR_EGRESO = [
@@ -71,6 +71,17 @@ class AnalisisControlador
     private const PARES_GASTO_INGRESO = [
         'gasto_extension' => 'ingreso_extension',
         'gasto_postgrado' => 'ingreso_postgrado',
+        'gasto_unisalud' => 'ingreso_unisalud',
+    ];
+
+    /**
+     * Egresos de tipo "gasto" de Extensión/Postgrado que también se cargan en el landing de Gastos
+     * (ver obtenerGastosAutogestionTipoGasto()). En esa tabla su id lleva este desplazamiento para no
+     * chocar con los ids de `gastos` (los gastos fijos usan ids negativos) — ver decodificarIdTablaReal().
+     */
+    private const DESPLAZAMIENTO_ID_GASTO_AUTOGESTION = [
+        'gasto_extension' => 1000000000,
+        'gasto_postgrado' => 2000000000,
     ];
 
     private const TABLAS_POR_ORIGEN = [
@@ -80,8 +91,6 @@ class AnalisisControlador
         'gasto_postgrado' => 'gastos_postgrado',
         'ingreso_postgrado' => 'ingresos_postgrado',
         'gasto_unisalud' => 'gastos_unisalud',
-        // Solo para el % de asignación de la tarjeta Unisalud del selector; no es un origen
-        // seleccionable (no está en ORIGENES_ANALISIS).
         'ingreso_unisalud' => 'ingresos_unisalud',
         'monitores' => 'solicitudes_monitores',
         'arl' => 'solicitudes_arl',
@@ -94,6 +103,7 @@ class AnalisisControlador
         'gasto_postgrado' => 'Postgrado',
         'ingreso_postgrado' => 'Postgrado',
         'gasto_unisalud' => 'Unisalud',
+        'ingreso_unisalud' => 'Unisalud',
         'monitores' => 'Monitores',
         'arl' => 'ARL',
     ];
@@ -121,6 +131,12 @@ class AnalisisControlador
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'configurar_expansion_arbol') {
             $this->guardarExpansionArbol($tab);
+
+            return;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'guardar_codigo_ingresos_pp') {
+            $this->guardarCodigoIngresosPp($tab);
 
             return;
         }
@@ -427,6 +443,124 @@ class AnalisisControlador
     }
 
     /**
+     * POST por fetch desde el modal del botón Ingresos de Análisis de distribución (solo SA): liga ese
+     * botón a un código de Ingresos de PP. 'codigo' vacío = quitar la relación. Responde JSON.
+     */
+    private function guardarCodigoIngresosPp(string $tab): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        $responder = static function (int $codigoHttp, string $error): void {
+            http_response_code($codigoHttp);
+            echo json_encode(['ok' => $error === '', 'error' => $error]);
+        };
+
+        if (!$this->esSuperAdmin()) {
+            $responder(403, 'Solo el SA puede cambiar el código de Ingresos.');
+
+            return;
+        }
+
+        if ($tab !== 'analisis') {
+            $responder(400, 'Esta vista no tiene botón Ingresos.');
+
+            return;
+        }
+
+        $codigo = trim((string) ($_POST['codigo'] ?? ''));
+        if ($codigo !== '') {
+            $anioRegistro = (new AnioPresupuestal())->obtenerActivos()[0] ?? null;
+            $anio = $anioRegistro !== null ? (int) $anioRegistro['anio'] : (int) date('Y');
+            if (!isset((new PresupuestoInstitucional())->resumenPorCodigo('ingreso', $anio)['lineas'][$codigo])) {
+                $responder(400, 'Ese código no existe en Programación presupuestal (Ingresos).');
+
+                return;
+            }
+        }
+
+        try {
+            (new AnalisisArbolConfiguracion())->guardarCodigoPp('distribucion', $codigo !== '' ? $codigo : null, (int) $_SESSION['usuario_id']);
+        } catch (Throwable $excepcion) {
+            $responder(500, 'No se pudo guardar en la base de datos (¿ya se ejecutó instalar.php?).');
+
+            return;
+        }
+
+        $responder(200, '');
+    }
+
+    /**
+     * Tarjetas Ingresos e Inversiones de la sección Presupuesto del selector de Análisis de
+     * distribución. Leen la MISMA fuente que su landing: Tiempo real/Usuario, PP en vivo; Repositorio,
+     * la versión activa de PP de ese tipo ('ingreso' / 'proyecto'). 'url' es null si el usuario no
+     * tiene permiso a esa pestaña (la tarjeta se muestra sin enlace).
+     */
+    private function obtenerTarjetasPresupuesto(string $vista, ?array $anioActivo): array
+    {
+        $anio = $anioActivo !== null ? (int) $anioActivo['anio'] : (int) date('Y');
+        $pestanasPermitidas = AccesoAnalisis::actual()['pestanas'] ?? [];
+        $modelo = new PresupuestoInstitucional();
+
+        $resumen = static function (string $tipo) use ($vista, $modelo, $anio): ?array {
+            $versionId = null;
+            if ($vista === 'repositorio') {
+                $version = $modelo->obtenerVersionActiva($tipo);
+                if ($version === null) {
+                    return null;
+                }
+                $versionId = (int) $version['id'];
+            }
+
+            return $modelo->resumenPorCodigo($tipo, $anio, $versionId);
+        };
+        $url = static fn (string $pestana, array $extra = []): ?string => in_array($pestana, $pestanasPermitidas, true)
+            ? 'index.php?' . http_build_query(['ruta' => 'analisis', 'tab' => $pestana, 'vista' => $vista] + $extra)
+            : null;
+
+        $codigo = (new AnalisisArbolConfiguracion())->obtenerCodigoPp('distribucion');
+        $resumenIngresos = $resumen('ingreso');
+        $lineaIngreso = ($codigo !== null && $resumenIngresos !== null) ? ($resumenIngresos['lineas'][$codigo] ?? null) : null;
+        $resumenProyectos = $resumen('proyecto');
+
+        return [
+            'anio' => $anio,
+            'ingresos' => [
+                'codigo' => $codigo,
+                'nombre' => $lineaIngreso['descripcion'] ?? null,
+                'valor' => $lineaIngreso['valor'] ?? null,
+                'estado' => $codigo === null ? 'sin_configurar' : ($resumenIngresos === null ? 'sin_version' : ($lineaIngreso === null ? 'no_existe' : 'ok')),
+                'url' => $url('programacion', ['lado' => 'ingresos']),
+            ],
+            'inversiones' => [
+                'valor' => $resumenProyectos['total'] ?? null,
+                'estado' => $resumenProyectos === null ? 'sin_version' : 'ok',
+                'url' => $url('proyectos'),
+            ],
+        ];
+    }
+
+    /**
+     * Id de una fila de la tabla real => [origen real, id real]. En el landing de Gastos: id negativo
+     * = gasto fijo; id con desplazamiento = egreso de Extensión/Postgrado (ver
+     * DESPLAZAMIENTO_ID_GASTO_AUTOGESTION). En cualquier otro landing el id es el propio.
+     */
+    private function decodificarIdTablaReal(int $id, string $origenPagina): array
+    {
+        if ($origenPagina === 'gasto_principal') {
+            if ($id < 0) {
+                return ['gasto_fijo', -$id];
+            }
+            foreach (array_reverse(self::DESPLAZAMIENTO_ID_GASTO_AUTOGESTION, true) as $origenReal => $desplazamiento) {
+                if ($id > $desplazamiento) {
+                    return [$origenReal, $id - $desplazamiento];
+                }
+            }
+        }
+
+        return [$origenPagina, $id];
+    }
+
+    /**
      * POST por fetch desde el <input type="date"> "Corte" del árbol (solo SA, Tiempo real): guarda
      * la fecha de corte de la pestaña para todos los usuarios. 'fecha' = Y-m-d. Responde JSON.
      */
@@ -667,7 +801,7 @@ class AnalisisControlador
         $omitidos = 0;
 
         foreach ($ids as $id) {
-            [$origenFila, $idFila] = ($id < 0 && $origen === 'gasto_principal') ? ['gasto_fijo', -$id] : [$origen, $id];
+            [$origenFila, $idFila] = $this->decodificarIdTablaReal($id, $origen);
             $registro = $idFila > 0 ? $edicion->obtenerRegistro($origenFila, $idFila) : null;
             $permitido = $registro !== null && ($esSuperAdmin
                 || ($origenFila !== 'gasto_fijo' && (int) ($registro['usuario_id'] ?? 0) === $usuarioId));
@@ -752,7 +886,22 @@ class AnalisisControlador
                 }
             }
         }
-        $ids = array_values(array_filter($ids, static fn (int $id): bool => $id > 0));
+        // Egresos de Extensión/Postgrado cargados en el landing de Gastos (id con desplazamiento): se
+        // borran con su propio modelo, nunca con el de Gasto (ver decodificarIdTablaReal()).
+        if ($origen === 'gasto_principal') {
+            foreach ($ids as $idCodificado) {
+                [$origenReal, $idReal] = $this->decodificarIdTablaReal($idCodificado, $origen);
+                if (!isset(self::DESPLAZAMIENTO_ID_GASTO_AUTOGESTION[$origenReal])) {
+                    continue;
+                }
+                $modeloReal = $this->obtenerModeloModulo($origenReal);
+                if ($modeloReal->obtenerPorId($idReal) !== null && $modeloReal->eliminar($idReal)) {
+                    $eliminadosFijos++;
+                }
+            }
+        }
+        $limiteIdPropio = min(self::DESPLAZAMIENTO_ID_GASTO_AUTOGESTION);
+        $ids = array_values(array_filter($ids, static fn (int $id): bool => $id > 0 && ($origen !== 'gasto_principal' || $id <= $limiteIdPropio)));
 
         // Igual que Extensión/Postgrado al eliminar un ingreso: primero sus gastos automáticos
         // (por ingreso_id) y LUEGO el ingreso — al revés, la FK ON DELETE SET NULL deja esos
@@ -1780,6 +1929,13 @@ class AnalisisControlador
             $anioActivo, $vista, $snapshotIdActual, $dependenciaFiltroActual, $dependenciasTodas, $totalesPorModulo
         );
 
+        // Sección Presupuesto del selector: Ingresos (código de PP elegido por el SA) e Inversiones.
+        $tarjetasPresupuesto = $this->obtenerTarjetasPresupuesto($vista, $anioActivo);
+        $puedeConfigurarIngresosPp = $this->esSuperAdmin() && $vista !== 'usuario';
+        $lineasIngresosPp = $puedeConfigurarIngresosPp
+            ? (new PresupuestoInstitucional())->resumenPorCodigo('ingreso', (int) $tarjetasPresupuesto['anio'])['lineas']
+            : [];
+
         $resultado = $anioPresupuestalId > 0
             ? $this->obtenerFilasAnalisis($origenActivo, $anioPresupuestalId, $vista, $snapshotIdActual, $dependenciaFiltroActual)
             : ['columnas' => [], 'claves' => [], 'filas' => []];
@@ -2007,6 +2163,10 @@ class AnalisisControlador
         $totalIngresos = 0.0;
 
         foreach (self::ORIGENES_ANALISIS as $origen) {
+            // Monitores y ARL ya no tienen tarjeta en el selector: tampoco van en el Excel.
+            if (in_array($origen, ['monitores', 'arl'], true)) {
+                continue;
+            }
             $nombreHoja = $this->nombreHojaAnalisis($origen);
             $resultado = $anioPresupuestalId > 0
                 ? $this->obtenerFilasAnalisis($origen, $anioPresupuestalId, $vista, $snapshotId, $dependenciaFiltro)
@@ -2019,6 +2179,16 @@ class AnalisisControlador
                 $totalIngresos += $totalModulo;
             } else {
                 $totalEgresos += $totalModulo;
+            }
+
+            // Gastos ya incluye los egresos tipo "gasto" de Extensión/Postgrado, que también suman en
+            // sus propias hojas: en el total general se cuentan una sola vez.
+            if ($origen === 'gasto_principal' && $anioPresupuestalId > 0) {
+                foreach ($this->obtenerFilasCrudasModulo($origen, $anioPresupuestalId, $vista, $snapshotId, $dependenciaFiltro) as $filaCruda) {
+                    if (isset($filaCruda['__origen'])) {
+                        $totalEgresos -= $this->obtenerValorFilaModulo($origen, $filaCruda);
+                    }
+                }
             }
 
             $filasResumen[] = [$nombreHoja, (string) count($resultado['filas']), $this->formatoMonedaExportar($totalModulo)];
@@ -2158,6 +2328,8 @@ class AnalisisControlador
         // Solo aquí (Análisis de distribución) entran los gastos fijos, dentro del módulo Gasto.
         if ($origen === 'gasto_principal') {
             $filas = array_merge($filas, $this->obtenerGastosFijosParaAnalisis($anioPresupuestalId, $vista, $snapshotId));
+            // Y los egresos de tipo "gasto" de Extensión y Postgrado (marcados con __origen).
+            $filas = array_merge($filas, $this->obtenerGastosAutogestionTipoGasto($anioPresupuestalId, $vista, $snapshotId));
         }
 
         if ($vista === 'usuario' && $dependenciaFiltro !== null) {
@@ -2166,6 +2338,28 @@ class AnalisisControlador
                 $filas,
                 fn (array $fila): bool => in_array($this->obtenerDependenciaFilaModulo($origen, $fila), $permitidas, true)
             ));
+        }
+
+        return $filas;
+    }
+
+    /**
+     * Egresos de Extensión y Postgrado de tipo "gasto" (categoría "Gastos" o que empieza por
+     * "Costos", el mismo criterio de esos módulos) para cargarlos también en el landing de Gastos, por
+     * la misma ruta de cada vista (en vivo solo lo activo; snapshot en Repositorio). El filtro de
+     * dependencia (Usuario) lo aplica quien llama. Cada fila lleva '__origen' con su módulo real.
+     */
+    private function obtenerGastosAutogestionTipoGasto(int $anioPresupuestalId, string $vista, ?int $snapshotId): array
+    {
+        $filas = [];
+        foreach (array_keys(self::DESPLAZAMIENTO_ID_GASTO_AUTOGESTION) as $origenAutogestion) {
+            foreach ($this->obtenerFilasCrudasModulo($origenAutogestion, $anioPresupuestalId, $vista, $snapshotId, null) as $fila) {
+                $categoria = (string) ($fila['categoria'] ?? '');
+                if ($categoria === 'Gastos' || str_starts_with($categoria, 'Costos')) {
+                    $fila['__origen'] = $origenAutogestion;
+                    $filas[] = $fila;
+                }
+            }
         }
 
         return $filas;
@@ -2275,16 +2469,18 @@ class AnalisisControlador
 
         foreach ($filas as $fila) {
             $id = (int) $fila['id'];
+            // En Gastos, los egresos de Extensión/Postgrado van con su origen real (rutas, categoría...).
+            $origenFila = $fila['__origen'] ?? $origen;
             $itemsCrudos[] = [
-                'origen' => $origen,
+                'origen' => $origenFila,
                 'origen_id' => $id,
-                'tipo' => self::ETIQUETAS_ORIGEN[$origen],
-                'detalle' => $this->obtenerDependenciaFilaModulo($origen, $fila) ?? '',
+                'tipo' => self::ETIQUETAS_ORIGEN[$origenFila],
+                'detalle' => $this->obtenerDependenciaFilaModulo($origenFila, $fila) ?? '',
                 'cantidad' => $fila['cantidad'] ?? null,
-                'valor' => $this->obtenerValorFilaModulo($origen, $fila),
+                'valor' => $this->obtenerValorFilaModulo($origenFila, $fila),
                 'ruta_origen' => 'index.php?ruta=analisis&tab=analisis',
             ];
-            $registrosPrecargados[$origen . ':' . $id] = $fila;
+            $registrosPrecargados[$origenFila . ':' . $id] = $fila;
         }
 
         $peticiones = new PeticionesControlador();
@@ -2323,6 +2519,13 @@ class AnalisisControlador
             $puedeEditarFijos = $this->esSuperAdmin();
 
             foreach ($resultado['filas'] as &$fila) {
+                $origenFila = (string) ($fila['origen'] ?? $origen);
+                if (isset(self::DESPLAZAMIENTO_ID_GASTO_AUTOGESTION[$origenFila])) {
+                    // Egreso de Extensión/Postgrado: Tipo = su módulo; id desplazado para la tabla real.
+                    $fila['tipo_gasto'] = self::ETIQUETAS_ORIGEN[$origenFila];
+                    $fila['origen_id'] = self::DESPLAZAMIENTO_ID_GASTO_AUTOGESTION[$origenFila] + (int) $fila['origen_id'];
+                    continue;
+                }
                 $registro = $registrosPrecargados[$origen . ':' . (int) $fila['origen_id']] ?? [];
                 $esFijo = !empty($registro['es_gasto_fijo']);
                 $fila['tipo_gasto'] = $esFijo ? 'Gasto fijo' : 'Gasto';

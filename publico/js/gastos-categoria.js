@@ -9,8 +9,9 @@
     var datos = JSON.parse(datosEl.textContent);
     var motor = CategorizadorGastos.crearMotor(datos.catalogo, datos.mapeo);
 
-    // Se engancha a los dos formularios (alta sin prefijo, edición con prefijo "editar-").
-    ['', 'editar-'].forEach(function (prefijo) {
+    // Se engancha a los formularios de alta (sin prefijo) y edición ("editar-" en Gastos,
+    // "editar-egreso-" en los egresos de Extensión/Postgrado/Unisalud).
+    ['', 'editar-', 'editar-egreso-'].forEach(function (prefijo) {
         var select = document.getElementById(prefijo + 'categoria_gasto_id');
         if (!select) {
             return;
