@@ -100,6 +100,19 @@ class PeticionesControlador
         'gasto_unisalud' => 'ingreso_unisalud',
     ];
 
+    /**
+     * Columnas de las tablas de gasto que se muestran por defecto (en este orden, ver
+     * construirFilasPorOrigen()); las demás quedan ocultas de entrada. Público: Análisis de
+     * distribución usa el mismo criterio.
+     */
+    public const COLUMNAS_GASTO_VISIBLES = ['dependencia', 'valor_total', 'categoria_gasto', 'categoria', 'sede', 'rubro', 'actividad', 'insumo', 'proyecto', 'meses'];
+
+    /** Índices de las columnas de una tabla de gasto que van ocultas por defecto. */
+    public static function indicesOcultosGasto(array $clavesFila): array
+    {
+        return array_keys(array_filter($clavesFila, static fn (string $clave): bool => !in_array($clave, self::COLUMNAS_GASTO_VISIBLES, true)));
+    }
+
     private const TABLAS_ORIGEN = [
         'arl' => 'solicitudes_arl',
         'monitores' => 'solicitudes_monitores',
@@ -709,18 +722,12 @@ class PeticionesControlador
             $anchosColumna[$indice] = max(90, min(320, $maxLargo * 8 + 40));
         }
 
-        // La tabla de Gasto (ORIGENES_GASTO) tiene 14 columnas — de entrada oculta las que menos
-        // se consultan (Línea estratégica/Motor de desarrollo/Cantidad/Costo unitario/Techo
-        // presupuestal, ya implícitas en Valor total) para ganar espacio; el usuario las puede
-        // volver a mostrar desde "Mostrar u ocultar columnas" igual que cualquier otra.
-        $indicesOcultosPorDefecto = [];
-        if (in_array($origen, self::ORIGENES_GASTO, true)) {
-            $clavesOcultasPorDefecto = ['linea', 'motor', 'cantidad', 'costo_unitario', 'techo'];
-            $indicesOcultosPorDefecto = array_values(array_intersect_key(
-                array_flip($clavesFila),
-                array_flip($clavesOcultasPorDefecto)
-            ));
-        }
+        // Tablas de gasto (ORIGENES_GASTO): de entrada solo se ven las 9 columnas estándar
+        // (COLUMNAS_GASTO_VISIBLES); el resto queda oculto y se puede volver a mostrar desde
+        // "Mostrar u ocultar columnas" igual que cualquier otra.
+        $indicesOcultosPorDefecto = in_array($origen, self::ORIGENES_GASTO, true)
+            ? self::indicesOcultosGasto($clavesFila)
+            : [];
 
         require __DIR__ . '/../vista/peticiones/tipo-detalle.php';
     }
@@ -735,19 +742,14 @@ class PeticionesControlador
     public function construirFilasPorOrigen(string $origen, array $itemsCrudos, int $anioPresupuestalId, string $estado, string $rutaVolverEditar = 'index.php?ruta=peticiones'): array
     {
         if (in_array($origen, self::ORIGENES_GASTO, true)) {
-            $columnas = ['Dependencia', 'Sede', 'Línea estratégica', 'Motor de desarrollo', 'Proyecto PDI', 'Objeto/Proyecto (PAA)', 'Actividad', 'Rubro', 'Insumo', 'Cantidad', 'Costo unitario', 'Valor total', 'Meses', 'Techo presupuestal'];
-            $claves = ['dependencia', 'sede', 'linea', 'motor', 'proyecto', 'objeto_proyecto_paa', 'actividad', 'rubro', 'insumo', 'cantidad', 'costo_unitario', 'valor_total', 'meses', 'techo'];
-
-            // Gasto principal: la categoría de gasto (36 subcategorías de actividad) es su propia
-            // columna, con nombre distinto a la "Categoría" de Autogestión (Costos/Inversión/
-            // Excedentes). tabla-real/graficos.js la usa como dimensión de la gráfica.
-            if ($origen === 'gasto_principal') {
-                $columnas[] = 'Categoría de gasto';
-                $claves[] = 'categoria_gasto';
-            } else {
-                $columnas[] = 'Categoría';
-                $claves[] = 'categoria';
-            }
+            // Orden estándar de las tablas de gasto: primero las 9 columnas que se muestran por
+            // defecto (ver COLUMNAS_GASTO_VISIBLES; Meses al final de ellas para que siga la
+            // gráfica PAC, que solo se dibuja con esa columna visible) y después el resto, ocultas. Gasto
+            // principal usa "Categoría de gasto" (subcategorías de actividad; tabla-real/graficos.js
+            // la usa como dimensión) y Autogestión su "Categoría" (Costos/Inversión/Excedentes).
+            [$columnaCategoria, $claveCategoria] = $origen === 'gasto_principal' ? ['Categoría de gasto', 'categoria_gasto'] : ['Categoría', 'categoria'];
+            $columnas = ['Dependencia', 'Valor total', $columnaCategoria, 'Sede', 'Rubro', 'Actividad', 'Insumo', 'Proyecto PDI', 'Meses', 'Línea estratégica', 'Motor de desarrollo', 'Objeto/Proyecto (PAA)', 'Cantidad', 'Costo unitario', 'Techo presupuestal'];
+            $claves = ['dependencia', 'valor_total', $claveCategoria, 'sede', 'rubro', 'actividad', 'insumo', 'proyecto', 'meses', 'linea', 'motor', 'objeto_proyecto_paa', 'cantidad', 'costo_unitario', 'techo'];
 
             return [
                 'columnas' => $columnas,

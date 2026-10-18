@@ -1491,11 +1491,12 @@ class AnalisisControlador
             $anchosColumna[$indice] = max(90, min(320, $maxLargo * 8 + 40));
         }
 
-        $clavesOcultasPorDefecto = ['linea', 'motor', 'cantidad', 'costo_unitario', 'techo'];
-        $indicesOcultosPorDefecto = array_values(array_intersect_key(
-            array_flip($clavesFila),
-            array_flip($clavesOcultasPorDefecto)
-        ));
+        // Módulos de gasto: mismas 9 columnas visibles por defecto que en Peticiones
+        // (PeticionesControlador::COLUMNAS_GASTO_VISIBLES); el resto (incluidas "Tipo" y
+        // "Autogestión") queda oculto de entrada. Monitores/ARL no ocultan nada.
+        $indicesOcultosPorDefecto = in_array($origenActivo, ['gasto_principal', 'gasto_extension', 'gasto_postgrado', 'gasto_unisalud'], true)
+            ? PeticionesControlador::indicesOcultosGasto($clavesFila)
+            : [];
 
         // Pestañas Egresos/Ingresos (null si el módulo activo no tiene ingresos separados).
         $origenGastoActivo = isset(self::PARES_GASTO_INGRESO[$origenActivo])

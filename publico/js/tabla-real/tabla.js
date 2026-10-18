@@ -6,8 +6,11 @@ TablaReal.registrarVista('tabla', function (ctx) {
     var tdtColumnas = ctx.columnas;
     var filasOriginales = ctx.filasOriginales;
     var contenedorScroll = ctx.contenedorScroll;
-    var claveAnchos = 'peticiones_tabla_anchos_' + ctx.namespace;
-    var claveOcultas = 'peticiones_tabla_ocultas_' + ctx.namespace;
+    // Anchos y columnas ocultas se guardan por POSICIÓN de columna: al cambiar el orden estándar
+    // de las tablas de gasto se subió la versión de la clave (v2) para no aplicar lo guardado a la
+    // columna equivocada — cada quien arranca de nuevo con los valores por defecto.
+    var claveAnchos = 'peticiones_tabla_anchos_v2_' + ctx.namespace;
+    var claveOcultas = 'peticiones_tabla_ocultas_v2_' + ctx.namespace;
 
     var cuerpo = tabla.querySelector('tbody');
     var numeroColumnas = tabla.querySelectorAll('thead tr.fila-encabezados th').length || 1;
@@ -112,9 +115,9 @@ TablaReal.registrarVista('tabla', function (ctx) {
         fijarAnchoColumna(indice, anchosGuardados[indice]);
     });
 
-    // --- Ancho de la tabla: si las columnas visibles no llenan el contenedor, reparte el espacio
-    // sobrante entre ellas (proporcional a su ancho) para no dejar zona muerta a la derecha; si no
-    // caben, no toca nada y aparece el scroll horizontal normal de .tabla-scroll. "anchosBase"
+    // --- Ancho de la tabla: las columnas visibles siempre ocupan el 100 % del contenedor — si
+    // sobra espacio se agrandan y si falta se encogen, en proporción a su ancho, sin bajar de
+    // ANCHO_MINIMO_COLUMNA (si ni así caben, aparece el scroll horizontal normal de .tabla-scroll). "anchosBase"
     // guarda el ancho de cada columna ANTES de repartir (el guardado/por defecto), para no ir
     // agrandándolas de más cada vez que se recalcula (el CSS 'width: 100%' no sirve para esto:
     // con table-layout fixed los navegadores no liberan el espacio de una columna oculta con
@@ -125,6 +128,7 @@ TablaReal.registrarVista('tabla', function (ctx) {
         anchosBase[indice] = parseInt(anchosGuardados[indice], 10) || parseInt(col.style.width, 10) || 90;
     });
     var anchoColSeleccion = 34;
+    var ANCHO_MINIMO_COLUMNA = 70;
 
     function ajustarAnchoTabla() {
         if (!contenedorScroll) { return; }
@@ -135,9 +139,9 @@ TablaReal.registrarVista('tabla', function (ctx) {
         var sumaBase = indicesVisibles.reduce(function (total, indice) { return total + anchosBase[indice]; }, 0);
         if (sumaBase === 0) { return; }
         var disponible = contenedorScroll.clientWidth - anchoColSeleccion;
-        var factor = disponible > sumaBase ? disponible / sumaBase : 1;
+        var factor = disponible > 0 ? disponible / sumaBase : 1;
         indicesVisibles.forEach(function (indice) {
-            fijarAnchoColumna(indice, Math.round(anchosBase[indice] * factor));
+            fijarAnchoColumna(indice, Math.max(ANCHO_MINIMO_COLUMNA, Math.floor(anchosBase[indice] * factor)));
         });
     }
     window.addEventListener('resize', ajustarAnchoTabla);
