@@ -47,9 +47,11 @@ function analisisUrl(string $tab, string $vista, array $extra = []): string
     return 'index.php?' . http_build_query($parametros);
 }
 
-// Las pestañas viven en el menú lateral (Programación presupuestal ▾, ver parciales/sidebar.php) y
-// las acciones de la página (exportar, snapshot, Tiempo real/Repositorio/Usuario, selector de
-// versión/dependencia) van en el encabezado global — así no se gasta una fila entera en ellas.
+// Las pestañas viven en el menú lateral (Programación presupuestal ▾, ver parciales/sidebar.php).
+// Las acciones de la página (plantilla/importar/exportar, snapshot, Tiempo real/Repositorio/Usuario,
+// selector de versión/dependencia) se arman aquí una vez y cada pestaña las pinta a la derecha de
+// su propia barra de opciones ($accionesAnalisisHtml: árbol, Techos y Metas, tabla de
+// distribución, Documentos, Actas) — así no ocupan una fila entera ni se amontonan en el encabezado.
 ob_start();
 ?>
     <div class="analisis-acciones">
@@ -206,7 +208,7 @@ ob_start();
         <?php endif; ?>
     </div>
 <?php
-$accionesEncabezadoHtml = ob_get_clean();
+$accionesAnalisisHtml = ob_get_clean();
 require __DIR__ . '/../parciales/encabezado.php';
 ?>
 

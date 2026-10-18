@@ -39,6 +39,7 @@ $idTabla = 'tabla-analisis-' . $origenActivo;
         <h2 class="tabla-nombre"><?= htmlspecialchars($etiquetasModuloTabla[$origenActivo] ?? $origenActivo) ?></h2>
 
         <div class="tabla-acciones">
+            <?= $accionesAnalisisHtml ?? '' ?>
             <div class="grupo-iconos grupo-basico" data-grupo="basico">
                 <?php if (!empty($filasCompletas)): ?>
                 <div class="buscar-envoltorio">

@@ -150,7 +150,7 @@ foreach ($serie as $indice => $punto) {
     <style>
         .tm-tarjeta { padding: 0.5rem; display: flex; flex-direction: column; flex: 1; min-height: 0; margin: 0.5rem; }
         .tm-scroll { flex: 1; min-height: 0; overflow: auto; padding: 0.25rem 0.5rem 0.5rem; }
-        .tm-pills { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
+        .tm-pills { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
         .tm-pills a { font-size: 0.85rem; padding: 0.35rem 0.75rem; border: 1px solid var(--color-borde); border-radius: 999px; color: var(--color-texto); text-decoration: none; }
         .tm-pills a.activo { background: var(--color-primario); border-color: var(--color-primario); color: #fff; }
         .tm-tabla { --tm-control: 32px; width: 100%; border-collapse: collapse; font-size: 0.88rem; }
@@ -189,6 +189,7 @@ foreach ($serie as $indice => $punto) {
             <?php foreach ($etiquetasBloque as $clave => $etiqueta): ?>
             <a href="<?= htmlspecialchars(analisisUrl('techos', $vista, ['bloque' => $clave] + ($vista === 'usuario' && $dependenciaFiltroActual !== null ? ['dependencia' => $dependenciaFiltroActual] : []))) ?>" class="<?= $clave === $bloque ? 'activo' : '' ?>"><?= htmlspecialchars($etiqueta) ?></a>
             <?php endforeach; ?>
+            <?= $accionesAnalisisHtml ?? '' ?>
         </div>
 
         <h1 style="font-size: 1.1rem;"><?= $esGastos ? 'Techo vs asignación' : 'Tope vs ingresos' ?> · <?= htmlspecialchars($etiquetasBloque[$bloque]) ?></h1>

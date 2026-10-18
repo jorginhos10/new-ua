@@ -474,10 +474,10 @@ function botonesExtraTarjetaPresentacion(string $urlDescarga): string
 
 <div class="tarjeta presentacion-analisis">
     <div class="presentacion-cuerpo">
-        <?php if (!empty($mensajesPresentacion) || $puedeEditarPresentacion): ?>
+        <?php if (!empty($mensajesPresentacion) || $puedeEditarPresentacion || !empty($accionesAnalisisHtml)): ?>
         <div class="presentacion-seccion presentacion-info-banner">
             <div class="presentacion-info-banner-cuerpo">
-                <?php if (empty($mensajesPresentacion)): ?>
+                <?php if (empty($mensajesPresentacion) && $puedeEditarPresentacion): ?>
                 <p class="texto-atenuado" style="margin: 0;">No hay ningún mensaje configurado para explicar esta sección.</p>
                 <?php else: ?>
                 <?php foreach ($mensajesPresentacion as $mensaje): ?>
@@ -485,12 +485,15 @@ function botonesExtraTarjetaPresentacion(string $urlDescarga): string
                 <?php endforeach; ?>
                 <?php endif; ?>
             </div>
-            <?php if ($puedeEditarPresentacion): ?>
+            <?php if ($puedeEditarPresentacion || !empty($accionesAnalisisHtml)): ?>
             <div class="presentacion-info-banner-acciones">
+                <?php if ($puedeEditarPresentacion): ?>
                 <a class="presentacion-info-banner-editar" href="index.php?ruta=mensaje-global&audiencia=analisis_presentacion" title="Editar en Mensajes globales">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                     <?= empty($mensajesPresentacion) ? 'Agregar mensaje' : 'Editar' ?>
                 </a>
+                <?php endif; ?>
+                <?= $accionesAnalisisHtml ?? '' ?>
             </div>
             <?php endif; ?>
         </div>

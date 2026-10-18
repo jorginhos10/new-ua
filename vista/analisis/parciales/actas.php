@@ -144,6 +144,7 @@ $tamanoLegible = static fn (int $bytes): string => $bytes >= 1048576
         <p class="actas-analisis-resumen">
             <?= $dependenciasConActa ?> de <?= count($dependenciasActas) ?> facultades han cargado acta · <?= $totalActas ?> acta<?= $totalActas === 1 ? '' : 's' ?> en total
         </p>
+        <?= $accionesAnalisisHtml ?? '' ?>
         <a class="actas-boton-volver" href="<?= htmlspecialchars(analisisUrl('presentacion', $vista)) ?>">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
             Volver

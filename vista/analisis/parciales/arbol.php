@@ -594,7 +594,7 @@ $esSuperAdmin = $esSuperAdmin ?? false;
 $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
 ?>
 <div class="tarjeta arbol-tarjeta">
-    <?php if ($modoColumnas === 'completo' || $esSuperAdmin): ?>
+    <?php if ($modoColumnas === 'completo' || $esSuperAdmin || !empty($accionesAnalisisHtml)): ?>
     <div class="arbol-topbar">
         <?php if ($tab === 'programacion'): ?>
         <div class="arbol-lado-toggle">
@@ -619,6 +619,7 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
             </div>
             <button type="button" class="arbol-boton-toggle" id="arbol-boton-historico" hidden>Últimos 5 años</button>
             <?php endif; ?>
+            <?= $accionesAnalisisHtml ?? '' ?>
         </div>
     </div>
     <?php endif; ?>
@@ -1215,7 +1216,15 @@ document.addEventListener('DOMContentLoaded', function () {
     function mostrarVista(vista) {
         var esGrafica = vista === 'grafica';
         scrollArbol.style.display = esGrafica ? 'none' : '';
-        if (accionesArbol) { accionesArbol.style.display = esGrafica ? 'none' : ''; }
+        // Solo los controles propios del árbol (Año anterior, Listas desplegadas, corte...); las
+        // acciones de la pestaña (.analisis-acciones: exportar, snapshot, vista) siguen visibles.
+        if (accionesArbol) {
+            Array.prototype.forEach.call(accionesArbol.children, function (hijo) {
+                if (!hijo.classList.contains('analisis-acciones')) {
+                    hijo.style.display = esGrafica ? 'none' : '';
+                }
+            });
+        }
         contenedorGrafica.hidden = !esGrafica;
         Array.prototype.forEach.call(botones, function (boton) {
             var activo = boton.dataset.vistaArbol === vista;
