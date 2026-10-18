@@ -39,7 +39,7 @@ function marcadorNivelArbol(int $nivel, string $color): string
         . htmlspecialchars($color) . ';" title="Nivel ' . ($nivel + 1) . '" aria-hidden="true"></span>';
 }
 
-function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $padreId, array $columnasExtra = [], bool $mostrarVariacion = false, bool $expandido = true, string $colorGrupo = '#2a78d6'): void
+function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $padreId, array $columnasExtra = [], bool $mostrarVariacion = false, bool $expandido = true, string $colorGrupo = '#2a78d6', int $decimales = 2): void
 {
     $tieneHijos = !empty($nodo['hijos']);
     $esTotal = $nodo['esTotal'] ?? false;
@@ -87,7 +87,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
 
     foreach ($columnasAnios as $columna) {
         $valor = $nodo['valores'][$columna['clave']] ?? 0.0;
-        echo '<td class="arbol-celda-valor ' . $columna['grupo'] . '" data-clave="' . htmlspecialchars($columna['clave']) . '" data-valor="' . number_format($valor, 2, '.', '') . '">$' . number_format($valor, 2, ',', '.') . '</td>';
+        echo '<td class="arbol-celda-valor ' . $columna['grupo'] . '" data-clave="' . htmlspecialchars($columna['clave']) . '" data-valor="' . number_format($valor, $decimales, '.', '') . '">$' . number_format($valor, $decimales, ',', '.') . '</td>';
         if ($mostrarVariacion && $columna['clave'] === 'vigente') {
             // Punto de color de "Indexación" (solo hojas — ver PresupuestoInstitucional::colorIndexacion()):
             // el texto de la plantilla es el tooltip, el color sale de ese mismo texto.
@@ -107,7 +107,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
     echo '</tr>';
 
     foreach ($nodo['hijos'] as $hijo) {
-        renderFilaArbolAnalisis($hijo, $columnasAnios, $nodo['id'], $columnasExtra, $mostrarVariacion, $expandido, $colorGrupo);
+        renderFilaArbolAnalisis($hijo, $columnasAnios, $nodo['id'], $columnasExtra, $mostrarVariacion, $expandido, $colorGrupo, $decimales);
     }
 }
 ?>
@@ -618,6 +618,11 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
 $clavesColumnasArbol = array_column($columnasAnios, 'clave');
 $mostrarVariacion = $tab === 'programacion' && in_array('vigente', $clavesColumnasArbol, true) && in_array('anterior_total', $clavesColumnasArbol, true);
 $esSuperAdmin = $esSuperAdmin ?? false;
+// Articulación PDI se muestra sin decimales (el resto de pestañas, con 2).
+$decimalesArbol = $tab === 'pdi' ? 0 : 2;
+// Icono + modal de ajustes (solo SA, Articulación PDI en Tiempo real/Repositorio — ver pdi-ajustes.php).
+$infoAjustePdi = $infoAjustePdi ?? null;
+$mostrarAjustesPdi = $esSuperAdmin && $tab === 'pdi' && !empty($infoAjustePdi);
 $columnasExtraAntes = array_filter($columnasExtra, static fn (array $c): bool => empty($c['despues']));
 $columnasExtraDespues = array_filter($columnasExtra, static fn (array $c): bool => !empty($c['despues']));
 $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
@@ -639,6 +644,14 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
         <div class="arbol-acciones">
             <?php if ($esSuperAdmin): ?>
             <button type="button" class="arbol-boton-toggle <?= $arbolExpandidoPorDefecto ? 'activo' : '' ?>" id="arbol-boton-expansion-defecto" aria-pressed="<?= $arbolExpandidoPorDefecto ? 'true' : 'false' ?>" title="Solo SA: define si las listas de esta pestaña salen desplegadas (activo) o recogidas para todos">Listas desplegadas</button>
+            <?php endif; ?>
+            <?php if ($mostrarAjustesPdi): ?>
+            <button type="button" class="analisis-icono-boton" id="pdi-ajustes-abrir" style="position: relative;" title="Ajustes (solo SA): a quién se le suma o resta la diferencia contra PP y valor a mostrar de un proyecto<?= !empty($infoAjustePdi['pendiente']) ? ' — hay una diferencia sin asignar' : '' ?>">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                <?php if (!empty($infoAjustePdi['pendiente'])): ?>
+                <span style="position: absolute; top: 1px; right: 1px; width: 8px; height: 8px; border-radius: 50%; background: #d93025;"></span>
+                <?php endif; ?>
+            </button>
             <?php endif; ?>
             <?php if ($modoColumnas === 'completo'): ?>
             <button type="button" class="arbol-boton-toggle" id="arbol-boton-anterior">Año anterior</button>
@@ -682,7 +695,7 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
                     <th class="arbol-celda-extra arbol-celda-extra-<?= htmlspecialchars($columnaExtra['clave']) ?>"></th>
                     <?php endforeach; ?>
                     <?php foreach ($columnasAnios as $columna): ?>
-                    <th class="arbol-celda-valor <?= $columna['grupo'] ?>" data-clave="<?= htmlspecialchars($columna['clave']) ?>" data-valor="<?= number_format($totalesGenerales[$columna['clave']], 2, '.', '') ?>">$<?= number_format($totalesGenerales[$columna['clave']], 2, ',', '.') ?></th>
+                    <th class="arbol-celda-valor <?= $columna['grupo'] ?>" data-clave="<?= htmlspecialchars($columna['clave']) ?>" data-valor="<?= number_format($totalesGenerales[$columna['clave']], $decimalesArbol, '.', '') ?>">$<?= number_format($totalesGenerales[$columna['clave']], $decimalesArbol, ',', '.') ?></th>
                     <?php if ($mostrarVariacion && $columna['clave'] === 'vigente'): ?>
                     <th class="arbol-celda-indexacion"></th>
                     <th class="porcentaje-grupo"></th>
@@ -696,7 +709,7 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
                 <tr><td colspan="<?= count($columnasAnios) + 1 + count($columnasExtra) + ($mostrarVariacion ? 3 : 0) ?>" class="texto-atenuado arbol-celda-vacia">No hay datos para mostrar.</td></tr>
                 <?php endif; ?>
                 <?php foreach ($arbolDatos as $indiceRaiz => $nodoLinea): ?>
-                <?php renderFilaArbolAnalisis($nodoLinea, $columnasAnios, null, $columnasExtra, $mostrarVariacion, $arbolExpandidoPorDefecto, colorGrupoArbol((int) $indiceRaiz)); ?>
+                <?php renderFilaArbolAnalisis($nodoLinea, $columnasAnios, null, $columnasExtra, $mostrarVariacion, $arbolExpandidoPorDefecto, colorGrupoArbol((int) $indiceRaiz), $decimalesArbol); ?>
                 <?php endforeach; ?>
             </tbody>
         </table>
@@ -706,6 +719,10 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
     <?php require __DIR__ . '/arbol-grafica.php'; ?>
     <?php endif; ?>
 </div>
+
+<?php if ($mostrarAjustesPdi): ?>
+<?php require __DIR__ . '/pdi-ajustes.php'; ?>
+<?php endif; ?>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -904,7 +921,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // --- Editar valores (solo Tiempo real, solo filas de Proyecto): doble clic cambia el valor
     // en memoria y recalcula en cascada — no escribe nada en la base de datos real. ---
     function formatoMonedaArbol(valor) {
-        return '$' + Number(valor).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        return '$' + Number(valor).toLocaleString('es-CO', { minimumFractionDigits: <?= (int) $decimalesArbol ?>, maximumFractionDigits: <?= (int) $decimalesArbol ?> });
     }
 
     function recalcularAncestroArbol(idFila) {

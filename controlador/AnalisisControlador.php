@@ -23,6 +23,7 @@ require_once __DIR__ . '/../modelo/VersionArbol.php';
 require_once __DIR__ . '/../modelo/FuenteDatosAnalisis.php';
 require_once __DIR__ . '/../modelo/PresupuestoInstitucional.php';
 require_once __DIR__ . '/../modelo/AnalisisArbolConfiguracion.php';
+require_once __DIR__ . '/../modelo/AnalisisPdiAjuste.php';
 require_once __DIR__ . '/../modelo/TechosMetas.php';
 require_once __DIR__ . '/../modelo/PresupuestoDependencia.php';
 require_once __DIR__ . '/../modelo/IngresoUnisalud.php';
@@ -120,6 +121,12 @@ class AnalisisControlador
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'configurar_expansion_arbol') {
             $this->guardarExpansionArbol($tab);
+
+            return;
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'guardar_ajuste_pdi') {
+            $this->guardarAjustePdi($tab, $vista);
 
             return;
         }
@@ -411,6 +418,83 @@ class AnalisisControlador
         $guardado = (new AnalisisArbolConfiguracion())->guardarExpandido($tab, $expandido, (int) $_SESSION['usuario_id']);
 
         echo json_encode(['ok' => $guardado, 'expandido' => $expandido]);
+    }
+
+    /**
+     * POST por fetch desde el modal de ajustes de Articulación PDI (solo SA, Tiempo real/Repositorio):
+     * 'tipo' = 'absorbe' (proyecto_id: a quién se le suma/resta la diferencia contra PP),
+     * 'quitar_absorbe' (vuelve al de por defecto), 'valor' (proyecto_id + valor: valor a mostrar) o
+     * 'quitar_valor' (proyecto_id). Responde JSON, sin redirigir.
+     */
+    private function guardarAjustePdi(string $tab, string $vista): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        $responder = static function (int $codigoHttp, string $error): void {
+            http_response_code($codigoHttp);
+            echo json_encode(['ok' => $error === '', 'error' => $error]);
+        };
+
+        if (!$this->esSuperAdmin()) {
+            $responder(403, 'Solo el SA puede cambiar estos ajustes.');
+
+            return;
+        }
+
+        if ($tab !== 'pdi' || $vista === 'usuario') {
+            $responder(400, 'Esta vista no admite ajustes.');
+
+            return;
+        }
+
+        $modeloAnio = new AnioPresupuestal();
+        $anioRegistro = $modeloAnio->obtenerActivos()[0] ?? ($modeloAnio->obtenerTodos()[0] ?? null);
+        if ($anioRegistro === null) {
+            $responder(400, 'No hay un año presupuestal configurado.');
+
+            return;
+        }
+        $anio = (int) $anioRegistro['anio'];
+
+        $tipo = (string) ($_POST['tipo'] ?? '');
+        $proyectoId = (int) ($_POST['proyecto_id'] ?? 0);
+        $usuarioId = (int) $_SESSION['usuario_id'];
+        $modelo = new AnalisisPdiAjuste();
+
+        try {
+            if ($tipo === 'quitar_absorbe') {
+                $modelo->quitarAbsorbe($anio);
+                $responder(200, '');
+
+                return;
+            }
+
+            if (!in_array($tipo, ['absorbe', 'valor', 'quitar_valor'], true) || (new Proyecto())->obtenerPorId($proyectoId) === null) {
+                $responder(400, 'Proyecto o acción no válidos.');
+
+                return;
+            }
+
+            if ($tipo === 'absorbe') {
+                $modelo->guardarAbsorbe($anio, $proyectoId, $usuarioId);
+            } elseif ($tipo === 'quitar_valor') {
+                $modelo->quitarValor($anio, $proyectoId);
+            } else {
+                $valor = $_POST['valor'] ?? '';
+                if (!is_numeric($valor) || (float) $valor < 0) {
+                    $responder(400, 'El valor debe ser un número mayor o igual a 0.');
+
+                    return;
+                }
+                $modelo->guardarValor($anio, $proyectoId, (float) $valor, $usuarioId);
+            }
+        } catch (Throwable $excepcion) {
+            $responder(500, 'No se pudo guardar en la base de datos (¿ya se ejecutó instalar.php?).');
+
+            return;
+        }
+
+        $responder(200, '');
     }
 
     private function procesarPost(string $tab, string $vista): void
@@ -784,6 +868,7 @@ class AnalisisControlador
         $columnasExtra = [];
         $etiquetaColumnaArbol = 'Línea / Motor / Proyecto';
         $cuadreProyectos = [];
+        $infoAjustePdi = null;
         if ($tab === 'programacion') {
             [$arbolDatos, $totalesGenerales] = $this->construirArbolPresupuesto($tipoPresupuesto, $clavesColumnas, $anioVigenteNumero, $versionIdActual, $sinDatosRepositorio);
             $columnasExtra = [
@@ -810,7 +895,8 @@ class AnalisisControlador
             }
         } else {
             $fuenteDatos = new FuenteDatosAnalisis($versionIdActual, $dependenciaFiltroActual);
-            [$arbolDatos, $totalesGenerales] = $this->construirArbolPdi($fuenteDatos, $columnasAnios, $clavesColumnas, $sinDatosRepositorio, $vista === 'usuario', $vista === 'tiempo_real');
+            // Repositorio sigue la misma lógica de Tiempo real (solo gasto principal + PP); Usuario no.
+            [$arbolDatos, $totalesGenerales, $infoAjustePdi] = $this->construirArbolPdi($fuenteDatos, $columnasAnios, $clavesColumnas, $sinDatosRepositorio, $vista === 'usuario', $vista !== 'usuario');
         }
 
         $error = $_SESSION['analisis_flash_error'] ?? '';
@@ -887,7 +973,9 @@ class AnalisisControlador
         );
 
         $filas = [];
-        $this->aplanarArbolParaExportar($arbolDatos, 0, $columnasAnios, $columnasExtra, $incluirIndexacion, $filas);
+        // Articulación PDI se muestra y exporta sin decimales.
+        $decimales = $tab === 'pdi' ? 0 : 2;
+        $this->aplanarArbolParaExportar($arbolDatos, 0, $columnasAnios, $columnasExtra, $incluirIndexacion, $filas, $decimales);
 
         if (!empty($filas)) {
             $filaTotal = array_fill(0, count($columnasAntes), ['valor' => '', 'estilo' => 3]);
@@ -896,7 +984,7 @@ class AnalisisControlador
                 $filaTotal[] = ['valor' => '', 'estilo' => 3];
             }
             foreach ($columnasAnios as $columna) {
-                $filaTotal[] = ['valor' => $this->formatoMonedaExportar((float) ($totalesGenerales[$columna['clave']] ?? 0.0)), 'estilo' => 3];
+                $filaTotal[] = ['valor' => $this->formatoMonedaExportar((float) ($totalesGenerales[$columna['clave']] ?? 0.0), $decimales), 'estilo' => 3];
             }
             if ($incluirIndexacion) {
                 $filaTotal[] = ['valor' => '', 'estilo' => 3];
@@ -930,7 +1018,7 @@ class AnalisisControlador
     }
 
     /** Padre antes que sus hijos; la profundidad sangra la descripción y las raíces/totales van en negrita. */
-    private function aplanarArbolParaExportar(array $nodos, int $profundidad, array $columnasAnios, array $columnasExtra, bool $incluirIndexacion, array &$filas): void
+    private function aplanarArbolParaExportar(array $nodos, int $profundidad, array $columnasAnios, array $columnasExtra, bool $incluirIndexacion, array &$filas, int $decimales = 2): void
     {
         foreach ($nodos as $nodo) {
             $enNegrita = $profundidad === 0 || !empty($nodo['esTotal']);
@@ -950,14 +1038,14 @@ class AnalisisControlador
             $fila[] = $celda(str_repeat('    ', $profundidad) . $nodo['etiqueta']);
             $fila = array_merge($fila, $filaDespues);
             foreach ($columnasAnios as $columna) {
-                $fila[] = $celda($this->formatoMonedaExportar((float) ($nodo['valores'][$columna['clave']] ?? 0.0)));
+                $fila[] = $celda($this->formatoMonedaExportar((float) ($nodo['valores'][$columna['clave']] ?? 0.0), $decimales));
             }
             if ($incluirIndexacion) {
                 $fila[] = $celda((string) ($nodo['indexacion'] ?? ''));
             }
             $filas[] = $fila;
 
-            $this->aplanarArbolParaExportar($nodo['hijos'] ?? [], $profundidad + 1, $columnasAnios, $columnasExtra, $incluirIndexacion, $filas);
+            $this->aplanarArbolParaExportar($nodo['hijos'] ?? [], $profundidad + 1, $columnasAnios, $columnasExtra, $incluirIndexacion, $filas, $decimales);
         }
     }
 
@@ -988,6 +1076,10 @@ class AnalisisControlador
         $lineas = $sinDatosRepositorio ? [] : $fuenteDatos->obtenerLineas();
         $motores = $sinDatosRepositorio ? [] : $fuenteDatos->obtenerMotores();
         $proyectos = $sinDatosRepositorio ? [] : $fuenteDatos->obtenerProyectos();
+
+        // Articulación PDI no muestra decimales: cada proyecto se redondea al peso y, en Tiempo
+        // real/Repositorio, la diferencia contra Programación presupuestal se carga a un proyecto.
+        $infoAjustePdi = $this->redondearYCuadrarTotalesPdi($totalesPorColumna, $proyectos, $columnaVigente, $clavesColumnas, $modoUsuario);
 
         $arbolDatos = [];
         foreach ($lineas as $linea) {
@@ -1061,7 +1153,105 @@ class AnalisisControlador
             }
         }
 
-        return [$arbolDatos, $totalesGenerales];
+        return [$arbolDatos, $totalesGenerales, $infoAjustePdi];
+    }
+
+    /** Proyecto que absorbe por defecto la diferencia contra PP: línea 5, motor 3, proyecto 5 (NIT 050305). */
+    private const PROYECTO_AJUSTE_PP = [5, 3, 5];
+
+    /** Hasta este monto (pesos) la diferencia contra PP se carga sola al proyecto por defecto; más, la decide el SA. */
+    private const UMBRAL_AJUSTE_AUTOMATICO = 50;
+
+    /**
+     * Pasos de Articulación PDI (columna vigente en Tiempo real/Repositorio):
+     * 1) cada proyecto del catálogo se redondea al peso; 2) los valores fijados por el SA lo
+     * reemplazan; 3) la diferencia contra el total de Egresos de PP se suma (o resta) al proyecto
+     * absorbente — el elegido por el SA o, si |dif| <= UMBRAL_AJUSTE_AUTOMATICO, L5 M3 P5; con una
+     * diferencia mayor y sin elección, no se fuerza. Modifica $totalesPorColumna por referencia y
+     * devuelve el resumen para el modal de ajustes (null en modo Usuario o sin año vigente).
+     */
+    private function redondearYCuadrarTotalesPdi(array &$totalesPorColumna, array $proyectos, array $columnaVigente, array $clavesColumnas, bool $modoUsuario): ?array
+    {
+        $idsCatalogo = array_map(static fn (array $proyecto): int => (int) $proyecto['id'], $proyectos);
+
+        foreach ($clavesColumnas as $clave) {
+            foreach ($idsCatalogo as $idProyecto) {
+                $totalesPorColumna[$clave][$idProyecto] = round((float) ($totalesPorColumna[$clave][$idProyecto] ?? 0.0), 0);
+            }
+        }
+
+        if ($modoUsuario || $columnaVigente['registro'] === null || empty($idsCatalogo)) {
+            return null;
+        }
+
+        $claveVigente = $columnaVigente['clave'];
+        $anio = (int) $columnaVigente['registro']['anio'];
+
+        try {
+            $ajustes = (new AnalisisPdiAjuste())->obtener($anio);
+        } catch (Throwable $excepcion) {
+            // Tabla aún no creada (instalar.php): el árbol funciona igual, sin ajustes del SA.
+            $ajustes = ['valores' => [], 'absorbe' => null];
+        }
+
+        $digitos = static fn ($codigo): int => (int) preg_replace('/\D/', '', (string) $codigo);
+        $idPorDefecto = null;
+        $infoProyectos = [];
+        foreach ($proyectos as $proyecto) {
+            $idProyecto = (int) $proyecto['id'];
+            if ([$digitos($proyecto['linea_codigo'] ?? ''), $digitos($proyecto['motor_codigo'] ?? ''), $digitos($proyecto['codigo'] ?? '')] === self::PROYECTO_AJUSTE_PP) {
+                $idPorDefecto = $idProyecto;
+            }
+            $infoProyectos[$idProyecto] = [
+                'id' => $idProyecto,
+                'etiqueta' => trim(($proyecto['linea_codigo'] ?? '') . ' ' . ($proyecto['motor_codigo'] ?? '') . ' ' . ($proyecto['codigo'] ?? '')) . ' · ' . $proyecto['nombre'],
+                'calculado' => $totalesPorColumna[$claveVigente][$idProyecto],
+                'fijado' => null,
+            ];
+        }
+
+        foreach ($ajustes['valores'] as $idProyecto => $valor) {
+            if (isset($infoProyectos[$idProyecto])) {
+                $totalesPorColumna[$claveVigente][$idProyecto] = round($valor, 0);
+                $infoProyectos[$idProyecto]['fijado'] = round($valor, 0);
+            }
+        }
+
+        $suma = 0.0;
+        foreach ($idsCatalogo as $idProyecto) {
+            $suma += $totalesPorColumna[$claveVigente][$idProyecto];
+        }
+        $pp = round($this->totalEgresosPresupuesto($anio), 0);
+        $diferencia = $pp - $suma;
+
+        $absorbeElegido = ($ajustes['absorbe'] !== null && isset($infoProyectos[$ajustes['absorbe']])) ? $ajustes['absorbe'] : null;
+        $absorbeId = $absorbeElegido ?? (abs($diferencia) <= self::UMBRAL_AJUSTE_AUTOMATICO ? $idPorDefecto : null);
+        if ($absorbeId !== null && $diferencia != 0.0) {
+            $totalesPorColumna[$claveVigente][$absorbeId] += $diferencia;
+        }
+
+        return [
+            'anio' => $anio,
+            'pp' => $pp,
+            'suma' => $suma,
+            'diferencia' => $diferencia,
+            'absorbeId' => $absorbeId,
+            'absorbeElegido' => $absorbeElegido,
+            'idPorDefecto' => $idPorDefecto,
+            'pendiente' => $absorbeId === null && $diferencia != 0.0,
+            'proyectos' => array_values($infoProyectos),
+        ];
+    }
+
+    /** Total general de Egresos de PP para un año: suma de las raíces del árbol (la fila Total de PP › Egresos). */
+    private function totalEgresosPresupuesto(int $anio): float
+    {
+        $total = 0.0;
+        foreach ((new PresupuestoInstitucional())->obtenerArbolConValores('egreso', [$anio]) as $raiz) {
+            $total += (float) ($raiz['valores'][$anio] ?? 0.0);
+        }
+
+        return $total;
     }
 
     /**
@@ -1873,9 +2063,9 @@ class AnalisisControlador
         ];
     }
 
-    private function formatoMonedaExportar(float $valor): string
+    private function formatoMonedaExportar(float $valor, int $decimales = 2): string
     {
-        return number_format($valor, 2, ',', '.');
+        return number_format($valor, $decimales, ',', '.');
     }
 
     /** Filas crudas (SELECT * equivalente) de un módulo, ya resueltas según el modo de datos. */

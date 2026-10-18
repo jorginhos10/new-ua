@@ -115,13 +115,14 @@ TablaReal.registrarVista('tabla', function (ctx) {
         fijarAnchoColumna(indice, anchosGuardados[indice]);
     });
 
-    // --- Ancho de la tabla: las columnas visibles siempre ocupan el 100 % del contenedor — si
+    // --- Ancho de la tabla: por defecto las columnas visibles ocupan el 100 % del contenedor — si
     // sobra espacio se agrandan y si falta se encogen, en proporción a su ancho, sin bajar de
-    // ANCHO_MINIMO_COLUMNA (si ni así caben, aparece el scroll horizontal normal de .tabla-scroll). "anchosBase"
-    // guarda el ancho de cada columna ANTES de repartir (el guardado/por defecto), para no ir
-    // agrandándolas de más cada vez que se recalcula (el CSS 'width: 100%' no sirve para esto:
-    // con table-layout fixed los navegadores no liberan el espacio de una columna oculta con
-    // visibility: collapse). ---
+    // ANCHO_MINIMO_COLUMNA (si ni así caben, aparece el scroll horizontal normal de .tabla-scroll).
+    // Las columnas con ancho guardado en localStorage (las que el usuario ajustó arrastrando la
+    // barra) conservan ese ancho: el 100 % se reparte solo entre las demás. "anchosBase" guarda el
+    // ancho de cada columna ANTES de repartir (el guardado/por defecto), para no ir agrandándolas
+    // de más cada vez que se recalcula (el CSS 'width: 100%' no sirve para esto: con table-layout
+    // fixed los navegadores no liberan el espacio de una columna oculta con visibility: collapse). ---
     var anchosBase = {};
     tabla.querySelectorAll('colgroup col[id^="tdt-col-"]').forEach(function (col) {
         var indice = col.id.replace('tdt-col-', '');
@@ -136,11 +137,17 @@ TablaReal.registrarVista('tabla', function (ctx) {
             var col = document.getElementById('tdt-col-' + indice);
             return col && col.style.visibility !== 'collapse';
         });
-        var sumaBase = indicesVisibles.reduce(function (total, indice) { return total + anchosBase[indice]; }, 0);
-        if (sumaBase === 0) { return; }
-        var disponible = contenedorScroll.clientWidth - anchoColSeleccion;
-        var factor = disponible > 0 ? disponible / sumaBase : 1;
-        indicesVisibles.forEach(function (indice) {
+        var fijas = indicesVisibles.filter(function (indice) { return anchosGuardados[indice]; });
+        var libres = indicesVisibles.filter(function (indice) { return !anchosGuardados[indice]; });
+
+        fijas.forEach(function (indice) { fijarAnchoColumna(indice, anchosBase[indice]); });
+
+        var sumaFijas = fijas.reduce(function (total, indice) { return total + anchosBase[indice]; }, 0);
+        var sumaLibres = libres.reduce(function (total, indice) { return total + anchosBase[indice]; }, 0);
+        if (sumaLibres === 0) { return; }
+        var disponible = contenedorScroll.clientWidth - anchoColSeleccion - sumaFijas;
+        var factor = disponible > 0 ? disponible / sumaLibres : 1;
+        libres.forEach(function (indice) {
             fijarAnchoColumna(indice, Math.max(ANCHO_MINIMO_COLUMNA, Math.floor(anchosBase[indice] * factor)));
         });
     }
@@ -168,6 +175,7 @@ TablaReal.registrarVista('tabla', function (ctx) {
                 document.removeEventListener('mousemove', mover);
                 document.removeEventListener('mouseup', soltar);
                 guardarAncho(manija.dataset.indice, anchoFinal);
+                anchosGuardados[manija.dataset.indice] = anchoFinal;
                 anchosBase[manija.dataset.indice] = anchoFinal;
                 ajustarAnchoTabla();
             }
@@ -227,6 +235,23 @@ TablaReal.registrarVista('tabla', function (ctx) {
     // Recién aquí quedó aplicado el estado inicial completo de columnas ocultas (por defecto desde
     // el servidor y las guardadas en localStorage), así que el primer reparto de ancho se hace acá.
     ajustarAnchoTabla();
+
+    // --- Columnas monetarias a la derecha (celdas y total): una columna es monetaria con el mismo
+    // criterio de la fila de totales — todo su texto es numérico y alguna celda termina en ",NN"
+    // (así PHP formatea los float). Se decide con todas las filas, no solo las visibles, para que
+    // la alineación no cambie al filtrar. ---
+    (function alinearColumnasMonetarias() {
+        var filaTotales = tabla.querySelector('tfoot .fila-totales-tdt');
+        for (var indice = 0; indice < tdtColumnas.length; indice++) {
+            var celdas = filasOriginales.map(function (fila) { return fila.children[indice + 1]; }).filter(Boolean);
+            var textos = celdas.map(function (celda) { return celda.textContent.trim(); }).filter(function (t) { return t !== '' && t !== '—'; });
+            if (textos.length === 0 || !textos.every(ctx.esTextoNumerico) || !textos.some(function (t) { return /,\d{2}$/.test(t); })) {
+                continue;
+            }
+            celdas.forEach(function (celda) { celda.classList.add('columna-moneda'); });
+            if (filaTotales && filaTotales.children[indice + 1]) { filaTotales.children[indice + 1].classList.add('columna-moneda'); }
+        }
+    })();
 
     // --- Fila de filtros pegada bajo los encabezados (se mide después de repartir anchos) ---
     var filaEncabezados = tabla.querySelector('tr.fila-encabezados');
@@ -341,11 +366,27 @@ TablaReal.registrarVista('tabla', function (ctx) {
             tr.classList.toggle('fila-seleccionada', tr.querySelector('.tabla-seleccion-fila:checked') !== null);
         });
         if (casillaSeleccionarTodo) {
-            var total = filasOriginales.length;
-            casillaSeleccionarTodo.checked = total > 0 && seleccionadas.length === total;
-            casillaSeleccionarTodo.indeterminate = seleccionadas.length > 0 && seleccionadas.length < total;
+            // "Seleccionar todo" se refiere solo a lo que el filtro deja ver.
+            var visibles = filasVisibles();
+            var seleccionadasVisibles = visibles.filter(function (fila) {
+                return fila.querySelector('.tabla-seleccion-fila:checked') !== null;
+            }).length;
+            casillaSeleccionarTodo.checked = visibles.length > 0 && seleccionadasVisibles === visibles.length;
+            casillaSeleccionarTodo.indeterminate = seleccionadasVisibles > 0 && seleccionadasVisibles < visibles.length;
         }
     }
+
+    // Al cambiar el filtro se desmarcan las filas que quedan ocultas (Editar/Eliminar nunca deben
+    // actuar sobre algo que el usuario ya no ve) y se recalculan los botones y "seleccionar todo".
+    ctx.on('filtros', function () {
+        filasOriginales.forEach(function (fila) {
+            if (fila.classList.contains('fila-oculta-filtro')) {
+                var casilla = fila.querySelector('.tabla-seleccion-fila');
+                if (casilla) { casilla.checked = false; }
+            }
+        });
+        actualizarBotonesSeleccion();
+    });
 
     filasOriginales.forEach(function (fila) {
         var casilla = fila.querySelector('.tabla-seleccion-fila');
@@ -355,7 +396,7 @@ TablaReal.registrarVista('tabla', function (ctx) {
     if (casillaSeleccionarTodo) {
         casillaSeleccionarTodo.addEventListener('change', function () {
             var marcar = casillaSeleccionarTodo.checked;
-            filasOriginales.forEach(function (fila) {
+            filasVisibles().forEach(function (fila) {
                 var casilla = fila.querySelector('.tabla-seleccion-fila');
                 if (casilla) { casilla.checked = marcar; }
             });

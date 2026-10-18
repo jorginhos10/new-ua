@@ -83,6 +83,24 @@ SQL],
 ];
 
 $pasos[] = [
+    'seccion' => 'Análisis > Articulación PDI',
+    'que' => 'Tabla analisis_pdi_ajustes (valores fijados por el SA y proyecto que absorbe la diferencia contra PP)',
+    'falta' => fn() => !tablaExiste($pdo, 'analisis_pdi_ajustes'),
+    'sql' => [<<<'SQL'
+CREATE TABLE IF NOT EXISTS analisis_pdi_ajustes (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    anio INT NOT NULL,
+    tipo ENUM('valor','absorbe') NOT NULL,
+    proyecto_id INT NOT NULL,
+    valor DECIMAL(18,0) NULL,
+    actualizado_por INT NULL,
+    actualizado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_analisis_pdi_ajuste (anio, tipo, proyecto_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL],
+];
+
+$pasos[] = [
     'seccion' => 'Mensajes globales',
     'que' => 'Tabla mensajes_globales (con el mensaje actual de mensaje_global)',
     'falta' => fn() => !tablaExiste($pdo, 'mensajes_globales'),

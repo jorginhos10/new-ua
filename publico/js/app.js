@@ -259,7 +259,8 @@ document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.menu-autogestion-item > .enlace-lateral-toggle').forEach(function (boton) {
         var dropdown = boton.nextElementSibling;
 
-        if (!dropdown) {
+        // Sin contraer: el desplegable de Consejo Superior siempre se ve (data-siempre-abierto).
+        if (!dropdown || dropdown.hasAttribute('data-siempre-abierto')) {
             return;
         }
 
@@ -270,7 +271,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     document.addEventListener('click', function (evento) {
-        document.querySelectorAll('.menu-autogestion-item-dropdown.abierto').forEach(function (dropdown) {
+        document.querySelectorAll('.menu-autogestion-item-dropdown.abierto:not([data-siempre-abierto])').forEach(function (dropdown) {
             var boton = dropdown.previousElementSibling;
 
             if (!dropdown.contains(evento.target) && (!boton || !boton.contains(evento.target))) {

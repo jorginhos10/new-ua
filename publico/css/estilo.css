@@ -5831,15 +5831,28 @@ body.tabla-redimensionando-cursor * {
     gap: 0.3rem;
     cursor: pointer;
     user-select: none;
+    /* Nunca más ancho que la celda: si el texto no cabe se recorta por la derecha y no tapa la
+       barra de redimensionar (.redimensionador-columna). */
+    max-width: 100%;
+    overflow: hidden;
 }
 
+/* El botón de ordenar va al inicio (izquierda) del encabezado, no junto a la barra de ancho. */
 .boton-ordenar {
+    order: -1;
+    flex-shrink: 0;
     border: none;
     background: transparent;
     color: var(--color-texto-tenue);
     cursor: pointer;
     padding: 0;
     display: inline-flex;
+}
+
+/* Columnas monetarias (marcadas por tabla-real/tabla.js): valores y total a la derecha. */
+.tabla-dev-datos td.columna-moneda {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 
 .encabezado-columna.orden-asc .boton-ordenar,

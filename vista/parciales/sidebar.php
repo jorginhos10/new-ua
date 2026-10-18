@@ -73,7 +73,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
  * tiene permitidas (AccesoAnalisis::resolver()), en el mismo orden y conservando la vista
  * (Tiempo real/Repositorio/Usuario) y el lado (Ingresos/Egresos) que se están viendo.
  */
-$renderMenuAnalisisSidebar = static function (array $acceso, string $rutaActual): void {
+$renderMenuAnalisisSidebar = static function (array $acceso, string $rutaActual, bool $siempreAbierto = false): void {
     require_once __DIR__ . '/../../modelo/AnioPresupuestal.php';
     $anioActivoSidebar = (new AnioPresupuestal())->obtenerActivos()[0]['anio'] ?? date('Y');
     $enAnalisis = $rutaActual === 'analisis';
@@ -94,7 +94,8 @@ $renderMenuAnalisisSidebar = static function (array $acceso, string $rutaActual)
             <span>Programación presupuestal</span>
             <span class="menu-autogestion-item-flecha">▾</span>
         </button>
-        <ul class="menu-autogestion-item-dropdown menu-analisis-lista<?= $enAnalisis ? ' abierto' : '' ?>">
+        <?php // Consejo Superior: siempre desplegado (app.js no lo contrae: data-siempre-abierto). ?>
+        <ul class="menu-autogestion-item-dropdown menu-analisis-lista<?= ($enAnalisis || $siempreAbierto) ? ' abierto' : '' ?>"<?= $siempreAbierto ? ' data-siempre-abierto' : '' ?>>
             <?php foreach ($pestanasSidebar as $clavePestana => $etiquetaPestana): ?>
             <?php if (!in_array($clavePestana, $acceso['pestanas'] ?? [], true)) { continue; } ?>
             <?php
@@ -290,7 +291,7 @@ $renderMenuAnalisisSidebar = static function (array $acceso, string $rutaActual)
             <?php endforeach; ?>
             <?php if ($accesoAnalisisSidebar !== null): ?>
             <p class="grupo-menu">Análisis</p>
-            <?php $renderMenuAnalisisSidebar($accesoAnalisisSidebar, $rutaActual); ?>
+            <?php $renderMenuAnalisisSidebar($accesoAnalisisSidebar, $rutaActual, true); ?>
             <?php endif; ?>
     <?php elseif ($tipoCuentaActual === 'invitado'): ?>
             <p class="grupo-menu">Resumen</p>
