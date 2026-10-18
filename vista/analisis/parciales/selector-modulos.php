@@ -25,7 +25,7 @@ $distribucionPorModulo = $distribucionPorModulo ?? [];
 $clasesDistribucion = ['Gastos' => 'gastos', 'Inversiones' => 'inversiones', 'Excedentes' => 'excedentes', 'Otros' => 'otros'];
 
 $etiquetasModuloSelector = [
-    'gasto_principal' => 'Gasto',
+    'gasto_principal' => 'Gastos',
     'gasto_extension' => 'Extensión',
     'gasto_postgrado' => 'Postgrado',
     'gasto_unisalud' => 'Unisalud',

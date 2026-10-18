@@ -15,7 +15,7 @@
 $pestanasGastoIngreso = $pestanasGastoIngreso ?? null;
 
 $etiquetasModuloTabla = [
-    'gasto_principal' => 'Gasto',
+    'gasto_principal' => 'Gastos',
     'gasto_extension' => 'Extensión',
     'ingreso_extension' => 'Extensión',
     'gasto_postgrado' => 'Postgrado',

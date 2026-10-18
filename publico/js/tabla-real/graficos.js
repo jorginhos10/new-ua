@@ -15,6 +15,65 @@ TablaReal.registrarVista('grafica', function (ctx) {
         return ctx.vistaActiva() === 'grafica';
     }
 
+    // --- Textos generados a partir del nombre de una columna (tarjetas con el conteo, subtítulos
+    // "N … con datos"), según las normas de la RAE: plural del núcleo y de sus adjetivos (no del
+    // complemento con "de": "Categorías de gasto"), palabras agudas en -n/-s que pierden la tilde
+    // en plural ("descripción" → "descripciones"), siglas invariables y siempre en mayúscula
+    // ("proyectos PDI", nunca "pdis") y porcentajes con coma decimal y espacio antes del signo ("95,6 %"). ---
+    var ES_SIGLA = /^[A-ZÁÉÍÓÚÑ]{2,}$/;
+    var NO_PLURALIZAR = ['de', 'del', 'la', 'las', 'el', 'los', 'y', 'o', 'a', 'en', 'por', 'para', 'con'];
+    // Plurales pedidos explícitamente que no salen de la regla general (que no pluraliza el
+    // complemento con "de"): la etiqueta original se sigue usando tal cual para reconocer la columna.
+    var PLURALES_FIJOS = { 'Categoría de gasto': 'Categorías de gastos' };
+    var SIN_TILDE = { 'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u' };
+
+    function pluralizarPalabra(palabra) {
+        if (ES_SIGLA.test(palabra) || /\d/.test(palabra)) { return palabra; }
+        var minuscula = palabra.toLowerCase();
+        if (/[aeiouáéó]$/.test(minuscula)) { return palabra + 's'; }
+        if (/z$/.test(minuscula)) { return palabra.slice(0, -1) + (palabra.slice(-1) === 'Z' ? 'CES' : 'ces'); }
+        // Llanas/esdrújulas en -s/-x son invariables ("análisis", "tórax"); las monosílabas y las
+        // agudas no ("mes" → "meses", "compás" → "compases").
+        var silabas = (minuscula.match(/[aeiouáéíóúü]+/g) || []).length;
+        if (/[sx]$/.test(minuscula) && silabas > 1 && !/[áéíóú][sx]$/.test(minuscula)) { return palabra; }
+        // Aguda terminada en vocal tildada + n/s: pierde la tilde ("descripción" → "descripciones").
+        var sinTildeFinal = palabra.replace(/([áéíóú])([ns])$/i, function (_, vocal, consonante) {
+            return (SIN_TILDE[vocal.toLowerCase()] || vocal) + consonante;
+        });
+        return sinTildeFinal + 'es';
+    }
+
+    // Pluraliza el núcleo de la etiqueta y los adjetivos que lo siguen, hasta la primera
+    // preposición o paréntesis ("Línea estratégica" → "Líneas estratégicas", "Proyecto PDI" →
+    // "Proyectos PDI", "Categoría de gasto" → "Categorías de gasto").
+    function pluralizarEtiqueta(etiqueta) {
+        if (Object.prototype.hasOwnProperty.call(PLURALES_FIJOS, etiqueta)) { return PLURALES_FIJOS[etiqueta]; }
+        var palabras = String(etiqueta).split(' ');
+        for (var i = 0; i < palabras.length; i++) {
+            var palabra = palabras[i];
+            if (i > 0 && (NO_PLURALIZAR.indexOf(palabra.toLowerCase()) !== -1 || /^\(/.test(palabra))) { break; }
+            // "Objeto/Proyecto" → "Objetos/proyectos": cada lado de la barra es un núcleo.
+            palabras[i] = palabra.split('/').map(pluralizarPalabra).join('/');
+        }
+        return palabras.join(' ');
+    }
+
+    // Minúscula inicial para usar la etiqueta dentro de una frase, sin tocar las siglas.
+    function enFrase(texto) {
+        return String(texto).split(' ').map(function (palabra) {
+            // La sigla se reconoce aunque venga entre paréntesis o con signos ("(PAA)").
+            return ES_SIGLA.test(palabra.replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ]/g, '')) ? palabra : palabra.toLowerCase();
+        }).join(' ');
+    }
+
+    function cantidadConNombre(cantidad, etiqueta) {
+        return cantidad + ' ' + enFrase(cantidad === 1 ? etiqueta : pluralizarEtiqueta(etiqueta));
+    }
+
+    function formatoPorcentajeTdt(porcentaje) {
+        return porcentaje.toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' %';
+    }
+
     // --- Vista de gráfica: mismo dashboard de decisión del prototipo Dev (agrupar por cualquier
     // columna de texto y sumar la columna de valor), pero genérico — no asume las columnas de
     // Gasto: la columna de valor se detecta por nombre ("valor"/"total") y las dimensiones son
@@ -204,7 +263,7 @@ TablaReal.registrarVista('grafica', function (ctx) {
         fuerte.textContent = formatoMonedaTdt(valor);
         elementoTooltipGrafica.appendChild(fuerte);
         var linea2 = document.createElement('div');
-        linea2.textContent = porcentaje.toFixed(1) + '% del total de este panel';
+        linea2.textContent = formatoPorcentajeTdt(porcentaje) + ' del total de este panel';
         elementoTooltipGrafica.appendChild(linea2);
         if (pista) {
             var linea3 = document.createElement('div');
@@ -279,7 +338,7 @@ TablaReal.registrarVista('grafica', function (ctx) {
 
             var valorSpan = document.createElement('span');
             valorSpan.className = 'grafica-barra-valor';
-            valorSpan.textContent = formatoMonedaTdt(item.valor) + ' (' + porcentaje.toFixed(1) + '%)';
+            valorSpan.textContent = formatoMonedaTdt(item.valor) + ' (' + formatoPorcentajeTdt(porcentaje) + ')';
             if (aplicarPareto) { valorSpan.style.color = esVital ? 'var(--color-pareto-destacado)' : 'var(--color-texto)'; }
             fila.appendChild(valorSpan);
 
@@ -395,7 +454,7 @@ TablaReal.registrarVista('grafica', function (ctx) {
 
             var valorSpan = document.createElement('span');
             valorSpan.className = 'grafica-torta-leyenda-valor';
-            valorSpan.textContent = porcentaje.toFixed(1) + '%';
+            valorSpan.textContent = formatoPorcentajeTdt(porcentaje);
             if (aplicarPareto) { valorSpan.style.color = colorTextoPareto(indice); }
             filaLeyenda.appendChild(valorSpan);
 
@@ -806,7 +865,7 @@ TablaReal.registrarVista('grafica', function (ctx) {
         dimensiones.slice(0, 2).forEach(function (dimension) {
             var valoresUnicos = {};
             filasDatos.forEach(function (fila) { valoresUnicos[fila[dimension.indice] || '(Sin dato)'] = true; });
-            tarjetasKpi.push({ etiqueta: dimension.nombre + ' distintos', valor: String(Object.keys(valoresUnicos).length) });
+            tarjetasKpi.push({ etiqueta: pluralizarEtiqueta(dimension.nombre), valor: String(Object.keys(valoresUnicos).length) });
         });
 
         tarjetasKpi.forEach(function (kpi) {
@@ -892,7 +951,7 @@ TablaReal.registrarVista('grafica', function (ctx) {
                     : agruparYSumar(filasDatos, panelDato.indice, indiceValor);
                 var totalGeneral = agregados.reduce(function (acc, a) { return acc + a.valor; }, 0);
                 panelDato.titulo = panelDato.nombre;
-                panelDato.subtitulo = agregados.length + ' ' + panelDato.nombre.toLowerCase() + (agregados.length === 1 ? '' : 's') + ' con datos en el filtro actual';
+                panelDato.subtitulo = cantidadConNombre(agregados.length, panelDato.nombre) + ' con datos en el filtro actual';
                 renderizarPanel(contenedorPaneles, panelDato, agregados, totalGeneral, esExpandido);
             });
         }
