@@ -818,10 +818,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var campoCorte = document.getElementById('arbol-fecha-corte');
     if (campoCorte) {
+        // La fecha elegida se guarda en la BD (para todos); al terminar se recarga para ver la
+        // cabecera de la columna con la fecha nueva.
         campoCorte.addEventListener('change', function () {
-            var url = new URL(window.location.href);
-            url.searchParams.set('corte', campoCorte.value);
-            window.location.href = url.toString();
+            if (!campoCorte.value) { return; }
+
+            var datos = new FormData();
+            datos.append('accion', 'guardar_fecha_corte');
+            datos.append('fecha', campoCorte.value);
+
+            campoCorte.disabled = true;
+            fetch(window.location.href, { method: 'POST', body: datos, credentials: 'same-origin' })
+                .then(function (respuesta) { return respuesta.json(); })
+                .then(function (resultado) {
+                    if (!resultado.ok) { throw new Error(resultado.error || 'No se pudo guardar.'); }
+                    window.location.reload();
+                })
+                .catch(function (error) {
+                    campoCorte.disabled = false;
+                    alert('No se pudo guardar la fecha de corte: ' + error.message);
+                });
         });
     }
 

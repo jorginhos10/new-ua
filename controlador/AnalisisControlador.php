@@ -125,6 +125,12 @@ class AnalisisControlador
             return;
         }
 
+        if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'guardar_fecha_corte') {
+            $this->guardarFechaCorte($tab, $vista);
+
+            return;
+        }
+
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'guardar_ajuste_pdi') {
             $this->guardarAjustePdi($tab, $vista);
 
@@ -418,6 +424,50 @@ class AnalisisControlador
         $guardado = (new AnalisisArbolConfiguracion())->guardarExpandido($tab, $expandido, (int) $_SESSION['usuario_id']);
 
         echo json_encode(['ok' => $guardado, 'expandido' => $expandido]);
+    }
+
+    /**
+     * POST por fetch desde el <input type="date"> "Corte" del árbol (solo SA, Tiempo real): guarda
+     * la fecha de corte de la pestaña para todos los usuarios. 'fecha' = Y-m-d. Responde JSON.
+     */
+    private function guardarFechaCorte(string $tab, string $vista): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        $responder = static function (int $codigoHttp, string $error): void {
+            http_response_code($codigoHttp);
+            echo json_encode(['ok' => $error === '', 'error' => $error]);
+        };
+
+        if (!$this->esSuperAdmin()) {
+            $responder(403, 'Solo el SA puede cambiar la fecha de corte.');
+
+            return;
+        }
+
+        if ($tab !== 'programacion' || $vista !== 'tiempo_real') {
+            $responder(400, 'Esta vista no tiene fecha de corte.');
+
+            return;
+        }
+
+        $fecha = (string) ($_POST['fecha'] ?? '');
+        $partes = explode('-', $fecha);
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha) || !checkdate((int) $partes[1], (int) $partes[2], (int) $partes[0])) {
+            $responder(400, 'La fecha no es válida.');
+
+            return;
+        }
+
+        try {
+            $guardado = (new AnalisisArbolConfiguracion())->guardarFechaCorte($tab, $fecha, (int) $_SESSION['usuario_id']);
+        } catch (Throwable $excepcion) {
+            $responder(500, 'No se pudo guardar en la base de datos (¿ya se ejecutó instalar.php?).');
+
+            return;
+        }
+
+        $responder($guardado ? 200 : 500, $guardado ? '' : 'No se pudo guardar la fecha.');
     }
 
     /**
@@ -834,11 +884,11 @@ class AnalisisControlador
         // "Proyectos" solo muestra el año vigente (sin año anterior ni históricos).
         $modoColumnas = $tab === 'programacion' ? 'completo' : 'estructura';
 
-        // La fecha de corte es netamente de la página (una etiqueta para la columna "a corte",
-        // elegida con el <input type="date"> del topbar) — nunca viene de la plantilla, ni se
-        // guarda en BD; por eso ambas pestañas la resuelven igual, desde la URL.
+        // La fecha de corte es la que eligió el admin con el <input type="date"> del topbar y queda
+        // guardada en BD (analisis_arbol_configuracion.fecha_corte, por pestaña) para todos; solo
+        // sin ninguna elegida se usa el mismo día del año anterior. No viene de la plantilla ni de la URL.
         $fechaCorteDefecto = $anioAnteriorNumero . date('-m-d');
-        $fechaCorte = (string) ($_GET['corte'] ?? $fechaCorteDefecto);
+        $fechaCorte = (new AnalisisArbolConfiguracion())->obtenerFechaCorte($tab) ?? $fechaCorteDefecto;
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaCorte)) {
             $fechaCorte = $fechaCorteDefecto;
         }

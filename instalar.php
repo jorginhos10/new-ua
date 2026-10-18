@@ -83,6 +83,13 @@ SQL],
 ];
 
 $pasos[] = [
+    'seccion' => 'Análisis > Programación presupuestal',
+    'que' => 'Columna analisis_arbol_configuracion.fecha_corte (fecha de corte elegida por el admin)',
+    'falta' => fn() => !columnaExiste($pdo, 'analisis_arbol_configuracion', 'fecha_corte'),
+    'sql' => ['ALTER TABLE analisis_arbol_configuracion ADD COLUMN fecha_corte DATE NULL AFTER expandido'],
+];
+
+$pasos[] = [
     'seccion' => 'Análisis > Articulación PDI',
     'que' => 'Tabla analisis_pdi_ajustes (valores fijados por el SA y proyecto que absorbe la diferencia contra PP)',
     'falta' => fn() => !tablaExiste($pdo, 'analisis_pdi_ajustes'),
