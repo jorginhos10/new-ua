@@ -461,6 +461,27 @@ $pasos[] = [
 
 $pasos[] = [
     'seccion' => 'Análisis > Análisis de distribución',
+    'que' => 'Tabla edicion_masiva_proyecto_respaldos (respaldo previo de la edición masiva de Proyecto PDI)',
+    'falta' => fn() => !tablaExiste($pdo, 'edicion_masiva_proyecto_respaldos'),
+    'sql' => [<<<'SQL'
+CREATE TABLE IF NOT EXISTS edicion_masiva_proyecto_respaldos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    origen VARCHAR(30) NOT NULL,
+    proyecto_nuevo_id INT NOT NULL,
+    proyecto_nuevo_texto VARCHAR(255) NOT NULL,
+    total_filas INT NOT NULL DEFAULT 0,
+    filas LONGTEXT NOT NULL,
+    creado_por INT DEFAULT NULL,
+    creado_en TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    restaurado_en DATETIME DEFAULT NULL,
+    restaurado_por INT DEFAULT NULL,
+    KEY idx_edicion_masiva_respaldos_origen (origen, id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+SQL],
+];
+
+$pasos[] = [
+    'seccion' => 'Análisis > Análisis de distribución',
     'que' => 'Columna snapshots.activa',
     'falta' => fn() => !columnaExiste($pdo, 'snapshots', 'activa'),
     'sql' => ['ALTER TABLE snapshots ADD COLUMN activa TINYINT(1) NOT NULL DEFAULT 0 AFTER nombre'],

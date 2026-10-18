@@ -609,9 +609,13 @@ class PeticionesControlador
             : $this->obtenerDependenciasPermitidas();
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            [$error, $exitoAccion] = ($_POST['accion'] ?? '') === 'editar_proyecto_masivo'
-                ? $this->procesarEdicionMasivaProyecto($origen)
-                : $this->procesarAccionCeldaTipoDetalle($origen);
+            if (($_POST['accion'] ?? '') === 'editar_proyecto_masivo') {
+                [$error, $exitoAccion] = $this->procesarEdicionMasivaProyecto($origen);
+            } elseif (($_POST['accion'] ?? '') === 'restaurar_edicion_masiva') {
+                [$error, $exitoAccion] = $this->procesarRestaurarEdicionMasiva($origen);
+            } else {
+                [$error, $exitoAccion] = $this->procesarAccionCeldaTipoDetalle($origen);
+            }
             $destino = 'index.php?ruta=peticiones-tipo-detalle&estado=' . urlencode($estado) . '&origen=' . urlencode($origen)
                 . '&anio_id=' . $anioSeleccionadoId . '&resaltar_id=' . $resaltarId;
             if ($dependenciaFiltro !== '') {
@@ -920,7 +924,7 @@ class PeticionesControlador
         }
 
         $edicion = new EdicionMasivaProyecto();
-        $actualizados = 0;
+        $permitidas = [];
         $omitidos = 0;
 
         foreach ($ids as $id) {
@@ -928,12 +932,20 @@ class PeticionesControlador
             $esDueno = $registro !== null && (int) ($registro['usuario_id'] ?? 0) === (int) $_SESSION['usuario_id'];
             $permitido = $registro !== null && ($esDueno || !empty($_SESSION['usuario_super_admin']));
 
-            if ($permitido && $edicion->actualizar($origen, $id, $proyecto)) {
-                $actualizados++;
+            if ($permitido) {
+                $permitidas[] = [$origen, $id];
             } else {
                 $omitidos++;
             }
         }
+
+        // Guarda un respaldo del estado previo antes de modificar (ver EdicionMasivaProyecto::aplicar()).
+        $resultado = $edicion->aplicar($origen, $permitidas, $proyecto, (int) $_SESSION['usuario_id']);
+        if ($resultado['error'] !== '') {
+            return [$resultado['error'], ''];
+        }
+        $actualizados = $resultado['actualizados'];
+        $omitidos += $resultado['omitidos'];
 
         if ($actualizados === 0) {
             return ['No se actualizó ninguna fila (no existen, ya tenían ese Proyecto PDI o no son tuyas).', ''];
@@ -942,6 +954,32 @@ class PeticionesControlador
         $exito = 'Proyecto PDI actualizado a "' . $proyecto['codigo'] . ' - ' . $proyecto['nombre'] . '" en ' . $actualizados . ($actualizados === 1 ? ' fila.' : ' filas.');
         if ($omitidos > 0) {
             $exito .= ' ' . $omitidos . ($omitidos === 1 ? ' fila se omitió.' : ' filas se omitieron.');
+        }
+
+        return ['', $exito];
+    }
+
+    /**
+     * Revierte una edición masiva de Proyecto PDI desde su respaldo (modal de edición masiva). Solo
+     * superadmin. @return array{0: string, 1: string} [error, exito]
+     */
+    private function procesarRestaurarEdicionMasiva(string $origen): array
+    {
+        if (empty($_SESSION['usuario_super_admin'])) {
+            return ['Solo el superadmin puede restaurar una edición masiva.', ''];
+        }
+        if (!EdicionMasivaProyecto::admite($origen)) {
+            return ['Este origen no permite restaurar el Proyecto PDI.', ''];
+        }
+
+        $resultado = (new EdicionMasivaProyecto())->restaurar((int) ($_POST['respaldo_id'] ?? 0), $origen, (int) $_SESSION['usuario_id']);
+        if ($resultado['error'] !== '') {
+            return [$resultado['error'], ''];
+        }
+
+        $exito = 'Edición masiva restaurada: ' . $resultado['restauradas'] . ($resultado['restauradas'] === 1 ? ' fila.' : ' filas.');
+        if ($resultado['omitidas'] > 0) {
+            $exito .= ' ' . $resultado['omitidas'] . ($resultado['omitidas'] === 1 ? ' fila se omitió' : ' filas se omitieron') . ' (ya se habían cambiado o no existen).';
         }
 
         return ['', $exito];

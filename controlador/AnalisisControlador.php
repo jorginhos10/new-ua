@@ -431,6 +431,10 @@ class AnalisisControlador
             [$error, $exito] = $this->procesarEdicionMasivaProyecto((string) ($_GET['origen'] ?? ''));
         }
 
+        if ($tab === 'analisis' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'restaurar_edicion_masiva') {
+            [$error, $exito] = $this->procesarRestaurarEdicionMasiva((string) ($_GET['origen'] ?? ''));
+        }
+
         if ($tab === 'analisis' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'eliminar_celda') {
             [$error, $exito] = $this->procesarEliminarModulo((string) ($_GET['origen'] ?? ''));
         } elseif ($tab === 'programacion' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'importar_presupuesto') {
@@ -525,7 +529,7 @@ class AnalisisControlador
         $edicion = new EdicionMasivaProyecto();
         $esSuperAdmin = $this->esSuperAdmin();
         $usuarioId = (int) $_SESSION['usuario_id'];
-        $actualizados = 0;
+        $permitidas = [];
         $omitidos = 0;
 
         foreach ($ids as $id) {
@@ -534,12 +538,20 @@ class AnalisisControlador
             $permitido = $registro !== null && ($esSuperAdmin
                 || ($origenFila !== 'gasto_fijo' && (int) ($registro['usuario_id'] ?? 0) === $usuarioId));
 
-            if ($permitido && $edicion->actualizar($origenFila, $idFila, $proyecto)) {
-                $actualizados++;
+            if ($permitido) {
+                $permitidas[] = [$origenFila, $idFila];
             } else {
                 $omitidos++;
             }
         }
+
+        // Guarda un respaldo del estado previo antes de modificar (ver EdicionMasivaProyecto::aplicar()).
+        $resultado = $edicion->aplicar($origen, $permitidas, $proyecto, $usuarioId);
+        if ($resultado['error'] !== '') {
+            return [$resultado['error'], ''];
+        }
+        $actualizados = $resultado['actualizados'];
+        $omitidos += $resultado['omitidos'];
 
         if ($actualizados === 0) {
             return ['No se actualizó ninguna fila (no existen, ya tenían ese Proyecto PDI o no tienes permiso para editarlas).', ''];
@@ -548,6 +560,32 @@ class AnalisisControlador
         $exito = 'Proyecto PDI actualizado a "' . $proyecto['codigo'] . ' - ' . $proyecto['nombre'] . '" en ' . $actualizados . ($actualizados === 1 ? ' fila.' : ' filas.');
         if ($omitidos > 0) {
             $exito .= ' ' . $omitidos . ($omitidos === 1 ? ' fila se omitió.' : ' filas se omitieron.');
+        }
+
+        return ['', $exito];
+    }
+
+    /**
+     * Revierte una edición masiva de Proyecto PDI desde su respaldo (modal de edición masiva). Solo
+     * superadmin. @return array{0: string, 1: string} [error, exito]
+     */
+    private function procesarRestaurarEdicionMasiva(string $origen): array
+    {
+        if (!$this->esSuperAdmin()) {
+            return ['Solo el superadmin puede restaurar una edición masiva.', ''];
+        }
+        if (!in_array($origen, self::ORIGENES_ANALISIS, true) || !EdicionMasivaProyecto::admite($origen)) {
+            return ['Este módulo no permite restaurar el Proyecto PDI.', ''];
+        }
+
+        $resultado = (new EdicionMasivaProyecto())->restaurar((int) ($_POST['respaldo_id'] ?? 0), $origen, (int) $_SESSION['usuario_id']);
+        if ($resultado['error'] !== '') {
+            return [$resultado['error'], ''];
+        }
+
+        $exito = 'Edición masiva restaurada: ' . $resultado['restauradas'] . ($resultado['restauradas'] === 1 ? ' fila.' : ' filas.');
+        if ($resultado['omitidas'] > 0) {
+            $exito .= ' ' . $resultado['omitidas'] . ($resultado['omitidas'] === 1 ? ' fila se omitió' : ' filas se omitieron') . ' (ya se habían cambiado o no existen).';
         }
 
         return ['', $exito];
