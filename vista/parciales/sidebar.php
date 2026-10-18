@@ -66,6 +66,49 @@ if (!empty($_SESSION['usuario_id']) && in_array($tipoCuentaActual, ['administrad
 
 $puedeVerMenu = static fn (string $clave): bool => $menuPermitido === null || isset($menuPermitido[$clave]);
 $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
+
+/**
+ * "Programación presupuestal" (?ruta=analisis) como desplegable con sus pestañas — antes iban en
+ * una barra de pestañas dentro de la página (vista/analisis/index.php). Solo las que el usuario
+ * tiene permitidas (AccesoAnalisis::resolver()), en el mismo orden y conservando la vista
+ * (Tiempo real/Repositorio/Usuario) y el lado (Ingresos/Egresos) que se están viendo.
+ */
+$renderMenuAnalisisSidebar = static function (array $acceso, string $rutaActual): void {
+    require_once __DIR__ . '/../../modelo/AnioPresupuestal.php';
+    $anioActivoSidebar = (new AnioPresupuestal())->obtenerActivos()[0]['anio'] ?? date('Y');
+    $enAnalisis = $rutaActual === 'analisis';
+    $tabActual = $enAnalisis ? (string) ($_GET['tab'] ?? 'presentacion') : '';
+    $vistasPermitidas = $acceso['vistas'] ?? ['usuario'];
+    $vistaSidebar = ($enAnalisis && in_array($_GET['vista'] ?? '', $vistasPermitidas, true)) ? (string) $_GET['vista'] : ($vistasPermitidas[0] ?? 'usuario');
+    $pestanasSidebar = [
+        'presentacion' => 'Documentos',
+        'programacion' => 'Programación presupuestal ' . $anioActivoSidebar,
+        'proyectos' => 'Proyectos de Inversión',
+        'pdi' => 'Articulación PDI',
+        'techos' => 'Techos y Metas',
+        'analisis' => 'Análisis de distribución',
+    ];
+    ?>
+    <div class="menu-autogestion-item">
+        <button type="button" class="enlace-lateral-toggle<?= $enAnalisis ? ' activo' : '' ?>">
+            <span>Programación presupuestal</span>
+            <span class="menu-autogestion-item-flecha">▾</span>
+        </button>
+        <ul class="menu-autogestion-item-dropdown menu-analisis-lista<?= $enAnalisis ? ' abierto' : '' ?>">
+            <?php foreach ($pestanasSidebar as $clavePestana => $etiquetaPestana): ?>
+            <?php if (!in_array($clavePestana, $acceso['pestanas'] ?? [], true)) { continue; } ?>
+            <?php
+            $parametros = ['ruta' => 'analisis', 'tab' => $clavePestana, 'vista' => $clavePestana === 'techos' && $vistaSidebar === 'repositorio' ? 'tiempo_real' : $vistaSidebar];
+            if ($clavePestana === 'programacion' && in_array($_GET['lado'] ?? '', ['ingresos', 'egresos'], true)) {
+                $parametros['lado'] = $_GET['lado'];
+            }
+            ?>
+            <li><a href="index.php?<?= htmlspecialchars(http_build_query($parametros)) ?>" class="<?= $tabActual === $clavePestana ? 'activo' : '' ?>"><?= htmlspecialchars($etiquetaPestana) ?></a></li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+    <?php
+};
 ?>
 <?php
 // ?ruta=analisis arranca con el sidebar cerrado desde el HTML — si se cerrara por JS al cargar,
@@ -216,7 +259,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <a href="index.php?ruta=usuarios" class="<?= $rutaActual === 'usuarios' ? 'activo' : '' ?>">Usuarios</a>
             <?php endif; ?>
             <?php if ($accesoAnalisisSidebar !== null): ?>
-            <a href="index.php?ruta=analisis" class="<?= $rutaActual === 'analisis' ? 'activo' : '' ?>">Programación presupuestal</a>
+            <?php $renderMenuAnalisisSidebar($accesoAnalisisSidebar, $rutaActual); ?>
             <?php endif; ?>
             <?php if ($esDependenciaSuperadmin): ?>
             <a href="index.php?ruta=dev" class="<?= in_array($rutaActual, ['dev', 'dev-vista'], true) ? 'activo' : '' ?>">Dev</a>
@@ -246,7 +289,7 @@ $puedeVerActas = $puedeVerActas && $puedeVerMenu('actas');
             <?php endforeach; ?>
             <?php if ($accesoAnalisisSidebar !== null): ?>
             <p class="grupo-menu">Análisis</p>
-            <a href="index.php?ruta=analisis" class="<?= $rutaActual === 'analisis' ? 'activo' : '' ?>">Programación presupuestal</a>
+            <?php $renderMenuAnalisisSidebar($accesoAnalisisSidebar, $rutaActual); ?>
             <?php endif; ?>
     <?php elseif ($tipoCuentaActual === 'invitado'): ?>
             <p class="grupo-menu">Resumen</p>

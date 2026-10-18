@@ -100,6 +100,11 @@ require __DIR__ . '/../parciales/encabezado.php';
         flex-shrink: 0;
     }
 
+    /* Las pestañas pasaron al menú lateral; la barra queda solo con las acciones (a la derecha). */
+    .analisis-tabs[hidden] {
+        display: none;
+    }
+
     .analisis-tabs a {
         font-size: 0.82rem;
         color: var(--color-texto-secundario);
@@ -229,7 +234,8 @@ require __DIR__ . '/../parciales/encabezado.php';
 
 <div class="analisis-barra">
     <?php $pestanasPermitidas = AccesoAnalisis::actual()['pestanas']; ?>
-    <nav class="analisis-tabs">
+    <?php // Las pestañas ahora viven en el menú lateral (Programación presupuestal ▾, ver parciales/sidebar.php). ?>
+    <nav class="analisis-tabs" hidden>
         <?php if (in_array('presentacion', $pestanasPermitidas, true)): ?>
         <a href="<?= htmlspecialchars(analisisUrl('presentacion', $vista)) ?>" class="<?= $tab === 'presentacion' ? 'activa' : '' ?>">Documentos</a>
         <?php endif; ?>
