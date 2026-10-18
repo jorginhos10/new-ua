@@ -47,215 +47,11 @@ function analisisUrl(string $tab, string $vista, array $extra = []): string
     return 'index.php?' . http_build_query($parametros);
 }
 
-require __DIR__ . '/../parciales/encabezado.php';
+// Las pestañas viven en el menú lateral (Programación presupuestal ▾, ver parciales/sidebar.php) y
+// las acciones de la página (exportar, snapshot, Tiempo real/Repositorio/Usuario, selector de
+// versión/dependencia) van en el encabezado global — así no se gasta una fila entera en ellas.
+ob_start();
 ?>
-
-<style>
-    /* Cadena de alto forzada a 100vh (mismo patrón que vista/peticiones/tipo-detalle.php) — esta
-       página no usa barra-modulo.php, así que .area-contenido pasa a alojar directo la franja +
-       el contenido de la pestaña activa. */
-    html, body {
-        height: 100%;
-        overflow: hidden;
-    }
-
-    .layout {
-        height: 100vh;
-        min-height: 0;
-    }
-
-    .contenido-principal {
-        min-height: 0;
-    }
-
-    .area-contenido {
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-        flex: 1;
-        padding: 0;
-    }
-
-    /* Una sola franja (el doble de alta que la versión original de 2rem, para que quepan cómodos
-       las 4 pestañas + el grupo de botones + el toggle de 3 vías) — no dos franjas separadas. */
-    .analisis-barra {
-        flex-shrink: 0;
-        min-height: 4rem;
-        max-height: 4rem;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.75rem;
-        padding: 0 1rem;
-        border-bottom: 1px solid var(--color-borde);
-        background: var(--color-superficie);
-        flex-wrap: wrap;
-        overflow-x: auto;
-    }
-
-    .analisis-tabs {
-        display: flex;
-        align-items: center;
-        gap: 1.1rem;
-        flex-shrink: 0;
-    }
-
-    /* Las pestañas pasaron al menú lateral; la barra queda solo con las acciones (a la derecha). */
-    .analisis-tabs[hidden] {
-        display: none;
-    }
-
-    .analisis-tabs a {
-        font-size: 0.82rem;
-        color: var(--color-texto-secundario);
-        text-decoration: none;
-        white-space: nowrap;
-        padding: 0.3rem 0;
-        border-bottom: 2px solid transparent;
-        transition: color var(--transicion), border-color var(--transicion);
-    }
-
-    .analisis-tabs a:hover {
-        color: var(--color-texto);
-    }
-
-    .analisis-tabs a.activa {
-        color: var(--color-primario);
-        border-bottom-color: var(--color-primario);
-        font-weight: 600;
-    }
-
-    .analisis-acciones {
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-        flex-shrink: 0;
-        margin-left: auto;
-    }
-
-    .analisis-grupo-datos {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.1rem;
-        background: var(--color-gris-fondo);
-        border-radius: 999px;
-        padding: 0.15rem;
-    }
-
-    .analisis-icono-boton {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 26px;
-        height: 26px;
-        border-radius: 50%;
-        border: none;
-        background: transparent;
-        color: var(--color-gris-texto);
-        cursor: pointer;
-        transition: background var(--transicion), color var(--transicion);
-    }
-
-    .analisis-icono-boton:hover {
-        background: rgba(0, 0, 0, 0.08);
-    }
-
-    /* Limpiar árbol: acción destructiva, se tiñe de rojo al pasar el cursor. */
-    .analisis-icono-boton.analisis-icono-limpiar:hover {
-        background: var(--color-error-fondo);
-        color: var(--color-error-texto);
-    }
-
-    .analisis-toggle {
-        display: inline-flex;
-        border-radius: 999px;
-        background: var(--color-fondo);
-        border: 1px solid var(--color-borde);
-        flex-shrink: 0;
-    }
-
-    .analisis-toggle a {
-        border: none;
-        background: transparent;
-        border-radius: 999px;
-        padding: 0.25rem 0.7rem;
-        font-size: 0.78rem;
-        cursor: pointer;
-        color: var(--color-texto-secundario);
-        text-decoration: none;
-        white-space: nowrap;
-        transition: background var(--transicion), color var(--transicion);
-    }
-
-    .analisis-toggle a.activo {
-        background: var(--color-primario);
-        color: #fff;
-    }
-
-    .analisis-selector-modo {
-        font-size: 0.78rem;
-        border: 1px solid var(--color-borde);
-        border-radius: 6px;
-        padding: 0.2rem 0.4rem;
-        color: var(--color-texto);
-        max-width: 220px;
-    }
-
-    .analisis-contenido {
-        flex: 1;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        padding-top: 1rem;
-    }
-
-    .analisis-mensaje {
-        margin: 0.75rem 1rem 0;
-        padding: 0.6rem 0.9rem;
-        border-radius: 8px;
-        font-size: 0.85rem;
-        white-space: pre-line;
-        flex-shrink: 0;
-    }
-
-    .analisis-mensaje-error {
-        background: #fdecea;
-        color: #a83232;
-        border: 1px solid #f3c2bc;
-    }
-
-    .analisis-mensaje-exito {
-        background: #e8f6ee;
-        color: #1e6b3c;
-        border: 1px solid #bfe6cd;
-    }
-</style>
-
-<div class="analisis-barra">
-    <?php $pestanasPermitidas = AccesoAnalisis::actual()['pestanas']; ?>
-    <?php // Las pestañas ahora viven en el menú lateral (Programación presupuestal ▾, ver parciales/sidebar.php). ?>
-    <nav class="analisis-tabs" hidden>
-        <?php if (in_array('presentacion', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('presentacion', $vista)) ?>" class="<?= $tab === 'presentacion' ? 'activa' : '' ?>">Documentos</a>
-        <?php endif; ?>
-        <?php if (in_array('programacion', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => $lado])) ?>" class="<?= $tab === 'programacion' ? 'activa' : '' ?>">Programación presupuestal <?= htmlspecialchars((string) $anioLabelActivo) ?></a>
-        <?php endif; ?>
-        <?php if (in_array('proyectos', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('proyectos', $vista)) ?>" class="<?= $tab === 'proyectos' ? 'activa' : '' ?>">Proyectos de Inversión</a>
-        <?php endif; ?>
-        <?php if (in_array('pdi', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('pdi', $vista)) ?>" class="<?= $tab === 'pdi' ? 'activa' : '' ?>">Articulación PDI</a>
-        <?php endif; ?>
-        <?php if (in_array('techos', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('techos', $vista === 'usuario' ? 'usuario' : 'tiempo_real')) ?>" class="<?= $tab === 'techos' ? 'activa' : '' ?>">Techos y Metas</a>
-        <?php endif; ?>
-        <?php if (in_array('analisis', $pestanasPermitidas, true)): ?>
-        <a href="<?= htmlspecialchars(analisisUrl('analisis', $vista)) ?>" class="<?= $tab === 'analisis' ? 'activa' : '' ?>">Análisis de distribución</a>
-        <?php endif; ?>
-    </nav>
-
     <div class="analisis-acciones">
         <?php
         // Exportar de las pestañas de árbol: la misma URL que se está viendo (lado, versión,
@@ -409,7 +205,145 @@ require __DIR__ . '/../parciales/encabezado.php';
         </select>
         <?php endif; ?>
     </div>
-</div>
+<?php
+$accionesEncabezadoHtml = ob_get_clean();
+require __DIR__ . '/../parciales/encabezado.php';
+?>
+
+<style>
+    /* Cadena de alto forzada a 100vh (mismo patrón que vista/peticiones/tipo-detalle.php) — esta
+       página no usa barra-modulo.php, así que .area-contenido pasa a alojar directo la franja +
+       el contenido de la pestaña activa. */
+    html, body {
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .layout {
+        height: 100vh;
+        min-height: 0;
+    }
+
+    .contenido-principal {
+        min-height: 0;
+    }
+
+    .area-contenido {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        flex: 1;
+        padding: 0;
+    }
+
+    /* Una sola franja (el doble de alta que la versión original de 2rem, para que quepan cómodos
+       las 4 pestañas + el grupo de botones + el toggle de 3 vías) — no dos franjas separadas. */
+    .analisis-acciones {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        flex-shrink: 0;
+        margin-left: auto;
+    }
+
+    .analisis-grupo-datos {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.1rem;
+        background: var(--color-gris-fondo);
+        border-radius: 999px;
+        padding: 0.15rem;
+    }
+
+    .analisis-icono-boton {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        color: var(--color-gris-texto);
+        cursor: pointer;
+        transition: background var(--transicion), color var(--transicion);
+    }
+
+    .analisis-icono-boton:hover {
+        background: rgba(0, 0, 0, 0.08);
+    }
+
+    /* Limpiar árbol: acción destructiva, se tiñe de rojo al pasar el cursor. */
+    .analisis-icono-boton.analisis-icono-limpiar:hover {
+        background: var(--color-error-fondo);
+        color: var(--color-error-texto);
+    }
+
+    .analisis-toggle {
+        display: inline-flex;
+        border-radius: 999px;
+        background: var(--color-fondo);
+        border: 1px solid var(--color-borde);
+        flex-shrink: 0;
+    }
+
+    .analisis-toggle a {
+        border: none;
+        background: transparent;
+        border-radius: 999px;
+        padding: 0.25rem 0.7rem;
+        font-size: 0.78rem;
+        cursor: pointer;
+        color: var(--color-texto-secundario);
+        text-decoration: none;
+        white-space: nowrap;
+        transition: background var(--transicion), color var(--transicion);
+    }
+
+    .analisis-toggle a.activo {
+        background: var(--color-primario);
+        color: #fff;
+    }
+
+    .analisis-selector-modo {
+        font-size: 0.78rem;
+        border: 1px solid var(--color-borde);
+        border-radius: 6px;
+        padding: 0.2rem 0.4rem;
+        color: var(--color-texto);
+        max-width: 220px;
+    }
+
+    .analisis-contenido {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding-top: 1rem;
+    }
+
+    .analisis-mensaje {
+        margin: 0.75rem 1rem 0;
+        padding: 0.6rem 0.9rem;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        white-space: pre-line;
+        flex-shrink: 0;
+    }
+
+    .analisis-mensaje-error {
+        background: #fdecea;
+        color: #a83232;
+        border: 1px solid #f3c2bc;
+    }
+
+    .analisis-mensaje-exito {
+        background: #e8f6ee;
+        color: #1e6b3c;
+        border: 1px solid #bfe6cd;
+    }
+</style>
 
 <?php if ($error !== '' || $exito !== ''): ?>
 <div class="analisis-mensaje <?= $error !== '' ? 'analisis-mensaje-error' : 'analisis-mensaje-exito' ?>"><?= nl2br(htmlspecialchars($error !== '' ? $error : $exito)) ?></div>

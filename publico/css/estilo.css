@@ -6491,3 +6491,27 @@ body.tabla-redimensionando-cursor * {
         padding: 0.75rem 1.25rem;
     }
 }
+
+/* Acciones propias de la página dentro del encabezado global (ver $accionesEncabezadoHtml en
+   parciales/encabezado.php) — hoy Análisis: exportar, snapshot, Tiempo real/Repositorio/Usuario y
+   selector de versión/dependencia, que antes ocupaban una fila entera bajo el encabezado. */
+.acciones-encabezado-pagina {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    max-width: 60vw;
+    overflow-x: auto;
+    margin-right: 0.5rem;
+    scrollbar-width: thin;
+}
+
+.acciones-encabezado-pagina .analisis-acciones {
+    margin-left: 0;
+    flex-wrap: nowrap;
+}
+
+@media (max-width: 900px) {
+    .acciones-encabezado-pagina {
+        max-width: 45vw;
+    }
+}

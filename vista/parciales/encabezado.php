@@ -101,6 +101,10 @@ if (!empty($_SESSION['usuario_id'])) {
                 </div>
 
                 <div class="grupo-acciones-encabezado">
+                    <?php // Acciones propias de la página (ej. Análisis: exportar, snapshot, Tiempo real/Repositorio/Usuario). ?>
+                    <?php if (!empty($accionesEncabezadoHtml)): ?>
+                    <div class="acciones-encabezado-pagina"><?= $accionesEncabezadoHtml ?></div>
+                    <?php endif; ?>
                     <?php if ($esDependenciaRaizActual): ?>
                     <a
                         href="index.php?ruta=alternar-auditoria&volver=<?= urlencode($urlActualEncabezado) ?>"
