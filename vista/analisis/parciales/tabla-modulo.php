@@ -162,6 +162,9 @@ $idTabla = 'tabla-analisis-' . $origenActivo;
 </div>
 
 <?php if ($vista === 'tiempo_real'): ?>
+<?php require_once __DIR__ . '/../../../modelo/EdicionMasivaProyecto.php'; ?>
+<?php if (EdicionMasivaProyecto::admite($origenActivo)): require __DIR__ . '/../../parciales/modal-edicion-masiva-proyecto.php'; endif; ?>
+
 <form method="POST" id="tdt-form-accion" action="<?= htmlspecialchars(analisisUrl('analisis', $vista, ['origen' => $origenActivo])) ?>" style="display:none;">
     <input type="hidden" name="accion" id="tdt-form-accion-valor" value="">
     <input type="hidden" name="origen_ids_json" id="tdt-form-origen-ids-json" value="">

@@ -15,6 +15,7 @@ require_once __DIR__ . '/../modelo/IngresoUnisalud.php';
 require_once __DIR__ . '/../modelo/Necesidad.php';
 require_once __DIR__ . '/../modelo/AnioPresupuestal.php';
 require_once __DIR__ . '/../modelo/PeticionArchivada.php';
+require_once __DIR__ . '/../modelo/EdicionMasivaProyecto.php';
 require_once __DIR__ . '/../modelo/PeticionHistorial.php';
 require_once __DIR__ . '/../modelo/Dependencia.php';
 require_once __DIR__ . '/../modelo/Usuario.php';
@@ -595,7 +596,9 @@ class PeticionesControlador
             : $this->obtenerDependenciasPermitidas();
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-            [$error, $exitoAccion] = $this->procesarAccionCeldaTipoDetalle($origen);
+            [$error, $exitoAccion] = ($_POST['accion'] ?? '') === 'editar_proyecto_masivo'
+                ? $this->procesarEdicionMasivaProyecto($origen)
+                : $this->procesarAccionCeldaTipoDetalle($origen);
             $destino = 'index.php?ruta=peticiones-tipo-detalle&estado=' . urlencode($estado) . '&origen=' . urlencode($origen)
                 . '&anio_id=' . $anioSeleccionadoId . '&resaltar_id=' . $resaltarId;
             if ($dependenciaFiltro !== '') {
@@ -893,6 +896,55 @@ class PeticionesControlador
      *
      * @return array{0: string, 1: string} [error, exito]
      */
+    /**
+     * Edición masiva del Proyecto PDI desde el "Ver" (modal de
+     * parciales/modal-edicion-masiva-proyecto.php): sobrescribe solo ese campo en las filas
+     * seleccionadas, con el mismo permiso que eliminar en lote (dueño de la fila o superadmin).
+     */
+    private function procesarEdicionMasivaProyecto(string $origen): array
+    {
+        if (!EdicionMasivaProyecto::admite($origen)) {
+            return ['Este origen no permite editar el Proyecto PDI.', ''];
+        }
+
+        $proyecto = EdicionMasivaProyecto::proyecto((int) ($_POST['proyecto_id'] ?? 0));
+        if ($proyecto === null) {
+            return ['Selecciona un Proyecto PDI válido.', ''];
+        }
+
+        $ids = $this->leerIdsSeleccionadosTablaReal();
+        if (empty($ids)) {
+            return ['No seleccionaste ninguna fila.', ''];
+        }
+
+        $edicion = new EdicionMasivaProyecto();
+        $actualizados = 0;
+        $omitidos = 0;
+
+        foreach ($ids as $id) {
+            $registro = $edicion->obtenerRegistro($origen, $id);
+            $esDueno = $registro !== null && (int) ($registro['usuario_id'] ?? 0) === (int) $_SESSION['usuario_id'];
+            $permitido = $registro !== null && ($esDueno || !empty($_SESSION['usuario_super_admin']));
+
+            if ($permitido && $edicion->actualizar($origen, $id, $proyecto)) {
+                $actualizados++;
+            } else {
+                $omitidos++;
+            }
+        }
+
+        if ($actualizados === 0) {
+            return ['No se actualizó ninguna fila (no existen, ya tenían ese Proyecto PDI o no son tuyas).', ''];
+        }
+
+        $exito = 'Proyecto PDI actualizado a "' . $proyecto['codigo'] . ' - ' . $proyecto['nombre'] . '" en ' . $actualizados . ($actualizados === 1 ? ' fila.' : ' filas.');
+        if ($omitidos > 0) {
+            $exito .= ' ' . $omitidos . ($omitidos === 1 ? ' fila se omitió.' : ' filas se omitieron.');
+        }
+
+        return ['', $exito];
+    }
+
     private function procesarAccionCeldaTipoDetalle(string $origen): array
     {
         $modelo = $this->obtenerModeloPorOrigen($origen);

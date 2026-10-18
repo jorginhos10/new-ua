@@ -67,7 +67,7 @@ $recorrerGrafica($arbolDatos, null, null);
             <p class="grafica-stat-valor">$<?= number_format($totalGrafica, 2, ',', '.') ?></p>
         </div>
         <div class="grafica-stat">
-            <p class="grafica-stat-etiqueta">Grupos</p>
+            <p class="grafica-stat-etiqueta">Secciones</p>
             <p class="grafica-stat-valor"><?= count($arbolDatos) ?></p>
         </div>
         <div class="grafica-stat">

@@ -18,6 +18,7 @@ require_once __DIR__ . '/../modelo/SolicitudMonitor.php';
 require_once __DIR__ . '/../modelo/SolicitudArl.php';
 require_once __DIR__ . '/../modelo/Snapshot.php';
 require_once __DIR__ . '/../modelo/GastoFijo.php';
+require_once __DIR__ . '/../modelo/EdicionMasivaProyecto.php';
 require_once __DIR__ . '/../modelo/VersionArbol.php';
 require_once __DIR__ . '/../modelo/FuenteDatosAnalisis.php';
 require_once __DIR__ . '/../modelo/PresupuestoInstitucional.php';
@@ -426,6 +427,10 @@ class AnalisisControlador
             [$error, $exito] = $this->crearSnapshotPestana($tab, $lado);
         }
 
+        if ($tab === 'analisis' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'editar_proyecto_masivo') {
+            [$error, $exito] = $this->procesarEdicionMasivaProyecto((string) ($_GET['origen'] ?? ''));
+        }
+
         if ($tab === 'analisis' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'eliminar_celda') {
             [$error, $exito] = $this->procesarEliminarModulo((string) ($_GET['origen'] ?? ''));
         } elseif ($tab === 'programacion' && $vista === 'tiempo_real' && ($_POST['accion'] ?? '') === 'importar_presupuesto') {
@@ -495,6 +500,59 @@ class AnalisisControlador
     }
 
     /** @return array{0: string, 1: string} [error, exito] */
+    /**
+     * Edición masiva del Proyecto PDI desde la tabla de Análisis de distribución (modal de
+     * parciales/modal-edicion-masiva-proyecto.php): sobrescribe solo ese campo en las filas
+     * seleccionadas. Ids negativos = gastos fijos (ver obtenerGastosFijosParaAnalisis()), solo SA;
+     * el resto, si la fila es del usuario o es SA (mismo criterio que la eliminación en Peticiones).
+     */
+    private function procesarEdicionMasivaProyecto(string $origen): array
+    {
+        if (!in_array($origen, self::ORIGENES_ANALISIS, true) || !EdicionMasivaProyecto::admite($origen)) {
+            return ['Este módulo no permite editar el Proyecto PDI.', ''];
+        }
+
+        $proyecto = EdicionMasivaProyecto::proyecto((int) ($_POST['proyecto_id'] ?? 0));
+        if ($proyecto === null) {
+            return ['Selecciona un Proyecto PDI válido.', ''];
+        }
+
+        $ids = $this->leerIdsSeleccionadosTablaReal();
+        if (empty($ids)) {
+            return ['No seleccionaste ninguna fila.', ''];
+        }
+
+        $edicion = new EdicionMasivaProyecto();
+        $esSuperAdmin = $this->esSuperAdmin();
+        $usuarioId = (int) $_SESSION['usuario_id'];
+        $actualizados = 0;
+        $omitidos = 0;
+
+        foreach ($ids as $id) {
+            [$origenFila, $idFila] = ($id < 0 && $origen === 'gasto_principal') ? ['gasto_fijo', -$id] : [$origen, $id];
+            $registro = $idFila > 0 ? $edicion->obtenerRegistro($origenFila, $idFila) : null;
+            $permitido = $registro !== null && ($esSuperAdmin
+                || ($origenFila !== 'gasto_fijo' && (int) ($registro['usuario_id'] ?? 0) === $usuarioId));
+
+            if ($permitido && $edicion->actualizar($origenFila, $idFila, $proyecto)) {
+                $actualizados++;
+            } else {
+                $omitidos++;
+            }
+        }
+
+        if ($actualizados === 0) {
+            return ['No se actualizó ninguna fila (no existen, ya tenían ese Proyecto PDI o no tienes permiso para editarlas).', ''];
+        }
+
+        $exito = 'Proyecto PDI actualizado a "' . $proyecto['codigo'] . ' - ' . $proyecto['nombre'] . '" en ' . $actualizados . ($actualizados === 1 ? ' fila.' : ' filas.');
+        if ($omitidos > 0) {
+            $exito .= ' ' . $omitidos . ($omitidos === 1 ? ' fila se omitió.' : ' filas se omitieron.');
+        }
+
+        return ['', $exito];
+    }
+
     private function procesarEliminarModulo(string $origen): array
     {
         if (!in_array($origen, self::ORIGENES_ANALISIS, true)) {

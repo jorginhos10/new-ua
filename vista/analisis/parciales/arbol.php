@@ -636,7 +636,7 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
                     <th class="<?= $columna['grupo'] ?>" data-clave="<?= htmlspecialchars($columna['clave']) ?>"><?= htmlspecialchars($columna['etiqueta']) ?></th>
                     <?php if ($mostrarVariacion && $columna['clave'] === 'vigente'): ?>
                     <th class="arbol-celda-indexacion" title="Indexación: el criterio con el que se proyecta esta línea (solo hojas), diligenciado desde la plantilla."></th>
-                    <th class="porcentaje-grupo" title="Porcentaje que representa esta línea sobre el total de su Gran Grupo (1, 2, 3...)">%</th>
+                    <th class="porcentaje-grupo" title="Porcentaje que representa esta línea sobre el total de su sección (1, 2, 3...)">%</th>
                     <th class="variacion" title="Variación: (<?= htmlspecialchars($columna['etiqueta']) ?> − año anterior Final) / año anterior Final">Var. %</th>
                     <?php endif; ?>
                     <?php endforeach; ?>
@@ -992,10 +992,10 @@ document.addEventListener('DOMContentLoaded', function () {
     function pintarEncabezadoPorcentajeArbol() {
         if (!encabezadoPorcentajeArbol) { return; }
         var esTotal = modoPorcentajeArbol === 'total';
-        encabezadoPorcentajeArbol.textContent = esTotal ? '% total' : '% grupo';
+        encabezadoPorcentajeArbol.textContent = esTotal ? '% total' : '% sección';
         encabezadoPorcentajeArbol.title = (esTotal
             ? 'Porcentaje de cada línea sobre el Total general (como en la gráfica)'
-            : 'Porcentaje de cada línea sobre el total de su Gran Grupo (1, 2, 3...)')
+            : 'Porcentaje de cada línea sobre el total de su sección (1, 2, 3...)')
             + ' · clic para alternar';
         encabezadoPorcentajeArbol.classList.toggle('mostrando-porcentaje', !esTotal);
     }

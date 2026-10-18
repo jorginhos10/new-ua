@@ -185,6 +185,9 @@ $idTabla = 'tabla-' . $origen . '-' . $estado;
     <?php endif; ?>
 </div>
 
+<?php require_once __DIR__ . '/../../modelo/EdicionMasivaProyecto.php'; ?>
+<?php if (EdicionMasivaProyecto::admite($origen)): require __DIR__ . '/../parciales/modal-edicion-masiva-proyecto.php'; endif; ?>
+
 <form method="POST" id="tdt-form-accion" action="index.php?ruta=peticiones-tipo-detalle&estado=<?= urlencode($estado) ?>&origen=<?= urlencode($origen) ?>&anio_id=<?= (int) $anioSeleccionadoId ?>&resaltar_id=<?= (int) $resaltarId ?><?= $dependenciaFiltro !== '' ? '&dependencia=' . urlencode($dependenciaFiltro) : '' ?>" style="display:none;">
     <input type="hidden" name="accion" id="tdt-form-accion-valor" value="">
     <input type="hidden" name="origen_ids_json" id="tdt-form-origen-ids-json" value="">

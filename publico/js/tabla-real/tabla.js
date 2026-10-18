@@ -300,7 +300,9 @@ TablaReal.registrarVista('tabla', function (ctx) {
         construirFilaTotales();
     });
 
-    // --- Selección de fila(s) + Editar (navega al formulario real, exige exactamente 1) /
+    // --- Selección de fila(s) + Editar (con 1 fila navega al formulario real; con varias abre el
+    // modal de edición masiva del Proyecto PDI, si este origen lo admite — ver
+    // parciales/modal-edicion-masiva-proyecto.php y modelo/EdicionMasivaProyecto.php) /
     // Eliminar (real, admite varias a la vez — ver AnalisisControlador::procesarEliminarModulo()
     // y PeticionesControlador::procesarAccionCeldaTipoDetalle(), ambas ya aceptan un lote). ---
     var casillaSeleccionarTodo = document.getElementById('tdt-seleccionar-todo');
@@ -309,6 +311,7 @@ TablaReal.registrarVista('tabla', function (ctx) {
     var formAccion = document.getElementById('tdt-form-accion');
     var formAccionValor = document.getElementById('tdt-form-accion-valor');
     var formOrigenIdsJson = document.getElementById('tdt-form-origen-ids-json');
+    var modalEdicionMasiva = document.getElementById('tdt-modal-edicion-masiva');
 
     function filasSeleccionadas() {
         return filasOriginales.filter(function (fila) {
@@ -319,8 +322,16 @@ TablaReal.registrarVista('tabla', function (ctx) {
     function actualizarBotonesSeleccion() {
         var seleccionadas = filasSeleccionadas();
         var unica = seleccionadas.length === 1 ? seleccionadas[0] : null;
-        var puedeEditar = unica && unica.dataset.puedeEditar === '1' && unica.dataset.rutaEditar;
-        if (botonEditar) { botonEditar.disabled = !puedeEditar; }
+        var todasEditables = seleccionadas.length > 0 && seleccionadas.every(function (fila) { return fila.dataset.puedeEditar === '1'; });
+        var puedeEditar = unica
+            ? (unica.dataset.puedeEditar === '1' && unica.dataset.rutaEditar)
+            : (seleccionadas.length > 1 && !!modalEdicionMasiva && todasEditables);
+        if (botonEditar) {
+            botonEditar.disabled = !puedeEditar;
+            botonEditar.title = seleccionadas.length > 1
+                ? (modalEdicionMasiva ? (todasEditables ? 'Editar el Proyecto PDI de las ' + seleccionadas.length + ' filas seleccionadas' : 'Alguna fila seleccionada no se puede editar') : 'Selecciona una sola fila para editar')
+                : 'Editar';
+        }
         if (botonEliminar) { botonEliminar.disabled = seleccionadas.length === 0; }
         filasOriginales.forEach(function (tr) {
             tr.classList.toggle('fila-seleccionada', tr.querySelector('.tabla-seleccion-fila:checked') !== null);
@@ -351,10 +362,56 @@ TablaReal.registrarVista('tabla', function (ctx) {
     if (botonEditar) {
         botonEditar.addEventListener('click', function () {
             var seleccionadas = filasSeleccionadas();
-            if (seleccionadas.length !== 1 || botonEditar.disabled) { return; }
+            if (seleccionadas.length === 0 || botonEditar.disabled) { return; }
 
-            window.location.href = seleccionadas[0].dataset.rutaEditar;
+            if (seleccionadas.length === 1) {
+                window.location.href = seleccionadas[0].dataset.rutaEditar;
+                return;
+            }
+
+            if (modalEdicionMasiva) {
+                var resumen = document.getElementById('tdt-edicion-masiva-resumen');
+                if (resumen) { resumen.textContent = 'Se actualizará el Proyecto PDI de las ' + seleccionadas.length + ' filas seleccionadas.'; }
+                if (window.establecerValorBuscable) { window.establecerValorBuscable('masivo-proyecto_id', ''); }
+                modalEdicionMasiva.classList.add('abierto');
+            }
         });
+    }
+
+    if (modalEdicionMasiva) {
+        var cerrarEdicionMasiva = function () { modalEdicionMasiva.classList.remove('abierto'); };
+        ['tdt-cerrar-edicion-masiva', 'tdt-cancelar-edicion-masiva'].forEach(function (id) {
+            var boton = document.getElementById(id);
+            if (boton) { boton.addEventListener('click', cerrarEdicionMasiva); }
+        });
+        modalEdicionMasiva.addEventListener('click', function (evento) { if (evento.target === modalEdicionMasiva) { cerrarEdicionMasiva(); } });
+
+        var botonAplicarMasiva = document.getElementById('tdt-aplicar-edicion-masiva');
+        if (botonAplicarMasiva) {
+            botonAplicarMasiva.addEventListener('click', function () {
+                var campoProyecto = document.getElementById('masivo-proyecto_id');
+                var proyectoId = campoProyecto ? campoProyecto.value : '';
+                if (!proyectoId) {
+                    window.alert('Selecciona un Proyecto PDI de la lista.');
+                    return;
+                }
+                var seleccionadas = filasSeleccionadas();
+                if (seleccionadas.length === 0) { return; }
+
+                var campoProyectoForm = formAccion.querySelector('input[name="proyecto_id"]');
+                if (!campoProyectoForm) {
+                    campoProyectoForm = document.createElement('input');
+                    campoProyectoForm.type = 'hidden';
+                    campoProyectoForm.name = 'proyecto_id';
+                    formAccion.appendChild(campoProyectoForm);
+                }
+                campoProyectoForm.value = proyectoId;
+                formOrigenIdsJson.value = JSON.stringify(seleccionadas.map(function (fila) { return parseInt(fila.dataset.origenId, 10); }));
+                formAccionValor.value = 'editar_proyecto_masivo';
+                botonAplicarMasiva.disabled = true;
+                formAccion.submit();
+            });
+        }
     }
 
     if (botonEliminar) {
