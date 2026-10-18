@@ -22,7 +22,7 @@ $totalDiapositivas = 3 + max(1, count($diapositivasMensaje));
                     <h1>Hola, <?= htmlspecialchars($nombreUsuario) ?></h1>
                     <p class="inicio-rol">Rol: <?= htmlspecialchars($rolActual) ?></p>
                     <p class="inicio-correo"><?= htmlspecialchars($correoUsuario) ?></p>
-                    <p class="inicio-texto">Bienvenido al Sistema de Planeación y Presupuesto Institucional. Elige un módulo en el menú lateral para comenzar.</p>
+                    <p class="inicio-texto">Bienvenido al Sistema de Programación Presupuestal Institucional. Elige un módulo en el menú lateral para comenzar.</p>
                 </div>
 
                 <div class="inicio-pareja">
