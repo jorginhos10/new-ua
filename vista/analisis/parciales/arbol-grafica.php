@@ -208,7 +208,7 @@ $formatoPorcentajeGrafica = static fn (float $porcentaje): string => number_form
         }
 
         .arbol-grafica-torta svg {
-            width: min(260px, 70vw);
+            width: min(340px, 80vw);
             height: auto;
         }
 
@@ -218,6 +218,26 @@ $formatoPorcentajeGrafica = static fn (float $porcentaje): string => number_form
             stroke-width: 1.5;
             cursor: pointer;
             transition: opacity var(--transicion);
+        }
+
+        .arbol-grafica-torta-pct {
+            font-size: 11px;
+            font-weight: 700;
+            fill: #fff;
+            paint-order: stroke;
+            stroke: rgba(0, 0, 0, 0.35);
+            stroke-width: 2px;
+        }
+
+        .arbol-grafica-torta-pct.externo {
+            font-size: 10px;
+            fill: var(--color-texto);
+            stroke: none;
+        }
+
+        .arbol-grafica-torta-guia {
+            stroke: var(--color-texto-tenue);
+            stroke-width: 1;
         }
 
         .arbol-grafica-torta svg:hover path:not(:hover),
@@ -496,13 +516,16 @@ $formatoPorcentajeGrafica = static fn (float $porcentaje): string => number_form
         function dibujarTorta(partes, total) {
             var ns = 'http://www.w3.org/2000/svg';
             var svg = document.createElementNS(ns, 'svg');
-            svg.setAttribute('viewBox', '0 0 200 200');
+            // Margen alrededor del círculo para las etiquetas externas de las porciones pequeñas.
+            svg.setAttribute('viewBox', '-40 -30 280 260');
             svg.setAttribute('role', 'img');
             svg.setAttribute('aria-label', 'Gráfica de torta');
             var angulo = -Math.PI / 2;
+            var etiquetas = [];
 
             partes.forEach(function (parte) {
                 var fraccion = parte.valor / total;
+                var anguloInicio = angulo;
                 var elemento;
                 if (fraccion >= 0.9999) {
                     elemento = document.createElementNS(ns, 'circle');
@@ -523,6 +546,38 @@ $formatoPorcentajeGrafica = static fn (float $porcentaje): string => number_form
                 elemento.appendChild(titulo);
                 enlazarSegmento(elemento, parte.fila);
                 svg.appendChild(elemento);
+
+                // Porcentaje de la porción: adentro si cabe (>= 6 %), afuera con línea guía si no.
+                var medio = fraccion >= 0.9999 ? -Math.PI / 2 : anguloInicio + fraccion * Math.PI;
+                etiquetas.push({ medio: medio, adentro: fraccion >= 0.06, texto: formatoPorcentaje(porcentajeDe(parte.fila)), unica: fraccion >= 0.9999 });
+            });
+
+            // Las etiquetas van después de todas las porciones para quedar siempre encima.
+            etiquetas.forEach(function (etiqueta) {
+                var texto = document.createElementNS(ns, 'text');
+                texto.setAttribute('text-anchor', 'middle');
+                texto.setAttribute('dominant-baseline', 'central');
+                texto.setAttribute('pointer-events', 'none');
+                if (etiqueta.adentro) {
+                    var radioTexto = etiqueta.unica ? 0 : 60;
+                    texto.setAttribute('x', String(100 + radioTexto * Math.cos(etiqueta.medio)));
+                    texto.setAttribute('y', String(100 + radioTexto * Math.sin(etiqueta.medio)));
+                    texto.setAttribute('class', 'arbol-grafica-torta-pct');
+                } else {
+                    var cos = Math.cos(etiqueta.medio), sin = Math.sin(etiqueta.medio);
+                    var guia = document.createElementNS(ns, 'line');
+                    guia.setAttribute('x1', String(100 + 96 * cos));
+                    guia.setAttribute('y1', String(100 + 96 * sin));
+                    guia.setAttribute('x2', String(100 + 108 * cos));
+                    guia.setAttribute('y2', String(100 + 108 * sin));
+                    guia.setAttribute('class', 'arbol-grafica-torta-guia');
+                    svg.appendChild(guia);
+                    texto.setAttribute('x', String(100 + 122 * cos));
+                    texto.setAttribute('y', String(100 + 118 * sin));
+                    texto.setAttribute('class', 'arbol-grafica-torta-pct externo');
+                }
+                texto.textContent = etiqueta.texto;
+                svg.appendChild(texto);
             });
 
             torta.innerHTML = '';
