@@ -1,8 +1,8 @@
 <?php
 /**
- * Cuadre por código raíz entre "Proyectos" y Programación presupuestal Egresos — solo
+ * Cuadre por "Código PP" entre "Proyectos" y Programación presupuestal Egresos — solo
  * informativo (nunca bloquea guardar ni importar), solo en Tiempo real. Variable esperada:
- * $cuadreProyectos (array de ['codigo','descripcion','totalProyectos','totalPresupuesto'
+ * $cuadreProyectos (array de ['codigo' (Código PP),'descripcion' (de Egresos),'totalProyectos','totalPresupuesto'
  * (?float, null si el código no existe en Egresos),'diferencia' (?float)]).
  */
 if (empty($cuadreProyectos)) {
@@ -14,7 +14,7 @@ if (empty($cuadreProyectos)) {
     <table class="tabla-usuarios">
         <thead>
             <tr>
-                <th>Código</th>
+                <th>Código PP</th>
                 <th>Descripción</th>
                 <th>Total en Proyectos</th>
                 <th>Total en Progr. presupuestal (Egresos)</th>

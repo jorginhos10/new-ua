@@ -709,7 +709,8 @@ class AnalisisControlador
         $anioVigenteNumero = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['anio'] : (int) date('Y');
         $anioAnteriorNumero = $anioVigenteNumero - 1;
 
-        $modoColumnas = $esArbolPresupuesto ? 'completo' : 'estructura';
+        // "Proyectos" solo muestra el año vigente (sin año anterior ni históricos).
+        $modoColumnas = $tab === 'programacion' ? 'completo' : 'estructura';
 
         // La fecha de corte es netamente de la página (una etiqueta para la columna "a corte",
         // elegida con el <input type="date"> del topbar) — nunca viene de la plantilla, ni se
@@ -757,8 +758,16 @@ class AnalisisControlador
             $columnasExtra = [
                 ['clave' => 'codigo', 'etiqueta' => 'Código'],
             ];
+            // Código PP solo para el superadmin en Tiempo real (es para el cuadre, no de consulta).
+            if ($vista === 'tiempo_real' && AccesoAnalisis::actual()['clase'] === 'superadmin') {
+                $columnasExtra[] = ['clave' => 'codigoPp', 'etiqueta' => 'Código PP'];
+            }
+            // 'despues': van a la derecha de Descripción (ver arbol.php y exportarArbol()).
+            $columnasExtra[] = ['clave' => 'detalle', 'etiqueta' => 'Detalle', 'despues' => true];
+            $columnasExtra[] = ['clave' => 'fuentesFinanciacion', 'etiqueta' => 'Fuentes de financiación', 'despues' => true];
             $etiquetaColumnaArbol = 'Descripción';
-            if ($vista === 'tiempo_real') {
+            // El cuadre muestra los Códigos PP: mismo alcance que esa columna (SA, Tiempo real).
+            if ($vista === 'tiempo_real' && AccesoAnalisis::actual()['clase'] === 'superadmin') {
                 $cuadreProyectos = $this->calcularCuadreProyectos($arbolDatos, $anioVigenteNumero);
             }
         } else {
@@ -827,9 +836,14 @@ class AnalisisControlador
         // Programación presupuestal, siempre al final, nunca en medio de las otras columnas.
         $incluirIndexacion = $tab === 'programacion';
 
+        // Columnas extra a la izquierda de la descripción y las marcadas 'despues' a su derecha.
+        $columnasAntes = array_values(array_filter($columnasExtra, static fn (array $c): bool => empty($c['despues'])));
+        $columnasDespues = array_values(array_filter($columnasExtra, static fn (array $c): bool => !empty($c['despues'])));
+
         $encabezados = array_merge(
-            array_column($columnasExtra, 'etiqueta'),
+            array_column($columnasAntes, 'etiqueta'),
             [$etiquetaColumnaArbol],
+            array_column($columnasDespues, 'etiqueta'),
             array_column($columnasAnios, 'etiqueta'),
             $incluirIndexacion ? ['Indexación'] : []
         );
@@ -838,8 +852,11 @@ class AnalisisControlador
         $this->aplanarArbolParaExportar($arbolDatos, 0, $columnasAnios, $columnasExtra, $incluirIndexacion, $filas);
 
         if (!empty($filas)) {
-            $filaTotal = array_fill(0, count($columnasExtra), ['valor' => '', 'estilo' => 3]);
+            $filaTotal = array_fill(0, count($columnasAntes), ['valor' => '', 'estilo' => 3]);
             $filaTotal[] = ['valor' => 'Total', 'estilo' => 3];
+            foreach ($columnasDespues as $columnaDespues) {
+                $filaTotal[] = ['valor' => '', 'estilo' => 3];
+            }
             foreach ($columnasAnios as $columna) {
                 $filaTotal[] = ['valor' => $this->formatoMonedaExportar((float) ($totalesGenerales[$columna['clave']] ?? 0.0)), 'estilo' => 3];
             }
@@ -882,10 +899,18 @@ class AnalisisControlador
             $celda = static fn (string $texto): array|string => $enNegrita ? ['valor' => $texto, 'estilo' => 4] : $texto;
 
             $fila = [];
+            $filaDespues = [];
             foreach ($columnasExtra as $columnaExtra) {
-                $fila[] = $celda((string) ($nodo[$columnaExtra['clave']] ?? ''));
+                // Proyecto(s) PDI se exporta como los NITs separados por ";", no los nombres.
+                $claveExportar = $columnaExtra['clave'] === 'proyectosPdi' ? 'proyectosPdiNits' : $columnaExtra['clave'];
+                if (!empty($columnaExtra['despues'])) {
+                    $filaDespues[] = $celda((string) ($nodo[$claveExportar] ?? ''));
+                } else {
+                    $fila[] = $celda((string) ($nodo[$claveExportar] ?? ''));
+                }
             }
             $fila[] = $celda(str_repeat('    ', $profundidad) . $nodo['etiqueta']);
+            $fila = array_merge($fila, $filaDespues);
             foreach ($columnasAnios as $columna) {
                 $fila[] = $celda($this->formatoMonedaExportar((float) ($nodo['valores'][$columna['clave']] ?? 0.0)));
             }
@@ -1344,28 +1369,36 @@ class AnalisisControlador
     }
 
     /**
-     * Cuadre por código raíz entre "Proyectos" (tipo 'proyecto') y Programación presupuestal
-     * Egresos — solo informativo (nunca bloquea guardar/importar), y solo por nivel raíz (no
-     * línea a línea): cuando un código de capítulo (ej. '1.6.0') existe en ambos árboles, se
-     * compara el total del año vigente de cada lado. $arbolDatos ya viene remapeado por clave
+     * Cuadre por "Código PP" entre "Proyectos" (tipo 'proyecto') y Programación presupuestal
+     * Egresos — solo informativo (nunca bloquea guardar/importar): las filas de Proyectos que
+     * traen el mismo Código PP (ej. '1.6.0') se suman (año vigente) y se comparan contra la línea
+     * de Egresos con ese código, en cualquier nivel. $arbolDatos ya viene remapeado por clave
      * ('vigente', no el año literal — ver remapArbolPresupuesto()); Egresos se lee crudo (por
      * año literal) porque aquí solo hace falta el año vigente, no todo el remapeo de columnas.
      */
     private function calcularCuadreProyectos(array $arbolDatos, int $anioVigenteNumero): array
     {
-        $raicesEgresos = (new PresupuestoInstitucional())->obtenerArbolConValores('egreso', [$anioVigenteNumero]);
-        $totalesEgresosPorCodigo = [];
-        foreach ($raicesEgresos as $raiz) {
-            $totalesEgresosPorCodigo[$raiz['codigo']] = (float) ($raiz['valores'][$anioVigenteNumero] ?? 0.0);
+        $egresosPorCodigo = [];
+        foreach ($this->aplanarArbolPresupuesto((new PresupuestoInstitucional())->obtenerArbolConValores('egreso', [$anioVigenteNumero])) as $nodoEgreso) {
+            $egresosPorCodigo[$nodoEgreso['codigo']] = $nodoEgreso;
+        }
+
+        $totalProyectosPorCodigoPp = [];
+        foreach ($this->aplanarArbolPresupuesto($arbolDatos) as $nodoProyecto) {
+            $codigoPp = (string) ($nodoProyecto['codigoPp'] ?? '');
+            if ($codigoPp === '') {
+                continue;
+            }
+            $totalProyectosPorCodigoPp[$codigoPp] = ($totalProyectosPorCodigoPp[$codigoPp] ?? 0.0) + (float) ($nodoProyecto['valores']['vigente'] ?? 0.0);
         }
 
         $cuadre = [];
-        foreach ($arbolDatos as $raizProyecto) {
-            $totalPresupuesto = $totalesEgresosPorCodigo[$raizProyecto['codigo']] ?? null;
-            $totalProyectos = (float) ($raizProyecto['valores']['vigente'] ?? 0.0);
+        foreach ($totalProyectosPorCodigoPp as $codigoPp => $totalProyectos) {
+            $nodoEgreso = $egresosPorCodigo[$codigoPp] ?? null;
+            $totalPresupuesto = $nodoEgreso !== null ? (float) ($nodoEgreso['valores'][$anioVigenteNumero] ?? 0.0) : null;
             $cuadre[] = [
-                'codigo' => $raizProyecto['codigo'],
-                'descripcion' => $raizProyecto['etiqueta'],
+                'codigo' => (string) $codigoPp,
+                'descripcion' => $nodoEgreso['etiqueta'] ?? '',
                 'totalProyectos' => $totalProyectos,
                 'totalPresupuesto' => $totalPresupuesto,
                 'diferencia' => $totalPresupuesto !== null ? $totalProyectos - $totalPresupuesto : null,
@@ -2369,29 +2402,23 @@ class AnalisisControlador
         $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
         $anioVigenteRegistro = $aniosActivos[0] ?? null;
         $anioVigenteNumero = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['anio'] : (int) date('Y');
-        $anioPorClave = $this->resolverAniosPorClave($anioVigenteNumero);
-        $anios = array_values(array_unique(array_values($anioPorClave)));
+        // Solo el año vigente (sin año anterior ni históricos). Fuentes de financiación: códigos
+        // de Egresos de Programación presupuestal separados por ";". Código PP: código de
+        // Egresos (ej. '1.6.0') contra el que cuadra esta fila (ver calcularCuadreProyectos()).
+        $encabezados = ['Código', 'Descripción', 'Detalle', 'Fuentes de financiación', (string) $anioVigenteNumero, 'Código PP'];
 
-        $encabezados = ['Código', 'Descripción', (string) $anioVigenteNumero, 'Año anterior (Final)', 'Año anterior (a corte)'];
-        for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
-            $encabezados[] = (string) ($anioVigenteNumero - $desplazamiento);
-        }
-
-        $planas = $this->aplanarArbolPresupuesto((new PresupuestoInstitucional())->obtenerArbolConValores('proyecto', $anios));
+        $planas = $this->aplanarArbolPresupuesto((new PresupuestoInstitucional())->obtenerArbolConValores('proyecto', [$anioVigenteNumero]));
 
         $filas = [];
         foreach ($planas as $nodo) {
-            $fila = [
+            $filas[] = [
                 $nodo['codigo'],
                 $nodo['etiqueta'],
-                $this->formatoNumeroExportar($nodo['valores'][$anioPorClave['vigente']] ?? 0.0),
-                $this->formatoNumeroExportar($nodo['valores'][$anioPorClave['anterior_total']] ?? 0.0),
-                $nodo['valorCorte'] !== null ? $this->formatoNumeroExportar($nodo['valorCorte']) : '',
+                $nodo['detalle'] ?? '',
+                $nodo['fuentesCodigos'] ?? '',
+                $this->formatoNumeroExportar($nodo['valores'][$anioVigenteNumero] ?? 0.0),
+                $nodo['codigoPp'] ?? '',
             ];
-            for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
-                $fila[] = $this->formatoNumeroExportar($nodo['valores'][$anioVigenteNumero - $desplazamiento] ?? 0.0);
-            }
-            $filas[] = $fila;
         }
 
         GeneradorXlsx::descargarPlantillaMultihoja('proyectos.xlsx', [
@@ -2433,7 +2460,11 @@ class AnalisisControlador
             return 'No se pudo leer el archivo: ' . $excepcion->getMessage();
         }
 
-        array_shift($filas);
+        // Una plantilla anterior (con año anterior e históricos) leería un valor como Código PP.
+        $encabezado = array_shift($filas) ?? [];
+        if (trim((string) ($encabezado[5] ?? '')) !== 'Código PP') {
+            return 'Esta plantilla es de un formato anterior. Usa el botón "Plantilla" para descargar una plantilla nueva.';
+        }
 
         $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
         $anioVigenteRegistro = $aniosActivos[0] ?? null;
@@ -2460,20 +2491,16 @@ class AnalisisControlador
     }
 
     /**
-     * Igual espíritu que validarFilasPresupuesto(), pero para la hoja única de "Proyectos": 5
-     * columnas fijas (índices 0-4: Código, Descripción, vigente, Año anterior Final, Año
-     * anterior a corte — sin Proyecto(s) PDI), históricos en los índices 3+$desplazamiento
-     * (5,6,7,8) — verificado a mano contra exportarPlantillaProyectos().
+     * Igual espíritu que validarFilasPresupuesto(), pero para la hoja única de "Proyectos": 6
+     * columnas (índices 0-5: Código, Descripción, Detalle, Fuentes de financiación, vigente,
+     * Código PP — sin Proyecto(s) PDI ni años anteriores) — verificado a mano contra
+     * exportarPlantillaProyectos(). Solo toca el año vigente: los valores de otros años que ya
+     * estén guardados no se modifican.
      */
     private function validarFilasProyectos(array $filas, int $anioVigenteNumero, array &$errores): array
     {
-        $anioAnteriorNumero = $anioVigenteNumero - 1;
         $lineasValidas = [];
-
-        $indicesHistoricos = [];
-        for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
-            $indicesHistoricos[3 + $desplazamiento] = $anioVigenteNumero - $desplazamiento;
-        }
+        $codigosEgreso = (new PresupuestoInstitucional())->nombresPorCodigo('egreso');
 
         foreach ($filas as $indice => $fila) {
             $numeroFilaExcel = $indice + 2;
@@ -2493,37 +2520,33 @@ class AnalisisControlador
             $filaValida = true;
             $valores = [];
 
-            $crudoVigente = trim((string) ($fila[2] ?? ''));
+            $detalle = trim((string) ($fila[2] ?? ''));
+
+            $fuentes = [];
+            foreach (explode(';', (string) ($fila[3] ?? '')) as $codigoFuente) {
+                $codigoFuente = trim($codigoFuente);
+                if ($codigoFuente === '') {
+                    continue;
+                }
+                if (!isset($codigosEgreso[$codigoFuente])) {
+                    $errores[] = "Proyectos, fila $numeroFilaExcel: la fuente de financiación \"$codigoFuente\" no existe en Programación presupuestal (Egresos).";
+                    $filaValida = false;
+                    continue;
+                }
+                $fuentes[] = $codigoFuente;
+            }
+
+            $crudoVigente = trim((string) ($fila[4] ?? ''));
             if ($crudoVigente !== '' && !is_numeric($crudoVigente)) {
                 $errores[] = "Proyectos, fila $numeroFilaExcel: \"$anioVigenteNumero\" no es un número válido.";
                 $filaValida = false;
             }
             $valores[$anioVigenteNumero] = ['valor_final' => $crudoVigente !== '' && is_numeric($crudoVigente) ? (float) $crudoVigente : 0.0];
 
-            $crudoAnteriorFinal = trim((string) ($fila[3] ?? ''));
-            $crudoAnteriorCorte = trim((string) ($fila[4] ?? ''));
-
-            if ($crudoAnteriorFinal !== '' && !is_numeric($crudoAnteriorFinal)) {
-                $errores[] = "Proyectos, fila $numeroFilaExcel: \"Año anterior (Final)\" no es un número válido.";
+            $codigoPp = trim((string) ($fila[5] ?? ''));
+            if ($codigoPp !== '' && !preg_match('/^\d+(\.\d+)*$/', $codigoPp)) {
+                $errores[] = "Proyectos, fila $numeroFilaExcel: Código PP inválido \"$codigoPp\".";
                 $filaValida = false;
-            }
-            if ($crudoAnteriorCorte !== '' && !is_numeric($crudoAnteriorCorte)) {
-                $errores[] = "Proyectos, fila $numeroFilaExcel: \"Año anterior (a corte)\" no es un número válido.";
-                $filaValida = false;
-            }
-
-            $valores[$anioAnteriorNumero] = [
-                'valor_final' => $crudoAnteriorFinal !== '' && is_numeric($crudoAnteriorFinal) ? (float) $crudoAnteriorFinal : 0.0,
-                'valor_corte' => $crudoAnteriorCorte !== '' && is_numeric($crudoAnteriorCorte) ? (float) $crudoAnteriorCorte : null,
-            ];
-
-            foreach ($indicesHistoricos as $indiceColumna => $anioHistorico) {
-                $crudo = trim((string) ($fila[$indiceColumna] ?? ''));
-                if ($crudo !== '' && !is_numeric($crudo)) {
-                    $errores[] = "Proyectos, fila $numeroFilaExcel: \"$anioHistorico\" no es un número válido.";
-                    $filaValida = false;
-                }
-                $valores[$anioHistorico] = ['valor_final' => $crudo !== '' && is_numeric($crudo) ? (float) $crudo : 0.0];
             }
 
             if (!$filaValida) {
@@ -2534,6 +2557,9 @@ class AnalisisControlador
                 'codigo' => $codigo,
                 'descripcion' => $descripcion,
                 'proyectos_ids' => [],
+                'codigo_pp' => $codigoPp !== '' ? $codigoPp : null,
+                'detalle' => $detalle !== '' ? $detalle : null,
+                'fuentes_financiacion' => !empty($fuentes) ? implode(';', $fuentes) : null,
                 'valores' => $valores,
             ];
         }

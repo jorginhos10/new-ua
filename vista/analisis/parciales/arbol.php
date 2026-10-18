@@ -50,8 +50,21 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         . ($padreId !== null ? ' data-padre="' . htmlspecialchars($padreId) . '"' : '')
         . ' data-expandido="' . ($expandido ? '1' : '0') . '">';
 
+    $celdasDespues = '';
     foreach ($columnasExtra as $columnaExtra) {
-        echo '<td class="arbol-celda-extra arbol-celda-extra-' . htmlspecialchars($columnaExtra['clave']) . '">' . htmlspecialchars((string) ($nodo[$columnaExtra['clave']] ?? '')) . '</td>';
+        $textoExtra = (string) ($nodo[$columnaExtra['clave']] ?? '');
+        // Proyecto(s) PDI: solo el conteo ("pry ##"), no la lista concatenada.
+        if ($columnaExtra['clave'] === 'proyectosPdi') {
+            $nits = (string) ($nodo['proyectosPdiNits'] ?? '');
+            $textoExtra = $textoExtra === '' ? '' : 'pry ' . count(explode(';', $nits));
+        }
+        $celdaExtra = '<td class="arbol-celda-extra arbol-celda-extra-' . htmlspecialchars($columnaExtra['clave']) . '">' . htmlspecialchars($textoExtra) . '</td>';
+        // 'despues' (Detalle, Fuentes de financiación en "Proyectos"): a la derecha de la descripción.
+        if (!empty($columnaExtra['despues'])) {
+            $celdasDespues .= $celdaExtra;
+        } else {
+            echo $celdaExtra;
+        }
     }
 
     // El flex vive en un <div> interno, nunca en el <td>: un <td> con display:flex deja de ser
@@ -70,6 +83,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
     $tituloEtiqueta = $tieneHijos ? 'Clic para contraer/expandir · doble clic para renombrar (solo Tiempo real)' : 'Doble clic para renombrar (solo Tiempo real)';
     echo '<span class="arbol-etiqueta-texto" title="' . $tituloEtiqueta . '">' . htmlspecialchars($nodo['etiqueta']) . '</span>';
     echo '</div></td>';
+    echo $celdasDespues;
 
     foreach ($columnasAnios as $columna) {
         $valor = $nodo['valores'][$columna['clave']] ?? 0.0;
@@ -231,6 +245,19 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
         min-width: 240px;
     }
 
+    /* "Proyectos": Detalle es texto largo y Fuentes de financiación una lista de nombres. */
+    .arbol-tabla .arbol-celda-extra-detalle,
+    .arbol-tabla .arbol-celda-extra-fuentesFinanciacion {
+        white-space: normal;
+        min-width: 240px;
+    }
+
+    .arbol-tabla .arbol-celda-extra-proyectosPdi {
+        width: 3rem;
+        min-width: 3rem;
+        max-width: 3rem;
+    }
+
     .arbol-tabla td.arbol-celda-vacia {
         text-align: center;
         padding: 1.5rem 0.85rem;
@@ -278,7 +305,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
 
     /* Proyecto(s) PDI solo se muestra en Tiempo real: en Repositorio/Usuario esta pestaña es de
        solo consulta. Código sí se ve en los tres modos (pedido del usuario). */
-    body.arbol-vista-consulta .arbol-celda-extra:not(.arbol-celda-extra-codigo) {
+    body.arbol-vista-consulta .arbol-celda-extra:not(.arbol-celda-extra-codigo):not(.arbol-celda-extra-detalle):not(.arbol-celda-extra-fuentesFinanciacion) {
         display: none;
     }
 
@@ -591,6 +618,8 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
 $clavesColumnasArbol = array_column($columnasAnios, 'clave');
 $mostrarVariacion = $tab === 'programacion' && in_array('vigente', $clavesColumnasArbol, true) && in_array('anterior_total', $clavesColumnasArbol, true);
 $esSuperAdmin = $esSuperAdmin ?? false;
+$columnasExtraAntes = array_filter($columnasExtra, static fn (array $c): bool => empty($c['despues']));
+$columnasExtraDespues = array_filter($columnasExtra, static fn (array $c): bool => !empty($c['despues']));
 $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
 ?>
 <div class="tarjeta arbol-tarjeta">
@@ -628,10 +657,13 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
         <table class="arbol-tabla" id="arbol-tabla">
             <thead>
                 <tr>
-                    <?php foreach ($columnasExtra as $columnaExtra): ?>
+                    <?php foreach ($columnasExtraAntes as $columnaExtra): ?>
                     <th class="arbol-celda-extra arbol-celda-extra-<?= htmlspecialchars($columnaExtra['clave']) ?>"><?= htmlspecialchars($columnaExtra['etiqueta']) ?></th>
                     <?php endforeach; ?>
                     <th class="arbol-celda-etiqueta"><?= htmlspecialchars($etiquetaColumnaArbol ?? 'Línea / Motor / Proyecto') ?></th>
+                    <?php foreach ($columnasExtraDespues as $columnaExtra): ?>
+                    <th class="arbol-celda-extra arbol-celda-extra-<?= htmlspecialchars($columnaExtra['clave']) ?>"><?= htmlspecialchars($columnaExtra['etiqueta']) ?></th>
+                    <?php endforeach; ?>
                     <?php foreach ($columnasAnios as $columna): ?>
                     <th class="<?= $columna['grupo'] ?>" data-clave="<?= htmlspecialchars($columna['clave']) ?>"><?= htmlspecialchars($columna['etiqueta']) ?></th>
                     <?php if ($mostrarVariacion && $columna['clave'] === 'vigente'): ?>
@@ -642,10 +674,13 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
                     <?php endforeach; ?>
                 </tr>
                 <tr class="arbol-fila-totales" id="arbol-fila-totales">
-                    <?php foreach ($columnasExtra as $columnaExtra): ?>
+                    <?php foreach ($columnasExtraAntes as $columnaExtra): ?>
                     <th class="arbol-celda-extra arbol-celda-extra-<?= htmlspecialchars($columnaExtra['clave']) ?>"></th>
                     <?php endforeach; ?>
                     <th class="arbol-celda-etiqueta">Total</th>
+                    <?php foreach ($columnasExtraDespues as $columnaExtra): ?>
+                    <th class="arbol-celda-extra arbol-celda-extra-<?= htmlspecialchars($columnaExtra['clave']) ?>"></th>
+                    <?php endforeach; ?>
                     <?php foreach ($columnasAnios as $columna): ?>
                     <th class="arbol-celda-valor <?= $columna['grupo'] ?>" data-clave="<?= htmlspecialchars($columna['clave']) ?>" data-valor="<?= number_format($totalesGenerales[$columna['clave']], 2, '.', '') ?>">$<?= number_format($totalesGenerales[$columna['clave']], 2, ',', '.') ?></th>
                     <?php if ($mostrarVariacion && $columna['clave'] === 'vigente'): ?>

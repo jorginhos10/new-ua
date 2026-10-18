@@ -89,7 +89,7 @@ class PresupuestoInstitucional
     private function obtenerLineas(string $tipo): array
     {
         $consulta = $this->db->prepare(
-            'SELECT id, codigo, es_total, descripcion, indexacion, orden
+            'SELECT id, codigo, es_total, descripcion, indexacion, codigo_pp, detalle, fuentes_financiacion, orden
              FROM presupuesto_institucional_lineas
              WHERE tipo = :tipo
              ORDER BY orden ASC, codigo ASC'
@@ -97,6 +97,12 @@ class PresupuestoInstitucional
         $consulta->execute(['tipo' => $tipo]);
 
         return $consulta->fetchAll();
+    }
+
+    /** codigo => descripcion de las líneas en vivo de un lado. */
+    public function nombresPorCodigo(string $tipo): array
+    {
+        return array_column($this->obtenerLineas($tipo), 'descripcion', 'codigo');
     }
 
     /**
@@ -199,6 +205,11 @@ class PresupuestoInstitucional
     private function construirArbolDesdeDatos(string $tipo, array $lineas, array $valoresPorLinea, array $proyectosPorLinea, array $anios): array
     {
         $codigosExistentes = array_flip(array_column($lineas, 'codigo'));
+        // "Proyectos": las fuentes de financiación se guardan como códigos de Egresos y el nombre
+        // se resuelve siempre contra Egresos en vivo — si allá se renombra, aquí también cambia.
+        $nombresEgresoPorCodigo = $tipo === 'proyecto'
+            ? $this->nombresPorCodigo('egreso')
+            : [];
 
         $nodosPorCodigo = [];
         foreach ($lineas as $linea) {
@@ -224,6 +235,13 @@ class PresupuestoInstitucional
                 'proyectosPdi' => $proyectosPorLinea[(int) $linea['id']]['nombres'] ?? '',
                 'proyectosPdiNits' => $proyectosPorLinea[(int) $linea['id']]['nits'] ?? '',
                 'indexacion' => $linea['indexacion'] ?? null,
+                'codigoPp' => $linea['codigo_pp'] ?? '',
+                'detalle' => $linea['detalle'] ?? '',
+                'fuentesCodigos' => $linea['fuentes_financiacion'] ?? '',
+                'fuentesFinanciacion' => implode('; ', array_map(
+                    static fn (string $codigoFuente): string => $nombresEgresoPorCodigo[$codigoFuente] ?? $codigoFuente,
+                    array_filter(explode(';', (string) ($linea['fuentes_financiacion'] ?? '')), 'strlen')
+                )),
                 'hijos' => [],
             ];
         }
@@ -637,10 +655,11 @@ class PresupuestoInstitucional
     private function guardarLadoLote(string $tipo, array $lineas, int $usuarioId): void
     {
         $upsertLinea = $this->db->prepare(
-            'INSERT INTO presupuesto_institucional_lineas (tipo, codigo, es_total, descripcion, indexacion, orden, actualizado_por)
-             VALUES (:tipo, :codigo, :es_total, :descripcion, :indexacion, :orden, :actualizado_por)
+            'INSERT INTO presupuesto_institucional_lineas (tipo, codigo, es_total, descripcion, indexacion, codigo_pp, detalle, fuentes_financiacion, orden, actualizado_por)
+             VALUES (:tipo, :codigo, :es_total, :descripcion, :indexacion, :codigo_pp, :detalle, :fuentes_financiacion, :orden, :actualizado_por)
              ON DUPLICATE KEY UPDATE es_total = VALUES(es_total), descripcion = VALUES(descripcion),
-                 indexacion = VALUES(indexacion), orden = VALUES(orden), actualizado_por = VALUES(actualizado_por)'
+                 indexacion = VALUES(indexacion), codigo_pp = VALUES(codigo_pp), detalle = VALUES(detalle),
+                 fuentes_financiacion = VALUES(fuentes_financiacion), orden = VALUES(orden), actualizado_por = VALUES(actualizado_por)'
         );
         $obtenerId = $this->db->prepare(
             'SELECT id FROM presupuesto_institucional_lineas WHERE tipo = :tipo AND codigo = :codigo'
@@ -665,6 +684,9 @@ class PresupuestoInstitucional
                 'es_total' => self::esCodigoTotal($codigo) ? 1 : 0,
                 'descripcion' => $linea['descripcion'],
                 'indexacion' => $linea['indexacion'] ?? null,
+                'codigo_pp' => $linea['codigo_pp'] ?? null,
+                'detalle' => $linea['detalle'] ?? null,
+                'fuentes_financiacion' => $linea['fuentes_financiacion'] ?? null,
                 'orden' => $orden,
                 'actualizado_por' => $usuarioId,
             ]);

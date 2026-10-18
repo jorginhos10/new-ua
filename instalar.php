@@ -439,6 +439,27 @@ $pasos[] = [
 ];
 
 $pasos[] = [
+    'seccion' => 'Análisis > Proyectos de Inversión',
+    'que' => 'Columna presupuesto_institucional_lineas.codigo_pp',
+    'falta' => fn() => !columnaExiste($pdo, 'presupuesto_institucional_lineas', 'codigo_pp'),
+    'sql' => ['ALTER TABLE presupuesto_institucional_lineas ADD COLUMN codigo_pp VARCHAR(50) NULL AFTER indexacion'],
+];
+
+$pasos[] = [
+    'seccion' => 'Análisis > Proyectos de Inversión',
+    'que' => 'Columna presupuesto_institucional_lineas.detalle',
+    'falta' => fn() => !columnaExiste($pdo, 'presupuesto_institucional_lineas', 'detalle'),
+    'sql' => ['ALTER TABLE presupuesto_institucional_lineas ADD COLUMN detalle TEXT NULL AFTER codigo_pp'],
+];
+
+$pasos[] = [
+    'seccion' => 'Análisis > Proyectos de Inversión',
+    'que' => 'Columna presupuesto_institucional_lineas.fuentes_financiacion',
+    'falta' => fn() => !columnaExiste($pdo, 'presupuesto_institucional_lineas', 'fuentes_financiacion'),
+    'sql' => ['ALTER TABLE presupuesto_institucional_lineas ADD COLUMN fuentes_financiacion VARCHAR(500) NULL AFTER detalle'],
+];
+
+$pasos[] = [
     'seccion' => 'Análisis > Análisis de distribución',
     'que' => 'Columna snapshots.activa',
     'falta' => fn() => !columnaExiste($pdo, 'snapshots', 'activa'),
