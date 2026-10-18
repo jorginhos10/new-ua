@@ -148,6 +148,70 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
+// Menú lateral redimensionable: arrastrar su borde derecho cambia el ancho (entre 180 y 480 px, y
+// nunca más de la mitad de la pantalla); se guarda en localStorage ('sidebarAncho') y el <head>
+// de parciales/encabezado.php lo aplica antes de pintar. Doble clic en el borde: ancho por defecto.
+document.addEventListener('DOMContentLoaded', function () {
+    var barraLateral = document.querySelector('.barra-lateral');
+    var manija = document.getElementById('barra-lateral-redimensionador');
+
+    if (!barraLateral || !manija) {
+        return;
+    }
+
+    var ANCHO_MINIMO = 180;
+    var ANCHO_MAXIMO = 480;
+    var raiz = document.documentElement;
+
+    function limitar(ancho) {
+        var maximo = Math.min(ANCHO_MAXIMO, Math.floor(window.innerWidth / 2));
+        return Math.max(ANCHO_MINIMO, Math.min(maximo, Math.round(ancho)));
+    }
+
+    function aplicar(ancho) {
+        raiz.style.setProperty('--ancho-barra-lateral', ancho + 'px');
+    }
+
+    function guardar(ancho) {
+        try { localStorage.setItem('sidebarAncho', String(ancho)); } catch (error) { /* sin localStorage */ }
+    }
+
+    manija.addEventListener('pointerdown', function (evento) {
+        evento.preventDefault();
+        var izquierda = barraLateral.getBoundingClientRect().left;
+        var anchoFinal = barraLateral.getBoundingClientRect().width;
+        barraLateral.classList.add('redimensionando');
+        document.body.classList.add('redimensionando-menu');
+        manija.setPointerCapture(evento.pointerId);
+
+        function mover(eventoMover) {
+            anchoFinal = limitar(eventoMover.clientX - izquierda);
+            aplicar(anchoFinal);
+        }
+
+        function soltar() {
+            barraLateral.classList.remove('redimensionando');
+            document.body.classList.remove('redimensionando-menu');
+            manija.removeEventListener('pointermove', mover);
+            manija.removeEventListener('pointerup', soltar);
+            manija.removeEventListener('pointercancel', soltar);
+            guardar(anchoFinal);
+            // Avisa a las tablas/gráficas que recalculan su ancho al cambiar el tamaño de la ventana.
+            window.dispatchEvent(new Event('resize'));
+        }
+
+        manija.addEventListener('pointermove', mover);
+        manija.addEventListener('pointerup', soltar);
+        manija.addEventListener('pointercancel', soltar);
+    });
+
+    manija.addEventListener('dblclick', function () {
+        raiz.style.removeProperty('--ancho-barra-lateral');
+        try { localStorage.removeItem('sidebarAncho'); } catch (error) { /* sin localStorage */ }
+        window.dispatchEvent(new Event('resize'));
+    });
+});
+
 document.addEventListener('DOMContentLoaded', function () {
     var boton = document.getElementById('menu-usuario-boton');
     var dropdown = document.getElementById('menu-usuario-dropdown');

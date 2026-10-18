@@ -116,6 +116,7 @@ $renderMenuAnalisisSidebar = static function (array $acceso, string $rutaActual)
 // abriendo igual que en el resto de páginas (app.js).
 ?>
 <aside class="barra-lateral<?= $rutaActual === 'analisis' ? ' colapsada' : '' ?>">
+    <div class="barra-lateral-redimensionador" id="barra-lateral-redimensionador" role="separator" aria-orientation="vertical" aria-label="Cambiar el ancho del menú" title="Arrastra para cambiar el ancho del menú (doble clic: restablecer)"></div>
     <a href="index.php?ruta=dashboard" class="marca">S P P I</a>
         <nav class="menu-lateral">
     <?php if ($tipoCuentaActual === 'administrador'): ?>

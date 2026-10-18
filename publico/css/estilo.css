@@ -3081,7 +3081,8 @@ a.barra-progreso:hover {
 }
 
 .barra-lateral {
-    width: 230px;
+    /* Ancho ajustable arrastrando su borde derecho (ver .barra-lateral-redimensionador y app.js). */
+    width: var(--ancho-barra-lateral, 230px);
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -3104,6 +3105,38 @@ a.barra-progreso:hover {
     width: 0;
     padding-left: 0;
     padding-right: 0;
+}
+
+/* Manija del borde derecho del menú lateral: arrastrar = cambiar el ancho (guardado en
+   localStorage); mientras se arrastra se apaga la transición para que siga al cursor. */
+.barra-lateral-redimensionador {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 6px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 2;
+    touch-action: none;
+    transition: background var(--transicion);
+}
+
+.barra-lateral-redimensionador:hover,
+.barra-lateral.redimensionando .barra-lateral-redimensionador {
+    background: rgba(10, 132, 255, 0.55);
+}
+
+.barra-lateral.colapsada .barra-lateral-redimensionador {
+    display: none;
+}
+
+.barra-lateral.redimensionando {
+    transition: none;
+}
+
+body.redimensionando-menu {
+    cursor: col-resize;
+    user-select: none;
 }
 
 .boton-hamburguesa {

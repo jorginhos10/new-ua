@@ -76,6 +76,16 @@ if (!empty($_SESSION['usuario_id'])) {
 <head>
     <meta charset="UTF-8">
     <title><?= htmlspecialchars($tituloPagina) ?></title>
+    <script>
+    // Ancho del menú lateral guardado por el usuario (ver app.js, "Menú lateral redimensionable"):
+    // se aplica aquí, antes de pintar, para que la página no salte al cargar.
+    try {
+        var anchoMenuGuardado = parseInt(localStorage.getItem('sidebarAncho'), 10);
+        if (anchoMenuGuardado >= 180 && anchoMenuGuardado <= 480) {
+            document.documentElement.style.setProperty('--ancho-barra-lateral', anchoMenuGuardado + 'px');
+        }
+    } catch (error) { /* sin localStorage: ancho por defecto */ }
+    </script>
     <link rel="stylesheet" href="publico/css/estilo.css?v=<?= $versionCss ?>">
 </head>
 <body>
