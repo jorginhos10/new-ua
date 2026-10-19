@@ -2218,7 +2218,11 @@ class AnalisisControlador
         $baseGasto = $techoGasto + $totalFijosGasto;
 
         if ($baseGasto > 0) {
-            $egresosGasto = (float) ($totalesPorModulo['gasto_principal'] ?? 0);
+            // La tarjeta muestra Gastos + los egresos tipo "gasto" de Extensión/Postgrado, pero estos se
+            // financian con los ingresos de su módulo, no con este techo: la barra y el % solo miden lo
+            // propio de Gastos (gasto principal + gastos fijos).
+            $porcionAutogestion = $this->totalGastoAutogestionEnGastos($anioId, $vista, $snapshotId, $dependenciaFiltro);
+            $egresosGasto = (float) ($totalesPorModulo['gasto_principal'] ?? 0) - $porcionAutogestion;
             $etiquetaBase = $totalFijosGasto > 0 ? $etiquetaGasto . ' + gastos fijos' : $etiquetaGasto;
             $techos['gasto_principal'] = ['avance' => $egresosGasto, 'techo' => $baseGasto, 'etiqueta' => $etiquetaBase];
             $asignacion['gasto_principal'] = [
@@ -2227,7 +2231,8 @@ class AnalisisControlador
                 // residuos (ej. 100,0000000001 %) que pintaban en rojo un 100,0 exacto.
                 'excedido' => round($egresosGasto, 2) > round($baseGasto, 2),
                 'titulo' => 'Egresos asignados del ' . $etiquetaBase . ': ' . $monedaCorta($egresosGasto) . ' de ' . $monedaCorta($baseGasto)
-                    . ($totalFijosGasto > 0 ? ' (' . $etiquetaGasto . ' ' . $monedaCorta($techoGasto) . ' + gastos fijos ' . $monedaCorta($totalFijosGasto) . ')' : ''),
+                    . ($totalFijosGasto > 0 ? ' (' . $etiquetaGasto . ' ' . $monedaCorta($techoGasto) . ' + gastos fijos ' . $monedaCorta($totalFijosGasto) . ')' : '')
+                    . ($porcionAutogestion > 0 ? '. No incluye ' . $monedaCorta($porcionAutogestion) . ' de gastos de Extensión/Postgrado (van con los ingresos de su módulo)' : ''),
             ];
         }
 
@@ -2356,11 +2361,7 @@ class AnalisisControlador
             // Gastos ya incluye los egresos tipo "gasto" de Extensión/Postgrado, que también suman en
             // sus propias hojas: en el total general se cuentan una sola vez.
             if ($origen === 'gasto_principal' && $anioPresupuestalId > 0) {
-                foreach ($this->obtenerFilasCrudasModulo($origen, $anioPresupuestalId, $vista, $snapshotId, $dependenciaFiltro) as $filaCruda) {
-                    if (isset($filaCruda['__origen'])) {
-                        $totalEgresos -= $this->obtenerValorFilaModulo($origen, $filaCruda);
-                    }
-                }
+                $totalEgresos -= $this->totalGastoAutogestionEnGastos($anioPresupuestalId, $vista, $snapshotId, $dependenciaFiltro);
             }
 
             $filasResumen[] = [$nombreHoja, (string) count($resultado['filas']), $this->formatoMonedaExportar($totalModulo)];
@@ -2513,6 +2514,19 @@ class AnalisisControlador
         }
 
         return $filas;
+    }
+
+    /** Suma de los egresos de Extensión/Postgrado cargados dentro de Gastos (ver obtenerGastosAutogestionTipoGasto()). */
+    private function totalGastoAutogestionEnGastos(int $anioPresupuestalId, string $vista, ?int $snapshotId, ?string $dependenciaFiltro): float
+    {
+        $total = 0.0;
+        foreach ($this->obtenerFilasCrudasModulo('gasto_principal', $anioPresupuestalId, $vista, $snapshotId, $dependenciaFiltro) as $fila) {
+            if (isset($fila['__origen'])) {
+                $total += $this->obtenerValorFilaModulo('gasto_principal', $fila);
+            }
+        }
+
+        return $total;
     }
 
     /**
