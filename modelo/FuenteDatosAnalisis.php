@@ -175,6 +175,8 @@ class FuenteDatosAnalisis
                     && ($g['tipo_automatico'] ?? null) !== 'techo_hijo'
                     && ($g['estado'] ?? null) !== 'borrador'
             ));
+            // Y lo archivado/en Expediente al tomar la versión (como filtrarActivos() en vivo).
+            $gastos = $this->quitarArchivadosDeVersion('gasto_principal', $gastos);
         } else {
             // Datos en vivo (nunca Repositorio — un snapshot congelado ya es su propia verdad
             // histórica): Articulación PDI debe mostrar solo lo activo — ni borrador (todavía no
@@ -196,10 +198,11 @@ class FuenteDatosAnalisis
     {
         if ($this->esRepositorio()) {
             $gastos = array_merge(
-                $this->filtrarPorAnioDeVersion('gastos_extension', $anioPresupuestalId),
-                $this->filtrarPorAnioDeVersion('gastos_postgrado', $anioPresupuestalId),
-                $this->filtrarPorAnioDeVersion('gastos_unisalud', $anioPresupuestalId)
+                $this->quitarArchivadosDeVersion('gasto_extension', $this->filtrarPorAnioDeVersion('gastos_extension', $anioPresupuestalId)),
+                $this->quitarArchivadosDeVersion('gasto_postgrado', $this->filtrarPorAnioDeVersion('gastos_postgrado', $anioPresupuestalId)),
+                $this->quitarArchivadosDeVersion('gasto_unisalud', $this->filtrarPorAnioDeVersion('gastos_unisalud', $anioPresupuestalId))
             );
+            $gastos = array_values(array_filter($gastos, static fn (array $g): bool => ($g['estado'] ?? null) !== 'borrador'));
         } else {
             $gastos = array_merge(
                 $this->filtrarActivos('gasto_extension', $this->modeloGastoExtension->obtenerPorAnio($anioPresupuestalId)),
@@ -233,6 +236,29 @@ class FuenteDatosAnalisis
 
             return !in_array($accion, ['archivada', 'expediente'], true);
         }));
+    }
+
+    /** Cache de la tabla peticiones_archivadas congelada en la versión ("origen:id" => acción). */
+    private ?array $cacheAccionesVersion = null;
+
+    /**
+     * Repositorio: quita lo que estaba "archivada"/"expediente" según la tabla peticiones_archivadas
+     * congelada en la versión (desde que VersionArbol la guarda). Una versión anterior no la tiene:
+     * ahí no hay forma de saberlo y las filas se dejan como están.
+     */
+    private function quitarArchivadosDeVersion(string $origen, array $filas): array
+    {
+        if ($this->cacheAccionesVersion === null) {
+            $this->cacheAccionesVersion = [];
+            foreach ($this->modeloVersion->obtenerTablaDeVersion($this->versionId, 'peticiones_archivadas') as $archivada) {
+                $this->cacheAccionesVersion[($archivada['origen'] ?? '') . ':' . ($archivada['origen_id'] ?? '')] = $archivada['accion'] ?? '';
+            }
+        }
+
+        return array_values(array_filter(
+            $filas,
+            fn (array $fila): bool => !in_array($this->cacheAccionesVersion[$origen . ':' . ($fila['id'] ?? '')] ?? null, ['archivada', 'expediente'], true)
+        ));
     }
 
     private function filtrarPorAnioDeVersion(string $tabla, int $anioPresupuestalId): array

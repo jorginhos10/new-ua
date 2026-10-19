@@ -19,7 +19,7 @@ class VersionArbol
      * suma a su total por proyecto — sin ellas, una versión congelada quedaría con el total del
      * proyecto desactualizado frente a gastos_extension/postgrado/unisalud en ese momento.
      */
-    private const TABLAS_ARBOL = ['gastos', 'gastos_extension', 'gastos_postgrado', 'gastos_unisalud', 'lineas', 'motores', 'proyectos', 'anios_presupuestales'];
+    private const TABLAS_ARBOL = ['gastos', 'gastos_extension', 'gastos_postgrado', 'gastos_unisalud', 'lineas', 'motores', 'proyectos', 'anios_presupuestales', 'peticiones_archivadas'];
 
     public const PESTANAS_VALIDAS = ['articulacion_pdi', 'programacion_presupuestal'];
 

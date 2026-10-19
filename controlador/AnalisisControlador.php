@@ -1128,8 +1128,10 @@ class AnalisisControlador
             }
         } else {
             $fuenteDatos = new FuenteDatosAnalisis($versionIdActual, $dependenciaFiltroActual);
-            // Repositorio sigue la misma lógica de Tiempo real (solo gasto principal + PP); Usuario no.
-            [$arbolDatos, $totalesGenerales, $infoAjustePdi] = $this->construirArbolPdi($fuenteDatos, $columnasAnios, $clavesColumnas, $sinDatosRepositorio, $vista === 'usuario', $vista !== 'usuario');
+            // Las tres vistas siguen la lógica de Tiempo real: solo gasto principal (sin autogestión) y
+            // sin borradores, archivados ni Expediente. Usuario, además, sin el aporte de PP (no se puede
+            // atribuir a una dependencia).
+            [$arbolDatos, $totalesGenerales, $infoAjustePdi] = $this->construirArbolPdi($fuenteDatos, $columnasAnios, $clavesColumnas, $sinDatosRepositorio, $vista === 'usuario', true);
         }
 
         $error = $_SESSION['analisis_flash_error'] ?? '';
@@ -2477,6 +2479,9 @@ class AnalisisControlador
                 $filas,
                 static fn (array $fila): bool => (int) ($fila['anio_presupuestal_id'] ?? 0) === $anioPresupuestalId
             ));
+            // Mismo criterio que Tiempo real (filtrarSoloActivos()), pero con lo congelado en el snapshot:
+            // sin borradores ni lo que en ese momento estaba archivado o en Expediente.
+            $filas = $this->filtrarSoloActivosDeSnapshot($origen, $snapshotId, $filas);
 
             if ($origen === 'gasto_principal') {
                 $filas = array_values(array_filter(
@@ -2577,6 +2582,35 @@ class AnalisisControlador
         return array_values(array_filter(
             $filas,
             static fn (array $fila): bool => !isset($idsExcluidos[(int) $fila['id']])
+        ));
+    }
+
+    /** Cache por snapshot de sus acciones de Peticiones ("origen:id" => acción). */
+    private array $cacheAccionesSnapshot = [];
+
+    /**
+     * filtrarSoloActivos() para filas de un snapshot (Repositorio): sin borradores ni lo que estaba
+     * "archivada"/"expediente" según la tabla peticiones_archivadas congelada en ESE snapshot.
+     */
+    private function filtrarSoloActivosDeSnapshot(string $origen, int $snapshotId, array $filas): array
+    {
+        $filas = array_values(array_filter(
+            $filas,
+            static fn (array $fila): bool => ($fila['estado'] ?? null) !== 'borrador'
+        ));
+
+        if (!isset($this->cacheAccionesSnapshot[$snapshotId])) {
+            $acciones = [];
+            foreach ((new Snapshot())->obtenerTablaDeSnapshot($snapshotId, 'peticiones_archivadas') as $archivada) {
+                $acciones[($archivada['origen'] ?? '') . ':' . ($archivada['origen_id'] ?? '')] = $archivada['accion'] ?? '';
+            }
+            $this->cacheAccionesSnapshot[$snapshotId] = $acciones;
+        }
+        $acciones = $this->cacheAccionesSnapshot[$snapshotId];
+
+        return array_values(array_filter(
+            $filas,
+            static fn (array $fila): bool => !in_array($acciones[$origen . ':' . ($fila['id'] ?? '')] ?? null, ['archivada', 'expediente'], true)
         ));
     }
 
