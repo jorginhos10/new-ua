@@ -59,7 +59,8 @@ class CategoriaGasto
     {
         $usosAutogestion = '(SELECT COUNT(*) FROM gastos_extension ge WHERE ge.categoria_gasto_id = c.id)
                     + (SELECT COUNT(*) FROM gastos_postgrado gp WHERE gp.categoria_gasto_id = c.id)
-                    + (SELECT COUNT(*) FROM gastos_unisalud gu WHERE gu.categoria_gasto_id = c.id)';
+                    + (SELECT COUNT(*) FROM gastos_unisalud gu WHERE gu.categoria_gasto_id = c.id)
+                    + (SELECT COUNT(*) FROM gastos_fijos gf WHERE gf.categoria_gasto_id = c.id)';
         $consulta = static fn (string $extra): string => 'SELECT c.id, c.macro, c.subcategoria, c.tokens, c.orden, c.estado,
                     (SELECT COUNT(*) FROM gastos g WHERE g.categoria_gasto_id = c.id)' . $extra . '
                     + (SELECT COUNT(*) FROM rubro_categoria_gasto r WHERE r.categoria_id = c.id) AS usos
@@ -164,6 +165,7 @@ class CategoriaGasto
         'gastos_extension' => 'Extensión',
         'gastos_postgrado' => 'Postgrado',
         'gastos_unisalud' => 'Unisalud',
+        'gastos_fijos' => 'Gastos fijos',
     ];
 
     /**
@@ -180,9 +182,13 @@ class CategoriaGasto
         $gastos = [];
 
         foreach (array_keys(self::TABLAS_CLASIFICABLES) as $tabla) {
+            // gastos_fijos no tiene rubro_texto ni tipo_automatico.
+            $columnasTexto = $tabla === 'gastos_fijos'
+                ? 'NULL AS rubro_texto, NULL AS tipo_automatico'
+                : 'g.rubro_texto, g.tipo_automatico';
             try {
                 $filas = $this->db->query(
-                    "SELECT g.id, g.actividad, g.insumo, g.rubro_texto, g.tipo_automatico, g.categoria_gasto_id, g.categoria_origen,
+                    "SELECT g.id, g.actividad, g.insumo, $columnasTexto, g.categoria_gasto_id, g.categoria_origen,
                             r.codigo AS rubro_codigo
                      FROM $tabla g
                      LEFT JOIN rubros r ON r.id = g.rubro_id

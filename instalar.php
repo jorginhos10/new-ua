@@ -663,6 +663,34 @@ $pasos[] = [
     ],
 ];
 
+// Reglas para rubros que no tenían ninguna (detectados al clasificar Extensión/Postgrado y gastos fijos).
+// Los rubros 2.05 equivalentes las heredan (ver reglasDelRubro() en publico/js/categorizador-gastos.js).
+// Son reglas normales: se pueden editar o borrar luego en Configuraciones > Listas > Rubros por categoría.
+$pasos[] = [
+    'seccion' => 'Gastos > Categoría de gasto',
+    'que' => 'Reglas de rubro faltantes (jurídicos, inmobiliarios, carga, construcción, insumos, minerales, alimentos, pensiones, transferencias IES)',
+    'falta' => function () use ($pdo): bool {
+        if (!tablaExiste($pdo, 'rubro_categoria_gasto')) {
+            return false;
+        }
+        $consulta = $pdo->query("SELECT COUNT(*) FROM rubro_categoria_gasto WHERE prefijo_codigo = '2.03.04'");
+
+        return (int) $consulta->fetchColumn() === 0;
+    },
+    'sql' => [<<<'SQL'
+INSERT IGNORE INTO rubro_categoria_gasto (prefijo_codigo, accion, categoria_id, es_defecto, peso) VALUES
+('2.02.02.02.08.02', 'categoria', 'FIS-05', 1, 1.00),
+('2.02.02.02.07.02', 'categoria', 'CMP-08', 1, 1.00),
+('2.02.02.02.06.05', 'categoria', 'ADM-06', 1, 1.00),
+('2.02.02.02.05.04', 'categoria', 'CMP-05', 1, 1.00),
+('2.02.02.02.08.08', 'categoria', 'DOC-03', 1, 1.00),
+('2.02.02.01.01.04', 'categoria', 'DOC-02', 1, 1.00),
+('2.02.02.01.02.03', 'categoria', 'EST-04', 1, 1.00),
+('2.03.04', 'categoria', 'PER-01', 1, 1.00),
+('2.03.03', 'categoria', 'FIS-03', 1, 1.00)
+SQL],
+];
+
 // --- Instalar -----------------------------------------------------------------------------------
 
 $resultados = null;

@@ -677,8 +677,9 @@ class AnalisisControlador
                 $modelo->quitarValor($anio, $proyectoId);
             } else {
                 $valor = $_POST['valor'] ?? '';
-                if (!is_numeric($valor) || (float) $valor < 0) {
-                    $responder(400, 'El valor debe ser un número mayor o igual a 0.');
+                // Admite negativos (p. ej. para restar un ajuste a un proyecto).
+                if (!is_numeric($valor)) {
+                    $responder(400, 'El valor debe ser un número.');
 
                     return;
                 }

@@ -15,53 +15,92 @@ foreach ($proyectosAjustePdi as $proyectoAjuste) {
     }
 }
 ?>
+<style>
+    .pdi-ajustes-caja { max-width: 680px; }
+    .pdi-ajustes-resumen { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; margin: 1.5rem 0 1.25rem; }
+    .pdi-ajustes-dato { border: 1px solid var(--color-borde); border-radius: var(--radio-chico); padding: 0.55rem 0.7rem; background: var(--color-fondo); }
+    .pdi-ajustes-dato small { display: block; font-size: 0.72rem; color: var(--color-texto-tenue); text-transform: uppercase; letter-spacing: 0.03em; }
+    .pdi-ajustes-dato strong { display: block; margin-top: 0.2rem; font-size: 1rem; font-variant-numeric: tabular-nums; }
+    .pdi-ajustes-dato.cuadra strong { color: #1e6b3c; }
+    .pdi-ajustes-dato.descuadra strong { color: #a83232; }
+    .pdi-ajustes-dato em { display: block; font-style: normal; font-size: 0.72rem; color: #a83232; margin-top: 0.1rem; }
+    .pdi-ajustes-seccion { border-top: 1px solid var(--color-borde); padding-top: 1rem; margin-top: 1rem; }
+    .pdi-ajustes-seccion > label { display: block; font-weight: 600; font-size: 0.88rem; margin-bottom: 0.4rem; }
+    .pdi-ajustes-fila { display: flex; gap: 0.5rem; align-items: stretch; }
+    .pdi-ajustes-fila .campo { flex: 1; min-width: 0; margin: 0; }
+    .pdi-ajustes-fila .campo.pdi-ajustes-monto { flex: 0 0 11rem; }
+    .pdi-ajustes-fila .boton-agregar { flex-shrink: 0; white-space: nowrap; }
+    .pdi-ajustes-fijados { margin-top: 0.6rem; display: flex; flex-direction: column; gap: 0.35rem; }
+    .pdi-ajustes-fijado { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.82rem; padding: 0.35rem 0.5rem; border-radius: var(--radio-chico); background: var(--color-fondo); }
+    @media (max-width: 600px) { .pdi-ajustes-resumen { grid-template-columns: 1fr; } .pdi-ajustes-fila { flex-wrap: wrap; } .pdi-ajustes-fila .campo.pdi-ajustes-monto { flex: 1 1 100%; } }
+</style>
+
 <div id="pdi-ajustes-modal" class="modal-fondo">
-    <div class="modal-caja" style="max-width: 640px;">
+    <div class="modal-caja pdi-ajustes-caja">
         <div class="modal-cabecera">
             <h2>Ajustes de Articulación PDI</h2>
             <button type="button" class="modal-cerrar" id="pdi-ajustes-cerrar" aria-label="Cerrar">&times;</button>
         </div>
 
-        <p style="margin: 0.75rem 0; font-size: 0.9rem;" title="El total de este árbol debe cuadrar con el total de Egresos de Programación presupuestal del año vigente. Hasta $50 de diferencia se carga sola al proyecto por defecto; si es mayor, elige a quién sumarle o restarle la diferencia.">
-            <strong>PP Egresos <?= (int) $infoAjustePdi['anio'] ?>:</strong> <?= $pesosPdi((float) $infoAjustePdi['pp']) ?> ·
-            <strong>Suma de proyectos:</strong> <?= $pesosPdi((float) $infoAjustePdi['suma']) ?> ·
-            <strong style="color: <?= $infoAjustePdi['diferencia'] == 0.0 ? '#1e6b3c' : '#a83232' ?>;">Diferencia: <?= $pesosPdi((float) $infoAjustePdi['diferencia']) ?></strong>
-            <?php if ($infoAjustePdi['pendiente']): ?>
-            <span style="color: #a83232;" title="La diferencia supera $50 y no se ha asignado: el total del árbol no cuadra con PP.">· sin asignar</span>
-            <?php endif; ?>
-        </p>
+        <div class="pdi-ajustes-resumen" title="El total de este árbol debe cuadrar con el total de Egresos de Programación presupuestal del año vigente. Hasta $50 de diferencia se carga sola al proyecto por defecto; si es mayor, elige a quién sumarle o restarle la diferencia.">
+            <div class="pdi-ajustes-dato">
+                <small>PP Egresos <?= (int) $infoAjustePdi['anio'] ?></small>
+                <strong><?= $pesosPdi((float) $infoAjustePdi['pp']) ?></strong>
+            </div>
+            <div class="pdi-ajustes-dato">
+                <small>Suma de proyectos</small>
+                <strong><?= $pesosPdi((float) $infoAjustePdi['suma']) ?></strong>
+            </div>
+            <div class="pdi-ajustes-dato <?= $infoAjustePdi['diferencia'] == 0.0 ? 'cuadra' : 'descuadra' ?>">
+                <small>Diferencia</small>
+                <strong><?= $pesosPdi((float) $infoAjustePdi['diferencia']) ?></strong>
+                <?php if ($infoAjustePdi['pendiente']): ?>
+                <em title="La diferencia supera $50 y no se ha asignado: el total del árbol no cuadra con PP.">Sin asignar</em>
+                <?php endif; ?>
+            </div>
+        </div>
 
-        <div style="border-top: 1px solid var(--color-borde); padding-top: 0.75rem;">
-            <label for="pdi-ajustes-absorbe" style="font-weight: 600; font-size: 0.88rem;" title="La diferencia contra PP se suma (o se resta si es negativa) al valor de este proyecto.">Asignar la diferencia a</label>
-            <div style="display: flex; gap: 0.5rem; margin-top: 0.35rem;">
-                <select id="pdi-ajustes-absorbe" style="flex: 1; min-width: 0;">
-                    <option value="">Por defecto<?= $etiquetaPorDefectoPdi !== '' ? ' (' . htmlspecialchars($etiquetaPorDefectoPdi) . ')' : '' ?></option>
-                    <?php foreach ($proyectosAjustePdi as $proyectoAjuste): ?>
-                    <option value="<?= (int) $proyectoAjuste['id'] ?>"<?= (int) $proyectoAjuste['id'] === (int) $infoAjustePdi['absorbeElegido'] ? ' selected' : '' ?>><?= htmlspecialchars($proyectoAjuste['etiqueta']) ?></option>
-                    <?php endforeach; ?>
-                </select>
+        <div class="pdi-ajustes-seccion">
+            <label for="pdi-ajustes-absorbe" title="La diferencia contra PP se suma (o se resta si es negativa) al valor de este proyecto.">Asignar la diferencia a</label>
+            <div class="pdi-ajustes-fila">
+                <div class="campo">
+                    <select id="pdi-ajustes-absorbe">
+                        <option value="">Por defecto<?= $etiquetaPorDefectoPdi !== '' ? ' (' . htmlspecialchars($etiquetaPorDefectoPdi) . ')' : '' ?></option>
+                        <?php foreach ($proyectosAjustePdi as $proyectoAjuste): ?>
+                        <option value="<?= (int) $proyectoAjuste['id'] ?>"<?= (int) $proyectoAjuste['id'] === (int) $infoAjustePdi['absorbeElegido'] ? ' selected' : '' ?>><?= htmlspecialchars($proyectoAjuste['etiqueta']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
                 <button type="button" class="boton-agregar" id="pdi-ajustes-guardar-absorbe">Guardar</button>
             </div>
         </div>
 
-        <div style="border-top: 1px solid var(--color-borde); padding-top: 0.75rem; margin-top: 1rem;">
-            <label for="pdi-ajustes-valor-proyecto" style="font-weight: 600; font-size: 0.88rem;" title="Reemplaza el valor calculado de un proyecto. La diferencia que esto genere contra PP la absorbe el proyecto elegido arriba.">Valor a mostrar de un proyecto</label>
-            <div style="display: flex; gap: 0.5rem; margin-top: 0.35rem;">
-                <select id="pdi-ajustes-valor-proyecto" style="flex: 1; min-width: 0;">
-                    <?php foreach ($proyectosAjustePdi as $proyectoAjuste): ?>
-                    <option value="<?= (int) $proyectoAjuste['id'] ?>"><?= htmlspecialchars($proyectoAjuste['etiqueta']) ?> — calculado <?= $pesosPdi((float) $proyectoAjuste['calculado']) ?></option>
-                    <?php endforeach; ?>
-                </select>
-                <input type="number" id="pdi-ajustes-valor-monto" min="0" step="1" placeholder="Valor" style="width: 9rem;">
+        <div class="pdi-ajustes-seccion">
+            <label for="pdi-ajustes-valor-proyecto" title="Reemplaza el valor calculado de un proyecto (admite negativos). La diferencia que esto genere contra PP la absorbe el proyecto elegido arriba.">Valor a mostrar de un proyecto</label>
+            <div class="pdi-ajustes-fila">
+                <div class="campo">
+                    <select id="pdi-ajustes-valor-proyecto">
+                        <?php foreach ($proyectosAjustePdi as $proyectoAjuste): ?>
+                        <option value="<?= (int) $proyectoAjuste['id'] ?>"><?= htmlspecialchars($proyectoAjuste['etiqueta']) ?> — calculado <?= $pesosPdi((float) $proyectoAjuste['calculado']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="campo pdi-ajustes-monto">
+                    <input type="number" id="pdi-ajustes-valor-monto" step="1" placeholder="Valor (admite negativos)">
+                </div>
                 <button type="button" class="boton-agregar" id="pdi-ajustes-guardar-valor">Fijar</button>
             </div>
-            <?php foreach ($proyectosAjustePdi as $proyectoAjuste): ?>
-            <?php if ($proyectoAjuste['fijado'] === null) { continue; } ?>
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.82rem; margin-top: 0.4rem;">
-                <span><?= htmlspecialchars($proyectoAjuste['etiqueta']) ?> → <strong><?= $pesosPdi((float) $proyectoAjuste['fijado']) ?></strong> <span class="texto-atenuado">(calculado <?= $pesosPdi((float) $proyectoAjuste['calculado']) ?>)</span></span>
-                <button type="button" class="boton-secundario pdi-ajustes-quitar-valor" data-proyecto-id="<?= (int) $proyectoAjuste['id'] ?>">Quitar</button>
+            <?php $hayFijadosPdi = array_filter($proyectosAjustePdi, static fn (array $p): bool => $p['fijado'] !== null); ?>
+            <?php if (!empty($hayFijadosPdi)): ?>
+            <div class="pdi-ajustes-fijados">
+                <?php foreach ($hayFijadosPdi as $proyectoAjuste): ?>
+                <div class="pdi-ajustes-fijado">
+                    <span><?= htmlspecialchars($proyectoAjuste['etiqueta']) ?> → <strong><?= $pesosPdi((float) $proyectoAjuste['fijado']) ?></strong> <span class="texto-atenuado">(calculado <?= $pesosPdi((float) $proyectoAjuste['calculado']) ?>)</span></span>
+                    <button type="button" class="boton-secundario pdi-ajustes-quitar-valor" data-proyecto-id="<?= (int) $proyectoAjuste['id'] ?>">Quitar</button>
+                </div>
+                <?php endforeach; ?>
             </div>
-            <?php endforeach; ?>
+            <?php endif; ?>
         </div>
 
         <div class="modal-pie" style="gap: 0.5rem;">
@@ -105,8 +144,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.getElementById('pdi-ajustes-guardar-valor').addEventListener('click', function () {
         var monto = document.getElementById('pdi-ajustes-valor-monto').value;
-        if (monto === '' || isNaN(Number(monto)) || Number(monto) < 0) {
-            window.alert('Escribe un valor numérico mayor o igual a 0.');
+        if (monto === '' || isNaN(Number(monto))) {
+            window.alert('Escribe un valor numérico (puede ser negativo).');
             return;
         }
         guardar({ tipo: 'valor', proyecto_id: document.getElementById('pdi-ajustes-valor-proyecto').value, valor: monto });

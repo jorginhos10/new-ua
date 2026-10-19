@@ -88,7 +88,7 @@
         }
         ?>
 
-        <?php if ($moduloTieneItems): ?>
+        <?php // Tope en los tres módulos (también Unidad de Salud, que no tiene ítems): es el denominador de Techos y Metas. ?>
         <div class="campo-ancho">
             <label for="campo-tope-modulo">Tope</label>
             <form method="POST" action="index.php?ruta=autogestion&tab=<?= htmlspecialchars($moduloActivo) ?>" class="form-necesidad">
@@ -109,7 +109,6 @@
             </form>
             <p class="texto-atenuado">Un solo tope para todo <?= htmlspecialchars($modulos[$moduloActivo]) ?> — es el denominador de la tarjeta correspondiente en Inicio (suma de ingresos de este módulo, sin archivados, contra este número).</p>
         </div>
-        <?php endif; ?>
 
         <?php if (!$moduloTieneItems): ?>
         <div class="campo-ancho">

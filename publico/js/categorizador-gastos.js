@@ -52,8 +52,33 @@
             };
         });
 
-        // La regla de prefijo más largo que coincida con el código del rubro gana (por segmentos).
+        // Rubros 2.05 (gastos de comercialización, autogestión) = los mismos rubros de 2.02 (adquisición de
+        // bienes y servicios): 2.05.X.Y.A.B equivale a 2.02.02.Y.A.B y, para maquinaria y equipo, a
+        // 2.02.01.Y.A.B. Solo se usa si el código 2.05 no tiene regla propia (una regla de 2.05 siempre gana).
         function reglasDelRubro(codigo) {
+            var propias = reglasDelCodigo(codigo);
+            if (propias.length > 0 || !codigo || codigo.indexOf('2.05.') !== 0) {
+                return propias;
+            }
+
+            var segmentos = codigo.split('.');
+            if (segmentos.length < 4) {
+                return propias;
+            }
+            var cola = segmentos.slice(3).join('.');
+            var equivalentes = ['2.02.02.' + cola, '2.02.01.' + cola];
+            for (var i = 0; i < equivalentes.length; i++) {
+                var reglasEquivalente = reglasDelCodigo(equivalentes[i]);
+                if (reglasEquivalente.length > 0) {
+                    return reglasEquivalente;
+                }
+            }
+
+            return propias;
+        }
+
+        // La regla de prefijo más largo que coincida con el código del rubro gana (por segmentos).
+        function reglasDelCodigo(codigo) {
             if (!codigo) {
                 return [];
             }
