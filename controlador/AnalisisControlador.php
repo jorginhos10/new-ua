@@ -314,9 +314,24 @@ class AnalisisControlador
     }
 
     /**
-     * Botón de cámara de la franja superior (solo SA, solo Tiempo real): congela la pestaña que se
-     * está viendo con el mismo mecanismo de versiones que ya usa ?ruta=repositorios para ella —
-     * así aparece luego en el selector de la vista Repositorio de esa misma pestaña.
+     * Páginas que se congelan con "Todas las páginas" del modal de snapshot: [pestaña, lado]. El
+     * Comparativo vigencia inicial usa las mismas versiones de PP, así que no tiene snapshot propio.
+     */
+    private const PAGINAS_SNAPSHOT = [
+        ['presentacion', 'ingresos'],
+        ['programacion', 'ingresos'],
+        ['programacion', 'egresos'],
+        ['proyectos', 'ingresos'],
+        ['pdi', 'ingresos'],
+        ['techos', 'ingresos'],
+        ['analisis', 'ingresos'],
+    ];
+
+    /**
+     * Botón de cámara de la franja superior (solo SA, solo Tiempo real): el modal pregunta si se
+     * congela solo la página actual ('alcance' = 'pagina') o todas ('todas'), con el mismo mecanismo de
+     * versiones de cada pestaña — así aparece luego en su selector de Repositorio. Cada snapshot creado
+     * queda como el ACTIVO de su pestaña (el que se ve por defecto en Repositorio).
      */
     private function crearSnapshotPestana(string $tab, string $lado): array
     {
@@ -324,32 +339,69 @@ class AnalisisControlador
             return ['Solo el SA puede crear snapshots.', ''];
         }
 
-        $etiqueta = self::etiquetaSnapshotPestana($tab, $lado);
-        if ($etiqueta === null) {
+        $todas = ($_POST['alcance'] ?? '') === 'todas';
+        $paginas = $todas ? self::PAGINAS_SNAPSHOT : [[$tab, $lado]];
+        if (!$todas && self::etiquetaSnapshotPestana($tab, $lado) === null) {
             return ['Esta pestaña no tiene snapshots.', ''];
         }
 
-        $nombre = trim((string) ($_POST['nombre'] ?? ''));
-        if ($nombre === '') {
-            $nombre = $etiqueta . ' ' . date('Y-m-d H:i:s');
-        }
-        $nombre = mb_substr($nombre, 0, 150);
+        $nombreBase = mb_substr(trim((string) ($_POST['nombre'] ?? '')), 0, 120);
         $usuarioId = (int) $_SESSION['usuario_id'];
+        $creados = [];
+        $errores = [];
 
-        try {
-            match ($tab) {
-                'presentacion' => (new VersionDocumentos())->crear($nombre, $usuarioId),
-                'programacion' => (new PresupuestoInstitucional())->crearVersion($lado === 'egresos' ? 'egreso' : 'ingreso', $nombre, $usuarioId),
-                'proyectos' => (new PresupuestoInstitucional())->crearVersion('proyecto', $nombre, $usuarioId),
-                'pdi' => (new VersionArbol())->crear('articulacion_pdi', $nombre, $usuarioId),
-                'techos' => (new VersionTechos())->crear($nombre, $usuarioId),
-                'analisis' => (new Snapshot())->crear($nombre, $usuarioId),
-            };
-        } catch (Throwable $excepcion) {
-            return ['No se pudo crear el snapshot: ' . $excepcion->getMessage(), ''];
+        foreach ($paginas as [$tabPagina, $ladoPagina]) {
+            $etiqueta = (string) self::etiquetaSnapshotPestana($tabPagina, $ladoPagina);
+            $nombre = $nombreBase === '' ? $etiqueta . ' ' . date('Y-m-d H:i:s') : ($todas ? $nombreBase . ' — ' . $etiqueta : $nombreBase);
+            $nombre = mb_substr($nombre, 0, 150);
+
+            try {
+                $this->crearYActivarSnapshot($tabPagina, $ladoPagina, $nombre, $usuarioId);
+                $creados[] = $etiqueta;
+            } catch (Throwable $excepcion) {
+                $errores[] = $etiqueta . ': ' . $excepcion->getMessage();
+            }
         }
 
-        return ['', 'Snapshot "' . $nombre . '" de ' . $etiqueta . ' creado. Ya se puede elegir en la vista Repositorio.'];
+        if (empty($creados)) {
+            return ['No se pudo crear el snapshot. ' . implode(' · ', $errores), ''];
+        }
+
+        $exito = count($creados) === 1
+            ? 'Snapshot de ' . $creados[0] . ' creado y marcado como activo en Repositorio.'
+            : count($creados) . ' snapshots creados y marcados como activos en Repositorio (' . implode(', ', $creados) . ').';
+
+        return empty($errores) ? ['', $exito] : [$exito . ' Pero algunos no se pudieron crear: ' . implode(' · ', $errores), ''];
+    }
+
+    /** Crea la versión de una página y la deja como la activa de esa pestaña (lado, en PP). */
+    private function crearYActivarSnapshot(string $tab, string $lado, string $nombre, int $usuarioId): void
+    {
+        $tipoPresupuesto = $lado === 'egresos' ? 'egreso' : 'ingreso';
+
+        match ($tab) {
+            'presentacion' => (function () use ($nombre, $usuarioId): void {
+                $modelo = new VersionDocumentos();
+                $modelo->marcarActiva($modelo->crear($nombre, $usuarioId));
+            })(),
+            'programacion', 'proyectos' => (function () use ($tab, $tipoPresupuesto, $nombre, $usuarioId): void {
+                $modelo = new PresupuestoInstitucional();
+                $tipo = $tab === 'proyectos' ? 'proyecto' : $tipoPresupuesto;
+                $modelo->marcarVersionActiva($modelo->crearVersion($tipo, $nombre, $usuarioId), $tipo);
+            })(),
+            'pdi' => (function () use ($nombre, $usuarioId): void {
+                $modelo = new VersionArbol();
+                $modelo->marcarActiva($modelo->crear('articulacion_pdi', $nombre, $usuarioId), 'articulacion_pdi');
+            })(),
+            'techos' => (function () use ($nombre, $usuarioId): void {
+                $modelo = new VersionTechos();
+                $modelo->marcarActiva($modelo->crear($nombre, $usuarioId));
+            })(),
+            'analisis' => (function () use ($nombre, $usuarioId): void {
+                $modelo = new Snapshot();
+                $modelo->marcarActiva($modelo->crear($nombre, $usuarioId));
+            })(),
+        };
     }
 
     /**
@@ -2848,17 +2900,14 @@ class AnalisisControlador
         $anioPorClave = $this->resolverAniosPorClave($anioVigenteNumero);
         $anios = array_values(array_unique(array_values($anioPorClave)));
 
-        $encabezados = ['Código', 'Descripción', 'Proyecto(s) PDI', (string) $anioVigenteNumero, 'Año anterior (Final)', 'Año anterior (a corte)'];
+        // "Año anterior (Inicial)" va junto a Final y a corte. La importación ubica esa columna por su
+        // encabezado (ver ubicarColumnaInicialPlantilla()), así que las plantillas descargadas antes
+        // (sin ella, o con ella al final) se siguen leyendo bien.
+        $encabezados = ['Código', 'Descripción', 'Proyecto(s) PDI', (string) $anioVigenteNumero, 'Año anterior (Final)', 'Año anterior (a corte)', 'Año anterior (Inicial)'];
         for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
             $encabezados[] = (string) ($anioVigenteNumero - $desplazamiento);
         }
-        // Al final, nunca en medio: así un archivo descargado antes de agregar esta columna sigue
-        // leyéndose bien (le falta la última, nada más) — y el mismo orden sirve para el botón
-        // "Exportar a Excel" (ver exportarArbol()), que la agrega también al final.
         $encabezados[] = 'Indexación';
-        // También al final (después de Indexación): 2026 inicial, para el Comparativo vigencia inicial.
-        // Una plantilla descargada antes no la trae y se sigue importando igual (sin inicial).
-        $encabezados[] = 'Año anterior (Inicial)';
 
         $modeloPresupuesto = new PresupuestoInstitucional();
         $hojas = [];
@@ -2875,12 +2924,12 @@ class AnalisisControlador
                     $this->formatoNumeroExportar($nodo['valores'][$anioPorClave['vigente']] ?? 0.0),
                     $this->formatoNumeroExportar($nodo['valores'][$anioPorClave['anterior_total']] ?? 0.0),
                     $nodo['valorCorte'] !== null ? $this->formatoNumeroExportar($nodo['valorCorte']) : '',
+                    $nodo['valorInicial'] !== null ? $this->formatoNumeroExportar($nodo['valorInicial']) : '',
                 ];
                 for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
                     $fila[] = $this->formatoNumeroExportar($nodo['valores'][$anioVigenteNumero - $desplazamiento] ?? 0.0);
                 }
                 $fila[] = $nodo['esTotal'] ? '' : ($nodo['indexacion'] ?? '');
-                $fila[] = $nodo['valorInicial'] !== null ? $this->formatoNumeroExportar($nodo['valorInicial']) : '';
                 $filas[] = $fila;
             }
 
@@ -2943,16 +2992,16 @@ class AnalisisControlador
         }
 
         // Quita la fila de encabezado (fila 1) de cada hoja.
-        array_shift($filasEgresos);
-        array_shift($filasIngresos);
+        $encabezadoEgresos = array_shift($filasEgresos) ?? [];
+        $encabezadoIngresos = array_shift($filasIngresos) ?? [];
 
         $aniosActivos = (new AnioPresupuestal())->obtenerActivos();
         $anioVigenteRegistro = $aniosActivos[0] ?? null;
         $anioVigenteNumero = $anioVigenteRegistro !== null ? (int) $anioVigenteRegistro['anio'] : (int) date('Y');
 
         $errores = [];
-        $lineasEgreso = $this->validarFilasPresupuesto('Egresos', $filasEgresos, true, $anioVigenteNumero, $errores);
-        $lineasIngreso = $this->validarFilasPresupuesto('Ingresos', $filasIngresos, false, $anioVigenteNumero, $errores);
+        $lineasEgreso = $this->validarFilasPresupuesto('Egresos', $filasEgresos, true, $anioVigenteNumero, $errores, $encabezadoEgresos);
+        $lineasIngreso = $this->validarFilasPresupuesto('Ingresos', $filasIngresos, false, $anioVigenteNumero, $errores, $encabezadoIngresos);
 
         if (!empty($errores)) {
             return "No se importó nada porque se encontraron errores:\n" . implode("\n", $errores);
@@ -2977,7 +3026,22 @@ class AnalisisControlador
      * compartido entre las 2 hojas) en vez de devolverlos, para poder acumular los de ambas antes
      * de decidir si se guarda algo.
      */
-    private function validarFilasPresupuesto(string $nombreHoja, array $filas, bool $permitirProyectos, int $anioVigenteNumero, array &$errores): array
+    /**
+     * Índice de la columna "Año anterior (Inicial)" en el encabezado de una hoja de la plantilla de PP,
+     * o null si la plantilla no la trae (descargada antes de existir esa columna).
+     */
+    private function ubicarColumnaInicialPlantilla(array $encabezado): ?int
+    {
+        foreach ($encabezado as $indice => $titulo) {
+            if (trim((string) $titulo) === 'Año anterior (Inicial)') {
+                return (int) $indice;
+            }
+        }
+
+        return null;
+    }
+
+    private function validarFilasPresupuesto(string $nombreHoja, array $filas, bool $permitirProyectos, int $anioVigenteNumero, array &$errores, array $encabezado = []): array
     {
         $anioAnteriorNumero = $anioVigenteNumero - 1;
         $modeloProyecto = new Proyecto();
@@ -2988,15 +3052,19 @@ class AnalisisControlador
         // índice 6, no en el 7 (antes de quitar "Fecha de corte" había 7 columnas fijas, pero el
         // desplazamiento seguía sumando como si hubiera 8 — un año histórico se leía siempre una
         // columna corrida hacia la derecha de la que en verdad le correspondía).
+        // "Año anterior (Inicial)" se ubica por su encabezado: en la plantilla actual va junto a
+        // Final y a corte (índice 6) y corre una posición los históricos y la Indexación; en una
+        // plantilla anterior no está (o está al final, después de Indexación) y no corre nada.
+        // Vacía = no cambia el inicial ya guardado.
+        $indiceInicial = $this->ubicarColumnaInicialPlantilla($encabezado);
+        $corrimiento = $indiceInicial === 6 ? 1 : 0;
         $indicesHistoricos = [];
         for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
-            $indicesHistoricos[4 + $desplazamiento] = $anioVigenteNumero - $desplazamiento;
+            $indicesHistoricos[4 + $corrimiento + $desplazamiento] = $anioVigenteNumero - $desplazamiento;
         }
-        // Última columna, después de los 4 históricos (índice 10): el criterio de indexación
-        // (texto libre — "IPC", "SMMLV", "ICES"...), solo para hojas (nunca una fila total).
-        $indiceIndexacion = 6 + count($indicesHistoricos);
-        // Y la siguiente: "Año anterior (Inicial)". Vacía = no cambia el inicial ya guardado.
-        $indiceInicial = $indiceIndexacion + 1;
+        // Después de los 4 históricos: el criterio de indexación (texto libre — "IPC", "SMMLV",
+        // "ICES"...), solo para hojas (nunca una fila total).
+        $indiceIndexacion = 6 + $corrimiento + count($indicesHistoricos);
 
         foreach ($filas as $indice => $fila) {
             $numeroFilaExcel = $indice + 2;
@@ -3077,7 +3145,7 @@ class AnalisisControlador
                 $valores[$anioHistorico] = ['valor_final' => $crudo !== '' && is_numeric($crudo) ? (float) $crudo : 0.0];
             }
 
-            $crudoInicial = trim((string) ($fila[$indiceInicial] ?? ''));
+            $crudoInicial = $indiceInicial !== null ? trim((string) ($fila[$indiceInicial] ?? '')) : '';
             if ($crudoInicial !== '' && !is_numeric($crudoInicial)) {
                 $errores[] = "$nombreHoja, fila $numeroFilaExcel: \"Año anterior (Inicial)\" no es un número válido.";
                 $filaValida = false;

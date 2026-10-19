@@ -148,14 +148,33 @@ ob_start();
 
         <?php $etiquetaSnapshot = AnalisisControlador::etiquetaSnapshotPestana($tab, $lado); ?>
         <?php if ($esSuperAdmin && $vista === 'tiempo_real' && $etiquetaSnapshot !== null): ?>
-        <?php // Solo SA: congela esta pestaña (ver AnalisisControlador::crearSnapshotPestana()). ?>
-        <form method="POST" action="<?= htmlspecialchars(analisisUrl($tab, 'tiempo_real', $paramsTab)) ?>" class="analisis-grupo-datos" title="Snapshot"
-              onsubmit="var nombre = prompt(<?= htmlspecialchars(json_encode('Nombre del snapshot de ' . $etiquetaSnapshot . ':'), ENT_QUOTES) ?>, <?= htmlspecialchars(json_encode($etiquetaSnapshot . ' ' . date('d/m/Y H:i')), ENT_QUOTES) ?>); if (nombre === null) { return false; } this.elements.nombre.value = nombre; return true;">
+        <?php // Solo SA: modal "Solo esta página | Todas las páginas" (ver AnalisisControlador::crearSnapshotPestana()). ?>
+        <form method="POST" action="<?= htmlspecialchars(analisisUrl($tab, 'tiempo_real', $paramsTab)) ?>" class="analisis-grupo-datos" title="Snapshot">
             <input type="hidden" name="accion" value="crear_snapshot_pestana">
-            <input type="hidden" name="nombre" value="">
-            <button type="submit" class="analisis-icono-boton" title="Tomar snapshot de <?= htmlspecialchars($etiquetaSnapshot) ?> (queda en Repositorio)">
+            <input type="hidden" name="alcance" value="pagina">
+            <button type="button" class="analisis-icono-boton" title="Tomar snapshot (queda como el activo en Repositorio)" onclick="document.getElementById('analisis-modal-snapshot').classList.add('abierto'); document.getElementById('analisis-snapshot-nombre').focus();">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
             </button>
+            <div id="analisis-modal-snapshot" class="modal-fondo" onclick="if (event.target === this) { this.classList.remove('abierto'); }">
+                <div class="modal-caja" style="max-width: 540px;">
+                    <div class="modal-cabecera">
+                        <h2>Tomar snapshot</h2>
+                        <button type="button" class="modal-cerrar" aria-label="Cerrar" onclick="document.getElementById('analisis-modal-snapshot').classList.remove('abierto');">&times;</button>
+                    </div>
+                    <div class="campo">
+                        <label for="analisis-snapshot-nombre">Nombre</label>
+                        <input type="text" id="analisis-snapshot-nombre" name="nombre" maxlength="120" value="<?= htmlspecialchars('Snapshot ' . date('d/m/Y H:i')) ?>">
+                    </div>
+                    <p class="texto-atenuado" style="font-size: 0.82rem; margin: 0.6rem 0 0;" title="Con 'Todas las páginas' se crea uno por pestaña (Documentos, Programación presupuestal Ingresos y Egresos, Proyectos, Articulación PDI, Techos y Metas, Análisis de distribución) y a cada nombre se le agrega su pestaña.">
+                        Cada snapshot queda como el <strong>activo</strong> de su pestaña en Repositorio.
+                    </p>
+                    <div class="modal-pie" style="gap: 0.5rem; flex-wrap: wrap;">
+                        <button type="button" class="boton-secundario" onclick="document.getElementById('analisis-modal-snapshot').classList.remove('abierto');">Cancelar</button>
+                        <button type="submit" class="boton-secundario" onclick="this.form.alcance.value = 'todas'; return confirm('¿Tomar un snapshot de TODAS las páginas de Análisis? Cada uno quedará como el activo de su pestaña.');">Todas las páginas</button>
+                        <button type="submit" class="boton-agregar" onclick="this.form.alcance.value = 'pagina';">Solo esta página (<?= htmlspecialchars($etiquetaSnapshot) ?>)</button>
+                    </div>
+                </div>
+            </div>
         </form>
         <?php endif; ?>
 
