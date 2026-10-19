@@ -46,7 +46,7 @@ require_once __DIR__ . '/PeticionesControlador.php';
  */
 class AnalisisControlador
 {
-    private const TABS_VALIDAS = ['pdi', 'programacion', 'analisis', 'proyectos', 'techos', 'actas', 'presentacion'];
+    private const TABS_VALIDAS = ['pdi', 'programacion', 'comparativo', 'analisis', 'proyectos', 'techos', 'actas', 'presentacion'];
 
     /** Pestaña Actas: solo dependencias de tipo Facultad, menos estas (tipo Facultad pero no son facultades). */
     private const DEPENDENCIAS_EXCLUIDAS_ACTAS = ['DIRECTIVAS'];
@@ -83,6 +83,9 @@ class AnalisisControlador
         'gasto_extension' => 1000000000,
         'gasto_postgrado' => 2000000000,
     ];
+
+    /** Columna "Año anterior (a corte)" del árbol: oculta por ahora (true la vuelve a mostrar). */
+    private const MOSTRAR_COLUMNA_CORTE = false;
 
     private const TABLAS_POR_ORIGEN = [
         'gasto_principal' => 'gastos',
@@ -126,7 +129,11 @@ class AnalisisControlador
 
         $tab =in_array($_GET['tab'] ?? '', self::TABS_VALIDAS, true) ? $_GET['tab'] : 'presentacion';
         $vista = in_array($_GET['vista'] ?? '', self::VISTAS_VALIDAS, true) ? $_GET['vista'] : 'tiempo_real';
-        $pestanaArbol = $tab === 'programacion' ? 'programacion_presupuestal' : 'articulacion_pdi';
+        $pestanaArbol = match ($tab) {
+            'programacion' => 'programacion_presupuestal',
+            'comparativo' => 'comparativo_vigencia',
+            default => 'articulacion_pdi',
+        };
         $lado = ($_GET['lado'] ?? '') === 'egresos' ? 'egresos' : 'ingresos';
 
         if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['accion'] ?? '') === 'configurar_expansion_arbol') {
@@ -215,7 +222,7 @@ class AnalisisControlador
             return;
         }
 
-        if ($tab === 'pdi' || $tab === 'programacion' || $tab === 'proyectos') {
+        if (in_array($tab, ['pdi', 'programacion', 'comparativo', 'proyectos'], true)) {
             $this->renderizarArbol($tab, $vista, $pestanaArbol, $rolVista, $dependenciasTodas, $lado);
 
             return;
@@ -366,7 +373,7 @@ class AnalisisControlador
             return;
         }
 
-        if (!in_array($tab, ['programacion', 'proyectos'], true) || $vista !== 'tiempo_real') {
+        if (!in_array($tab, ['programacion', 'comparativo', 'proyectos'], true) || $vista !== 'tiempo_real') {
             $responder(400, 'Esta vista no se puede editar.');
 
             return;
@@ -402,7 +409,11 @@ class AnalisisControlador
 
                     return;
                 }
-                $campo = $clave === 'anterior_corte' ? 'valor_corte' : 'valor_final';
+                $campo = match ($clave) {
+                    'anterior_corte' => 'valor_corte',
+                    'anterior_inicial' => 'valor_inicial',
+                    default => 'valor_final',
+                };
                 $error = $modelo->actualizarValorLinea($tipo, $codigo, $anioPorClave[$clave], $campo, round((float) $valor, 2), $usuarioId);
             }
         } catch (Throwable $excepcion) {
@@ -429,7 +440,7 @@ class AnalisisControlador
             return;
         }
 
-        if (!in_array($tab, ['pdi', 'programacion', 'proyectos'], true)) {
+        if (!in_array($tab, ['pdi', 'programacion', 'comparativo', 'proyectos'], true)) {
             http_response_code(400);
             echo json_encode(['ok' => false, 'error' => 'Pestaña no válida.']);
 
@@ -579,7 +590,7 @@ class AnalisisControlador
             return;
         }
 
-        if ($tab !== 'programacion' || $vista !== 'tiempo_real') {
+        if (!in_array($tab, ['programacion', 'comparativo'], true) || $vista !== 'tiempo_real') {
             $responder(400, 'Esta vista no tiene fecha de corte.');
 
             return;
@@ -594,7 +605,8 @@ class AnalisisControlador
         }
 
         try {
-            $guardado = (new AnalisisArbolConfiguracion())->guardarFechaCorte($tab, $fecha, (int) $_SESSION['usuario_id']);
+            // Una sola fecha de corte para PP y su Comparativo (fila 'programacion').
+            $guardado = (new AnalisisArbolConfiguracion())->guardarFechaCorte('programacion', $fecha, (int) $_SESSION['usuario_id']);
         } catch (Throwable $excepcion) {
             $responder(500, 'No se pudo guardar en la base de datos (¿ya se ejecutó instalar.php?).');
 
@@ -732,7 +744,7 @@ class AnalisisControlador
         if ($tab === 'analisis' && isset($_GET['origen'])) {
             $destino .= '&origen=' . urlencode((string) $_GET['origen']);
         }
-        if ($tab === 'programacion') {
+        if ($tab === 'programacion' || $tab === 'comparativo') {
             $destino .= '&lado=' . urlencode($lado);
         }
 
@@ -964,7 +976,7 @@ class AnalisisControlador
     private function renderizarArbol(string $tab, string $vista, string $pestanaArbol, string $rolVista, array $dependenciasTodas, string $lado): void
     {
         $tipoPresupuesto = $lado === 'ingresos' ? 'ingreso' : 'egreso';
-        $esArbolPresupuesto = $tab === 'programacion' || $tab === 'proyectos';
+        $esArbolPresupuesto = in_array($tab, ['programacion', 'comparativo', 'proyectos'], true);
         $tipoVersion = $tab === 'proyectos' ? 'proyecto' : $tipoPresupuesto;
 
         // Cada pestaña tiene su propio mecanismo de versiones, cada una con su propia lista:
@@ -1037,7 +1049,7 @@ class AnalisisControlador
         // guardada en BD (analisis_arbol_configuracion.fecha_corte, por pestaña) para todos; solo
         // sin ninguna elegida se usa el mismo día del año anterior. No viene de la plantilla ni de la URL.
         $fechaCorteDefecto = $anioAnteriorNumero . date('-m-d');
-        $fechaCorte = (new AnalisisArbolConfiguracion())->obtenerFechaCorte($tab) ?? $fechaCorteDefecto;
+        $fechaCorte = (new AnalisisArbolConfiguracion())->obtenerFechaCorte('programacion') ?? $fechaCorteDefecto;
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaCorte)) {
             $fechaCorte = $fechaCorteDefecto;
         }
@@ -1046,9 +1058,23 @@ class AnalisisControlador
             ['clave' => 'vigente', 'etiqueta' => (string) $anioVigenteNumero, 'registro' => $anioVigenteRegistro, 'corte' => null, 'grupo' => 'vigente'],
         ];
 
+        // Comparativo vigencia inicial: 2027 frente a 2026 Final, 2026 Corte (fecha) y 2026 Inicial,
+        // siempre visibles (grupo propio, sin el plegado de "Año anterior") y sin históricos.
+        if ($tab === 'comparativo') {
+            $modoColumnas = 'comparativo';
+            $registroAnterior = $aniosPorNumero[$anioAnteriorNumero] ?? null;
+            $columnasAnios[] = ['clave' => 'anterior_total', 'etiqueta' => $anioAnteriorNumero . ' Final', 'registro' => $registroAnterior, 'corte' => null, 'grupo' => 'comparativo'];
+            $columnasAnios[] = ['clave' => 'anterior_corte', 'etiqueta' => $anioAnteriorNumero . ' Corte (' . date('d/m/Y', strtotime($fechaCorte)) . ')', 'registro' => $registroAnterior, 'corte' => $fechaCorte, 'grupo' => 'comparativo'];
+            $columnasAnios[] = ['clave' => 'anterior_inicial', 'etiqueta' => $anioAnteriorNumero . ' Inicial', 'registro' => $registroAnterior, 'corte' => null, 'grupo' => 'comparativo'];
+        }
+
         if ($modoColumnas === 'completo') {
             $columnasAnios[] = ['clave' => 'anterior_total', 'etiqueta' => $anioAnteriorNumero . ' (Final)', 'registro' => $aniosPorNumero[$anioAnteriorNumero] ?? null, 'corte' => null, 'grupo' => 'anterior'];
-            $columnasAnios[] = ['clave' => 'anterior_corte', 'etiqueta' => $anioAnteriorNumero . ' (' . date('d/m/Y', strtotime($fechaCorte)) . ')', 'registro' => $aniosPorNumero[$anioAnteriorNumero] ?? null, 'corte' => $fechaCorte, 'grupo' => 'anterior'];
+            // Columna "a corte" OCULTA por ahora en Programación presupuestal (se reutilizará en otro
+            // landing): no se borra nada — ni la fecha guardada, ni valor_corte, ni la plantilla.
+            if (self::MOSTRAR_COLUMNA_CORTE) {
+                $columnasAnios[] = ['clave' => 'anterior_corte', 'etiqueta' => $anioAnteriorNumero . ' (' . date('d/m/Y', strtotime($fechaCorte)) . ')', 'registro' => $aniosPorNumero[$anioAnteriorNumero] ?? null, 'corte' => $fechaCorte, 'grupo' => 'anterior'];
+            }
 
             for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
                 $anioHistorico = $anioVigenteNumero - $desplazamiento;
@@ -1068,7 +1094,15 @@ class AnalisisControlador
         $etiquetaColumnaArbol = 'Línea / Motor / Proyecto';
         $cuadreProyectos = [];
         $infoAjustePdi = null;
-        if ($tab === 'programacion') {
+        $comparativoVigencia = null;
+        if ($tab === 'comparativo') {
+            [$arbolDatos, $totalesGenerales] = $this->construirArbolPresupuesto($tipoPresupuesto, $clavesColumnas, $anioVigenteNumero, $versionIdActual, $sinDatosRepositorio);
+            $columnasExtra = [
+                ['clave' => 'codigo', 'etiqueta' => 'Código'],
+            ];
+            $etiquetaColumnaArbol = 'Descripción';
+            $comparativoVigencia = $this->calcularComparativoVigencia($arbolDatos, $fechaCorte, $anioAnteriorNumero, $lado);
+        } elseif ($tab === 'programacion') {
             [$arbolDatos, $totalesGenerales] = $this->construirArbolPresupuesto($tipoPresupuesto, $clavesColumnas, $anioVigenteNumero, $versionIdActual, $sinDatosRepositorio);
             $columnasExtra = [
                 ['clave' => 'codigo', 'etiqueta' => 'Código'],
@@ -1104,6 +1138,7 @@ class AnalisisControlador
 
         $tituloPaginaPorTab = [
             'programacion' => 'Análisis · Programación presupuestal ' . $anioVigenteNumero,
+            'comparativo' => 'Análisis · Comparativo vigencia inicial ' . $anioVigenteNumero,
             'proyectos' => 'Análisis · Proyectos de Inversión',
         ];
         $tituloPagina = $tituloPaginaPorTab[$tab] ?? 'Análisis · Articulación PDI';
@@ -1131,12 +1166,13 @@ class AnalisisControlador
     private function exportarArbol(string $tab, string $vista, string $lado, array $arbolDatos, array $totalesGenerales, array $columnasAnios, array $columnasExtra, string $etiquetaColumnaArbol, array $versiones, ?int $versionIdActual, ?string $dependenciaFiltroActual, int $anioVigenteNumero, string $fechaCorte, string $modoColumnas): void
     {
         $nombreHoja = match ($tab) {
-            'programacion' => $lado === 'ingresos' ? 'Ingresos' : 'Egresos',
+            'programacion', 'comparativo' => $lado === 'ingresos' ? 'Ingresos' : 'Egresos',
             'proyectos' => 'Proyectos de Inversión',
             default => 'Articulación PDI',
         };
         $titulo = match ($tab) {
             'programacion' => 'Programación presupuestal ' . $anioVigenteNumero . ' — ' . $nombreHoja,
+            'comparativo' => 'Comparativo vigencia inicial ' . $anioVigenteNumero . ' — ' . $nombreHoja,
             'proyectos' => 'Proyectos de Inversión',
             default => 'Articulación PDI',
         };
@@ -1195,7 +1231,7 @@ class AnalisisControlador
             [['valor' => $titulo, 'estilo' => 4]],
             ['Modo', $descripcionModo],
         ];
-        if ($modoColumnas === 'completo') {
+        if (in_array('anterior_corte', array_column($columnasAnios, 'clave'), true)) {
             $filasPrevias[] = ['Fecha de corte', date('d/m/Y', strtotime($fechaCorte))];
         }
         $filasPrevias[] = ['Generado', date('d/m/Y H:i')];
@@ -1203,17 +1239,150 @@ class AnalisisControlador
 
         $prefijoArchivo = match ($tab) {
             'programacion' => 'programacion_' . ($lado === 'ingresos' ? 'ingresos' : 'egresos'),
+            'comparativo' => 'comparativo_vigencia_' . ($lado === 'ingresos' ? 'ingresos' : 'egresos'),
             'proyectos' => 'proyectos',
             default => 'articulacion_pdi',
         };
 
-        GeneradorXlsx::descargarHojas($prefijoArchivo . '_' . $anioVigenteNumero . '_' . $vista . '.xlsx', [[
+        $hojas = [[
             'nombre' => $nombreHoja,
             'filasPrevias' => $filasPrevias,
             'encabezados' => $encabezados,
             'filas' => empty($filas) ? [['No hay datos para mostrar.']] : $filas,
-        ]]);
+        ]];
+        if ($tab === 'comparativo') {
+            $hojas[] = $this->construirHojaIndicadoresComparativo($this->calcularComparativoVigencia($arbolDatos, $fechaCorte, $anioVigenteNumero - 1, $lado), $anioVigenteNumero);
+        }
+
+        GeneradorXlsx::descargarHojas($prefijoArchivo . '_' . $anioVigenteNumero . '_' . $vista . '.xlsx', $hojas);
         exit;
+    }
+
+    /**
+     * Indicadores del Comparativo vigencia inicial, por sección raíz y total: proyección (2027) contra
+     * 2026 Inicial (aprobado), Final (definitivo), Corte (ejecutado a la fecha) y el cierre estimado
+     * (corte llevado al año completo). Ritmo = % ejecutado − % del año transcurrido a la fecha de
+     * corte. En Ingresos la "ejecución" es recaudo. Los % sin base (división por 0) quedan null.
+     *
+     * @return array{lado: string, fechaCorte: string, porcentajeTiempo: float, secciones: array<int, array>, total: array}
+     */
+    private function calcularComparativoVigencia(array $arbolDatos, string $fechaCorte, int $anioAnterior, string $lado): array
+    {
+        $marca = strtotime($fechaCorte);
+        $anioFecha = (int) date('Y', $marca);
+        if ($anioFecha < $anioAnterior) {
+            $porcentajeTiempo = 0.0;
+        } elseif ($anioFecha > $anioAnterior) {
+            $porcentajeTiempo = 100.0;
+        } else {
+            $porcentajeTiempo = ((int) date('z', $marca) + 1) / ((int) date('L', $marca) === 1 ? 366 : 365) * 100;
+        }
+
+        $variacion = static fn (float $proyeccion, ?float $base): ?float => ($base !== null && abs($base) > 0.0) ? ($proyeccion - $base) / abs($base) * 100 : null;
+
+        $armar = static function (string $id, string $codigo, string $etiqueta, array $valores) use ($porcentajeTiempo, $variacion): array {
+            $proyeccion = (float) ($valores['vigente'] ?? 0.0);
+            $inicial = (float) ($valores['anterior_inicial'] ?? 0.0);
+            $final = (float) ($valores['anterior_total'] ?? 0.0);
+            $corte = (float) ($valores['anterior_corte'] ?? 0.0);
+            $cierre = ($porcentajeTiempo > 0.0 && $corte > 0.0) ? $corte / ($porcentajeTiempo / 100) : null;
+            $ejecucion = $final > 0.0 ? $corte / $final * 100 : null;
+
+            return [
+                'id' => $id,
+                'codigo' => $codigo,
+                'etiqueta' => $etiqueta,
+                'proyeccion' => $proyeccion,
+                'inicial' => $inicial,
+                'final' => $final,
+                'corte' => $corte,
+                'cierre' => $cierre,
+                'variacion' => [
+                    'inicial' => ['valor' => $proyeccion - $inicial, 'porcentaje' => $variacion($proyeccion, $inicial)],
+                    'final' => ['valor' => $proyeccion - $final, 'porcentaje' => $variacion($proyeccion, $final)],
+                    'corte' => ['valor' => $proyeccion - $corte, 'porcentaje' => $variacion($proyeccion, $corte)],
+                    'cierre' => ['valor' => $cierre !== null ? $proyeccion - $cierre : null, 'porcentaje' => $variacion($proyeccion, $cierre)],
+                ],
+                'modificacion' => $final - $inicial,
+                'modificacionPorcentaje' => $variacion($final, $inicial),
+                'ejecucion' => $ejecucion,
+                'saldo' => $final - $corte,
+                'ritmo' => $ejecucion !== null ? $ejecucion - $porcentajeTiempo : null,
+            ];
+        };
+
+        $totales = ['vigente' => 0.0, 'anterior_inicial' => 0.0, 'anterior_total' => 0.0, 'anterior_corte' => 0.0];
+        foreach ($arbolDatos as $raiz) {
+            foreach ($totales as $clave => $acumulado) {
+                $totales[$clave] = $acumulado + (float) ($raiz['valores'][$clave] ?? 0.0);
+            }
+        }
+
+        $secciones = [];
+        foreach ($arbolDatos as $raiz) {
+            $seccion = $armar((string) $raiz['id'], (string) ($raiz['codigo'] ?? ''), (string) $raiz['etiqueta'], $raiz['valores']);
+            $seccion['participacionProyeccion'] = $totales['vigente'] != 0.0 ? $seccion['proyeccion'] / $totales['vigente'] * 100 : null;
+            $seccion['participacionFinal'] = $totales['anterior_total'] != 0.0 ? $seccion['final'] / $totales['anterior_total'] * 100 : null;
+            $seccion['cambioParticipacion'] = ($seccion['participacionProyeccion'] !== null && $seccion['participacionFinal'] !== null)
+                ? $seccion['participacionProyeccion'] - $seccion['participacionFinal']
+                : null;
+            $secciones[] = $seccion;
+        }
+
+        return [
+            'lado' => $lado,
+            'fechaCorte' => $fechaCorte,
+            'porcentajeTiempo' => $porcentajeTiempo,
+            'secciones' => $secciones,
+            'total' => $armar('total', '', 'Total', $totales),
+        ];
+    }
+
+    /** Hoja "Indicadores" del Excel del Comparativo: una fila por sección y el total. */
+    private function construirHojaIndicadoresComparativo(array $comparativo, int $anioVigente): array
+    {
+        $anioAnterior = $anioVigente - 1;
+        $moneda = fn (?float $valor): string => $valor === null ? '—' : $this->formatoMonedaExportar($valor);
+        $porcentaje = static fn (?float $valor): string => $valor === null ? '—' : number_format($valor, 1, ',', '.') . '%';
+        $nombreEjecucion = $comparativo['lado'] === 'ingresos' ? 'Recaudo' : 'Ejecución';
+
+        $filas = [];
+        foreach (array_merge($comparativo['secciones'], [$comparativo['total']]) as $fila) {
+            $esTotal = $fila['id'] === 'total';
+            $celdas = [
+                trim($fila['codigo'] . ' ' . $fila['etiqueta']),
+                $moneda($fila['proyeccion']),
+                $moneda($fila['inicial']), $moneda($fila['final']), $moneda($fila['corte']), $moneda($fila['cierre']),
+                $porcentaje($fila['variacion']['inicial']['porcentaje']), $porcentaje($fila['variacion']['final']['porcentaje']),
+                $porcentaje($fila['variacion']['corte']['porcentaje']), $porcentaje($fila['variacion']['cierre']['porcentaje']),
+                $moneda($fila['modificacion']), $porcentaje($fila['modificacionPorcentaje']),
+                $porcentaje($fila['ejecucion']), $moneda($fila['saldo']),
+                $fila['ritmo'] === null ? '—' : number_format($fila['ritmo'], 1, ',', '.') . ' pp',
+                $esTotal ? '' : $porcentaje($fila['participacionFinal'] ?? null),
+                $esTotal ? '' : $porcentaje($fila['participacionProyeccion'] ?? null),
+                $esTotal || ($fila['cambioParticipacion'] ?? null) === null ? '' : number_format($fila['cambioParticipacion'], 1, ',', '.') . ' pp',
+            ];
+            $filas[] = $esTotal ? array_map(static fn (string $c): array => ['valor' => $c, 'estilo' => 3], $celdas) : $celdas;
+        }
+
+        return [
+            'nombre' => 'Indicadores',
+            'filasPrevias' => [
+                [['valor' => 'Indicadores — Comparativo vigencia inicial', 'estilo' => 4]],
+                ['Fecha de corte', date('d/m/Y', strtotime($comparativo['fechaCorte']))],
+                ['% del año ' . $anioAnterior . ' transcurrido', number_format($comparativo['porcentajeTiempo'], 1, ',', '.') . '%'],
+                [],
+            ],
+            'encabezados' => [
+                'Sección', (string) $anioVigente,
+                $anioAnterior . ' Inicial', $anioAnterior . ' Final', $anioAnterior . ' Corte', 'Cierre estimado ' . $anioAnterior,
+                'Var. % vs Inicial', 'Var. % vs Final', 'Var. % vs Corte', 'Var. % vs Cierre',
+                'Modificación (Final − Inicial)', 'Modificación %',
+                $nombreEjecucion . ' a corte %', 'Saldo por ' . mb_strtolower($nombreEjecucion === 'Recaudo' ? 'recaudar' : 'ejecutar'), 'Ritmo vs tiempo',
+                'Participación ' . $anioAnterior . ' Final', 'Participación ' . $anioVigente, 'Cambio de participación',
+            ],
+            'filas' => $filas,
+        ];
     }
 
     /** Padre antes que sus hijos; la profundidad sangra la descripción y las raíces/totales van en negrita. */
@@ -1843,6 +2012,7 @@ class AnalisisControlador
             'vigente' => $anioVigenteNumero,
             'anterior_total' => $anioAnteriorNumero,
             'anterior_corte' => $anioAnteriorNumero,
+            'anterior_inicial' => $anioAnteriorNumero,
         ];
 
         for ($desplazamiento = 2; $desplazamiento <= 5; $desplazamiento++) {
@@ -1859,9 +2029,11 @@ class AnalisisControlador
         foreach ($nodos as $nodo) {
             $valoresPorClave = [];
             foreach ($anioPorClave as $clave => $anio) {
-                $valoresPorClave[$clave] = $clave === 'anterior_corte'
-                    ? (float) ($nodo['valorCorte'] ?? 0.0)
-                    : (float) ($nodo['valores'][$anio] ?? 0.0);
+                $valoresPorClave[$clave] = match ($clave) {
+                    'anterior_corte' => (float) ($nodo['valorCorte'] ?? 0.0),
+                    'anterior_inicial' => (float) ($nodo['valorInicial'] ?? 0.0),
+                    default => (float) ($nodo['valores'][$anio] ?? 0.0),
+                };
             }
             $nodo['valores'] = $valoresPorClave;
             $nodo['hijos'] = $this->remapArbolPresupuesto($nodo['hijos'], $anioPorClave);
@@ -2635,6 +2807,9 @@ class AnalisisControlador
         // leyéndose bien (le falta la última, nada más) — y el mismo orden sirve para el botón
         // "Exportar a Excel" (ver exportarArbol()), que la agrega también al final.
         $encabezados[] = 'Indexación';
+        // También al final (después de Indexación): 2026 inicial, para el Comparativo vigencia inicial.
+        // Una plantilla descargada antes no la trae y se sigue importando igual (sin inicial).
+        $encabezados[] = 'Año anterior (Inicial)';
 
         $modeloPresupuesto = new PresupuestoInstitucional();
         $hojas = [];
@@ -2656,6 +2831,7 @@ class AnalisisControlador
                     $fila[] = $this->formatoNumeroExportar($nodo['valores'][$anioVigenteNumero - $desplazamiento] ?? 0.0);
                 }
                 $fila[] = $nodo['esTotal'] ? '' : ($nodo['indexacion'] ?? '');
+                $fila[] = $nodo['valorInicial'] !== null ? $this->formatoNumeroExportar($nodo['valorInicial']) : '';
                 $filas[] = $fila;
             }
 
@@ -2770,6 +2946,8 @@ class AnalisisControlador
         // Última columna, después de los 4 históricos (índice 10): el criterio de indexación
         // (texto libre — "IPC", "SMMLV", "ICES"...), solo para hojas (nunca una fila total).
         $indiceIndexacion = 6 + count($indicesHistoricos);
+        // Y la siguiente: "Año anterior (Inicial)". Vacía = no cambia el inicial ya guardado.
+        $indiceInicial = $indiceIndexacion + 1;
 
         foreach ($filas as $indice => $fila) {
             $numeroFilaExcel = $indice + 2;
@@ -2849,6 +3027,13 @@ class AnalisisControlador
                 }
                 $valores[$anioHistorico] = ['valor_final' => $crudo !== '' && is_numeric($crudo) ? (float) $crudo : 0.0];
             }
+
+            $crudoInicial = trim((string) ($fila[$indiceInicial] ?? ''));
+            if ($crudoInicial !== '' && !is_numeric($crudoInicial)) {
+                $errores[] = "$nombreHoja, fila $numeroFilaExcel: \"Año anterior (Inicial)\" no es un número válido.";
+                $filaValida = false;
+            }
+            $valores[$anioAnteriorNumero]['valor_inicial'] = $crudoInicial !== '' && is_numeric($crudoInicial) ? (float) $crudoInicial : null;
 
             $indexacion = trim((string) ($fila[$indiceIndexacion] ?? ''));
             if ($indexacion !== '' && $esTotal) {

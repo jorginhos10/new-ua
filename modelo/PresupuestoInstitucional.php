@@ -62,6 +62,27 @@ class PresupuestoInstitucional
         $this->db = Conexion::obtener();
     }
 
+    /** Cache de conValorInicial(). */
+    private ?bool $conValorInicial = null;
+
+    /**
+     * ¿Existe ya la columna valor_inicial (2026 inicial del Comparativo vigencia inicial)? Mientras
+     * instalar.php no se corra, todo funciona igual que antes, sin ese dato.
+     */
+    private function conValorInicial(): bool
+    {
+        if ($this->conValorInicial === null) {
+            try {
+                $this->db->query('SELECT valor_inicial FROM presupuesto_institucional_valores LIMIT 0');
+                $this->conValorInicial = true;
+            } catch (Throwable $excepcion) {
+                $this->conValorInicial = false;
+            }
+        }
+
+        return $this->conValorInicial;
+    }
+
     public static function esCodigoTotal(string $codigo): bool
     {
         return str_ends_with($codigo, '.0');
@@ -192,6 +213,7 @@ class PresupuestoInstitucional
             $valoresPorLinea[(int) $valor['linea_id']][(int) $valor['anio']] = [
                 'valor_final' => (float) $valor['valor_final'],
                 'valor_corte' => $valor['valor_corte'] !== null ? (float) $valor['valor_corte'] : null,
+                'valor_inicial' => isset($valor['valor_inicial']) ? (float) $valor['valor_inicial'] : null,
             ];
         }
 
@@ -247,11 +269,15 @@ class PresupuestoInstitucional
             $valoresLinea = $valoresPorLinea[(int) $linea['id']] ?? [];
             $valores = [];
             $valorCorte = null;
+            $valorInicial = null;
 
             foreach ($anios as $anio) {
                 $valores[$anio] = (float) ($valoresLinea[$anio]['valor_final'] ?? 0);
                 if (isset($valoresLinea[$anio]['valor_corte'])) {
                     $valorCorte = (float) $valoresLinea[$anio]['valor_corte'];
+                }
+                if (isset($valoresLinea[$anio]['valor_inicial'])) {
+                    $valorInicial = (float) $valoresLinea[$anio]['valor_inicial'];
                 }
             }
 
@@ -263,6 +289,7 @@ class PresupuestoInstitucional
                 'esTotal' => (bool) $linea['es_total'],
                 'valores' => $valores,
                 'valorCorte' => $valorCorte,
+                'valorInicial' => $valorInicial,
                 'proyectosPdi' => $proyectosPorLinea[(int) $linea['id']]['nombres'] ?? '',
                 'proyectosPdiNits' => $proyectosPorLinea[(int) $linea['id']]['nits'] ?? '',
                 'indexacion' => $linea['indexacion'] ?? null,
@@ -322,7 +349,7 @@ class PresupuestoInstitucional
         $marcadoresAnios = implode(',', array_fill(0, count($anios), '?'));
 
         $consulta = $this->db->prepare(
-            "SELECT linea_id, anio, valor_final, valor_corte
+            'SELECT linea_id, anio, valor_final, valor_corte' . ($this->conValorInicial() ? ', valor_inicial' : '') . "
              FROM presupuesto_institucional_valores
              WHERE linea_id IN ($marcadoresIds) AND anio IN ($marcadoresAnios)"
         );
@@ -333,6 +360,7 @@ class PresupuestoInstitucional
             $resultado[(int) $fila['linea_id']][(int) $fila['anio']] = [
                 'valor_final' => (float) $fila['valor_final'],
                 'valor_corte' => $fila['valor_corte'] !== null ? (float) $fila['valor_corte'] : null,
+                'valor_inicial' => isset($fila['valor_inicial']) ? (float) $fila['valor_inicial'] : null,
             ];
         }
 
@@ -605,7 +633,8 @@ class PresupuestoInstitucional
      */
     public function actualizarValorLinea(string $tipo, string $codigo, int $anio, string $campo, float $valor, int $usuarioId): string
     {
-        if (!in_array($campo, ['valor_final', 'valor_corte'], true)) {
+        $camposEditables = $this->conValorInicial() ? ['valor_final', 'valor_corte', 'valor_inicial'] : ['valor_final', 'valor_corte'];
+        if (!in_array($campo, $camposEditables, true)) {
             return 'Columna no válida.';
         }
 
@@ -620,16 +649,22 @@ class PresupuestoInstitucional
         $this->db->beginTransaction();
 
         try {
-            $this->db->prepare(
-                "INSERT INTO presupuesto_institucional_valores (linea_id, anio, valor_final, valor_corte)
-                 VALUES (:linea_id, :anio, :valor_final, :valor_corte)
-                 ON DUPLICATE KEY UPDATE $campo = VALUES($campo)"
-            )->execute([
+            // Solo la columna editada (valor_final siempre va, porque no admite NULL).
+            $columnaExtra = $campo === 'valor_final' ? '' : ', ' . $campo;
+            $marcadorExtra = $campo === 'valor_final' ? '' : ', :valor_extra';
+            $parametros = [
                 'linea_id' => (int) $linea['id'],
                 'anio' => $anio,
                 'valor_final' => $campo === 'valor_final' ? $valor : 0,
-                'valor_corte' => $campo === 'valor_corte' ? $valor : null,
-            ]);
+            ];
+            if ($campo !== 'valor_final') {
+                $parametros['valor_extra'] = $valor;
+            }
+            $this->db->prepare(
+                "INSERT INTO presupuesto_institucional_valores (linea_id, anio, valor_final$columnaExtra)
+                 VALUES (:linea_id, :anio, :valor_final$marcadorExtra)
+                 ON DUPLICATE KEY UPDATE $campo = VALUES($campo)"
+            )->execute($parametros);
             $this->db->prepare('UPDATE presupuesto_institucional_lineas SET actualizado_por = :usuario WHERE id = :id')
                 ->execute(['usuario' => $usuarioId, 'id' => (int) $linea['id']]);
             $this->recalcularTotales($tipo);
@@ -695,10 +730,15 @@ class PresupuestoInstitucional
         $obtenerId = $this->db->prepare(
             'SELECT id FROM presupuesto_institucional_lineas WHERE tipo = :tipo AND codigo = :codigo'
         );
-        $upsertValor = $this->db->prepare(
-            'INSERT INTO presupuesto_institucional_valores (linea_id, anio, valor_final, valor_corte)
-             VALUES (:linea_id, :anio, :valor_final, :valor_corte)
-             ON DUPLICATE KEY UPDATE valor_final = VALUES(valor_final), valor_corte = VALUES(valor_corte)'
+        $conInicial = $this->conValorInicial();
+        $upsertValor = $this->db->prepare($conInicial
+            ? 'INSERT INTO presupuesto_institucional_valores (linea_id, anio, valor_final, valor_corte, valor_inicial)
+               VALUES (:linea_id, :anio, :valor_final, :valor_corte, :valor_inicial)
+               ON DUPLICATE KEY UPDATE valor_final = VALUES(valor_final), valor_corte = VALUES(valor_corte),
+                   valor_inicial = COALESCE(VALUES(valor_inicial), valor_inicial)'
+            : 'INSERT INTO presupuesto_institucional_valores (linea_id, anio, valor_final, valor_corte)
+               VALUES (:linea_id, :anio, :valor_final, :valor_corte)
+               ON DUPLICATE KEY UPDATE valor_final = VALUES(valor_final), valor_corte = VALUES(valor_corte)'
         );
         $borrarProyectos = $this->db->prepare(
             'DELETE FROM presupuesto_institucional_linea_proyectos WHERE linea_id = :linea_id'
@@ -726,12 +766,16 @@ class PresupuestoInstitucional
             $lineaId = (int) $obtenerId->fetchColumn();
 
             foreach ($linea['valores'] as $anio => $valor) {
-                $upsertValor->execute([
+                $parametrosValor = [
                     'linea_id' => $lineaId,
                     'anio' => $anio,
                     'valor_final' => $valor['valor_final'] ?? 0,
                     'valor_corte' => $valor['valor_corte'] ?? null,
-                ]);
+                ];
+                if ($conInicial) {
+                    $parametrosValor['valor_inicial'] = $valor['valor_inicial'] ?? null;
+                }
+                $upsertValor->execute($parametrosValor);
             }
 
             if (!self::esCodigoTotal($codigo)) {
@@ -767,10 +811,14 @@ class PresupuestoInstitucional
         $codigosTotales = array_column(array_filter($lineas, static fn (array $l): bool => (bool) $l['es_total']), 'codigo');
         usort($codigosTotales, static fn (string $a, string $b): int => substr_count($b, '.') <=> substr_count($a, '.'));
 
-        $upsertValor = $this->db->prepare(
-            'INSERT INTO presupuesto_institucional_valores (linea_id, anio, valor_final, valor_corte)
-             VALUES (:linea_id, :anio, :valor_final, :valor_corte)
-             ON DUPLICATE KEY UPDATE valor_final = VALUES(valor_final), valor_corte = VALUES(valor_corte)'
+        $conInicial = $this->conValorInicial();
+        $upsertValor = $this->db->prepare($conInicial
+            ? 'INSERT INTO presupuesto_institucional_valores (linea_id, anio, valor_final, valor_corte, valor_inicial)
+               VALUES (:linea_id, :anio, :valor_final, :valor_corte, :valor_inicial)
+               ON DUPLICATE KEY UPDATE valor_final = VALUES(valor_final), valor_corte = VALUES(valor_corte), valor_inicial = VALUES(valor_inicial)'
+            : 'INSERT INTO presupuesto_institucional_valores (linea_id, anio, valor_final, valor_corte)
+               VALUES (:linea_id, :anio, :valor_final, :valor_corte)
+               ON DUPLICATE KEY UPDATE valor_final = VALUES(valor_final), valor_corte = VALUES(valor_corte)'
         );
 
         foreach ($codigosTotales as $codigoTotal) {
@@ -783,7 +831,8 @@ class PresupuestoInstitucional
             $marcadores = implode(',', array_fill(0, count($idsHijos), '?'));
 
             $consulta = $this->db->prepare(
-                "SELECT anio, SUM(valor_final) AS suma_final, SUM(valor_corte) AS suma_corte
+                'SELECT anio, SUM(valor_final) AS suma_final, SUM(valor_corte) AS suma_corte'
+                . ($conInicial ? ', SUM(valor_inicial) AS suma_inicial' : '') . "
                  FROM presupuesto_institucional_valores
                  WHERE linea_id IN ($marcadores)
                  GROUP BY anio"
@@ -792,12 +841,16 @@ class PresupuestoInstitucional
 
             $lineaId = $idsPorCodigo[$codigoTotal];
             foreach ($consulta->fetchAll() as $sumaFila) {
-                $upsertValor->execute([
+                $parametrosTotal = [
                     'linea_id' => $lineaId,
                     'anio' => $sumaFila['anio'],
                     'valor_final' => $sumaFila['suma_final'],
                     'valor_corte' => $sumaFila['suma_corte'],
-                ]);
+                ];
+                if ($conInicial) {
+                    $parametrosTotal['valor_inicial'] = $sumaFila['suma_inicial'];
+                }
+                $upsertValor->execute($parametrosTotal);
             }
         }
     }

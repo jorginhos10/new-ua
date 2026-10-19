@@ -25,6 +25,8 @@ class AccesoAnalisis
     public const PESTANAS = [
         'presentacion' => 'analisis_presentacion',
         'programacion' => 'analisis_programacion',
+        // Subsección de PP: mismo permiso (no tiene opción propia en Permisos).
+        'comparativo' => 'analisis_programacion',
         'proyectos' => 'analisis_proyectos',
         'pdi' => 'analisis_pdi',
         'techos' => 'analisis_techos',

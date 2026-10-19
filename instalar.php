@@ -90,6 +90,13 @@ $pasos[] = [
 ];
 
 $pasos[] = [
+    'seccion' => 'Análisis > Comparativo vigencia inicial',
+    'que' => 'Columna presupuesto_institucional_valores.valor_inicial (2026 inicial, columna "Año anterior (Inicial)" de la plantilla de PP)',
+    'falta' => fn() => tablaExiste($pdo, 'presupuesto_institucional_valores') && !columnaExiste($pdo, 'presupuesto_institucional_valores', 'valor_inicial'),
+    'sql' => ['ALTER TABLE presupuesto_institucional_valores ADD COLUMN valor_inicial DECIMAL(20,2) NULL AFTER valor_corte'],
+];
+
+$pasos[] = [
     'seccion' => 'Análisis > Análisis de distribución',
     'que' => 'Columna analisis_arbol_configuracion.codigo_pp (código de Ingresos de PP ligado al botón Ingresos)',
     'falta' => fn() => !columnaExiste($pdo, 'analisis_arbol_configuracion', 'codigo_pp'),

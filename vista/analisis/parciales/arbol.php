@@ -616,7 +616,7 @@ function renderFilaArbolAnalisis(array $nodo, array $columnasAnios, ?string $pad
 <?php
 // Variación % (vigente vs año anterior Final): solo en la página, nunca en la plantilla.
 $clavesColumnasArbol = array_column($columnasAnios, 'clave');
-$mostrarVariacion = $tab === 'programacion' && in_array('vigente', $clavesColumnasArbol, true) && in_array('anterior_total', $clavesColumnasArbol, true);
+$mostrarVariacion = in_array($tab, ['programacion', 'comparativo'], true) && in_array('vigente', $clavesColumnasArbol, true) && in_array('anterior_total', $clavesColumnasArbol, true);
 $esSuperAdmin = $esSuperAdmin ?? false;
 // Articulación PDI se muestra sin decimales (el resto de pestañas, con 2).
 $decimalesArbol = $tab === 'pdi' ? 0 : 2;
@@ -628,17 +628,17 @@ $columnasExtraDespues = array_filter($columnasExtra, static fn (array $c): bool 
 $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
 ?>
 <div class="tarjeta arbol-tarjeta">
-    <?php if ($modoColumnas === 'completo' || $esSuperAdmin || !empty($accionesAnalisisHtml)): ?>
+    <?php if ($modoColumnas === 'completo' || $tab === 'comparativo' || $esSuperAdmin || !empty($accionesAnalisisHtml)): ?>
     <div class="arbol-topbar">
-        <?php if ($tab === 'programacion'): ?>
+        <?php if ($tab === 'programacion' || $tab === 'comparativo'): ?>
         <div class="arbol-lado-toggle">
-            <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => 'ingresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'ingresos' ? 'activo' : '' ?>">Ingresos</a>
-            <a href="<?= htmlspecialchars(analisisUrl('programacion', $vista, ['lado' => 'egresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'egresos' ? 'activo' : '' ?>">Egresos</a>
+            <a href="<?= htmlspecialchars(analisisUrl($tab, $vista, ['lado' => 'ingresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'ingresos' ? 'activo' : '' ?>">Ingresos</a>
+            <a href="<?= htmlspecialchars(analisisUrl($tab, $vista, ['lado' => 'egresos'])) ?>" class="arbol-boton-toggle <?= $lado === 'egresos' ? 'activo' : '' ?>">Egresos</a>
         </div>
-        <?php // Alterna entre el árbol y su gráfica jerárquica (ver arbol-grafica.php). ?>
+        <?php // Alterna entre el árbol y su gráfica (PP: arbol-grafica.php; Comparativo: comparativo-vigencia.php). ?>
         <div class="arbol-lado-toggle" id="arbol-vista-toggle">
             <button type="button" class="arbol-boton-toggle activo" data-vista-arbol="arbol" aria-pressed="true">Árbol</button>
-            <button type="button" class="arbol-boton-toggle" data-vista-arbol="grafica" aria-pressed="false">Gráfica</button>
+            <button type="button" class="arbol-boton-toggle" data-vista-arbol="grafica" aria-pressed="false"><?= $tab === 'comparativo' ? 'Indicadores' : 'Gráfica' ?></button>
         </div>
         <?php endif; ?>
         <div class="arbol-acciones">
@@ -655,11 +655,21 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
             <?php endif; ?>
             <?php if ($modoColumnas === 'completo'): ?>
             <button type="button" class="arbol-boton-toggle" id="arbol-boton-anterior">Año anterior</button>
+            <?php // Solo si la columna "a corte" se muestra (hoy oculta, ver AnalisisControlador::MOSTRAR_COLUMNA_CORTE). ?>
+            <?php if (in_array('anterior_corte', $clavesColumnasArbol, true)): ?>
             <div class="arbol-corte-envoltorio" id="arbol-corte-envoltorio" hidden>
                 <label for="arbol-fecha-corte">Corte <?= $anioAnteriorNumero ?>:</label>
                 <input type="date" id="arbol-fecha-corte" value="<?= htmlspecialchars($fechaCorte) ?>">
             </div>
+            <?php endif; ?>
             <button type="button" class="arbol-boton-toggle" id="arbol-boton-historico" hidden>Últimos 5 años</button>
+            <?php endif; ?>
+            <?php if ($tab === 'comparativo' && in_array('anterior_corte', $clavesColumnasArbol, true)): ?>
+            <?php // Comparativo: la fecha de corte se elige aquí (solo SA en Tiempo real) y siempre se ve. ?>
+            <div class="arbol-corte-envoltorio" id="arbol-corte-envoltorio" data-siempre-visible hidden>
+                <label for="arbol-fecha-corte">Corte <?= $anioAnteriorNumero ?>:</label>
+                <input type="date" id="arbol-fecha-corte" value="<?= htmlspecialchars($fechaCorte) ?>">
+            </div>
             <?php endif; ?>
             <?= $accionesAnalisisHtml ?? '' ?>
         </div>
@@ -717,6 +727,8 @@ $arbolExpandidoPorDefecto = $arbolExpandidoPorDefecto ?? true;
 
     <?php if ($tab === 'programacion'): ?>
     <?php require __DIR__ . '/arbol-grafica.php'; ?>
+    <?php elseif ($tab === 'comparativo'): ?>
+    <?php require __DIR__ . '/comparativo-vigencia.php'; ?>
     <?php endif; ?>
 </div>
 
@@ -770,7 +782,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function actualizarVisibilidadCorte() {
         if (envoltorioCorte) {
-            envoltorioCorte.hidden = !(mostrarAnteriorActual && rolVistaArbol === 'admin');
+            var siempreVisible = envoltorioCorte.hasAttribute('data-siempre-visible');
+            envoltorioCorte.hidden = !((mostrarAnteriorActual || siempreVisible) && rolVistaArbol === 'admin');
         }
     }
 
@@ -1085,7 +1098,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // Programación presupuestal y Proyectos (SA, Tiempo real): lo editado con doble clic se guarda
     // en la BD (ver AnalisisControlador::editarArbolPresupuesto()). Articulación PDI sale de los
     // gastos, así que ahí la edición sigue siendo solo de presentación.
-    var arbolGuardaEnBd = <?= json_encode(in_array($tab, ['programacion', 'proyectos'], true) && $vista === 'tiempo_real' && AccesoAnalisis::actual()['clase'] === 'superadmin') ?>;
+    var arbolGuardaEnBd = <?= json_encode(in_array($tab, ['programacion', 'comparativo', 'proyectos'], true) && $vista === 'tiempo_real' && AccesoAnalisis::actual()['clase'] === 'superadmin') ?>;
 
     // Manda un cambio al servidor; si falla, avisa y llama a revertir() para deshacerlo en pantalla.
     function guardarCambioArbol(campos, revertir) {
@@ -1265,9 +1278,10 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
-<?php if ($tab === 'programacion'): ?>
+<?php if ($tab === 'programacion' || $tab === 'comparativo'): ?>
 <script>
-// Toggle "Árbol | Gráfica" de Programación presupuestal: alterna entre el árbol y la gráfica
+// Toggle "Árbol | Gráfica" de Programación presupuestal (en el Comparativo: "Árbol | Indicadores",
+// que arranca en Indicadores): alterna entre el árbol y la gráfica
 // jerárquica de arbol-grafica.php. La elección se recuerda por lado (Ingresos/Egresos).
 document.addEventListener('DOMContentLoaded', function () {
     var toggle = document.getElementById('arbol-vista-toggle');
@@ -1278,7 +1292,8 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
     }
 
-    var claveVista = 'analisis_programacion_vista_' + <?= json_encode($lado) ?>;
+    var claveVista = 'analisis_' + <?= json_encode($tab) ?> + '_vista_' + <?= json_encode($lado) ?>;
+    var vistaPorDefecto = <?= json_encode($tab === 'comparativo' ? 'grafica' : 'arbol') ?>;
     var botones = toggle.querySelectorAll('[data-vista-arbol]');
 
     function mostrarVista(vista) {
@@ -1288,7 +1303,8 @@ document.addEventListener('DOMContentLoaded', function () {
         // acciones de la pestaña (.analisis-acciones: exportar, snapshot, vista) siguen visibles.
         if (accionesArbol) {
             Array.prototype.forEach.call(accionesArbol.children, function (hijo) {
-                if (!hijo.classList.contains('analisis-acciones')) {
+                // La fecha de corte del Comparativo (data-siempre-visible) mueve los indicadores: se queda.
+                if (!hijo.classList.contains('analisis-acciones') && !hijo.hasAttribute('data-siempre-visible')) {
                     hijo.style.display = esGrafica ? 'none' : '';
                 }
             });
@@ -1309,7 +1325,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var vistaGuardada = null;
     try { vistaGuardada = localStorage.getItem(claveVista); } catch (e) { vistaGuardada = null; }
-    if (vistaGuardada === 'grafica') {
+    if ((vistaGuardada || vistaPorDefecto) === 'grafica') {
         mostrarVista('grafica');
     }
 });

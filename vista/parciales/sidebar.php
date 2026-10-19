@@ -83,6 +83,7 @@ $renderMenuAnalisisSidebar = static function (array $acceso, string $rutaActual,
     $pestanasSidebar = [
         'presentacion' => 'Documentos',
         'programacion' => 'Programación presupuestal ' . $anioActivoSidebar,
+        'comparativo' => 'Comparativo vigencia inicial',
         'proyectos' => 'Proyectos de Inversión',
         'pdi' => 'Articulación PDI',
         'techos' => 'Techos y Metas',
@@ -100,11 +101,13 @@ $renderMenuAnalisisSidebar = static function (array $acceso, string $rutaActual,
             <?php if (!in_array($clavePestana, $acceso['pestanas'] ?? [], true)) { continue; } ?>
             <?php
             $parametros = ['ruta' => 'analisis', 'tab' => $clavePestana, 'vista' => $clavePestana === 'techos' && $vistaSidebar === 'repositorio' ? 'tiempo_real' : $vistaSidebar];
-            if ($clavePestana === 'programacion' && in_array($_GET['lado'] ?? '', ['ingresos', 'egresos'], true)) {
+            if (in_array($clavePestana, ['programacion', 'comparativo'], true) && in_array($_GET['lado'] ?? '', ['ingresos', 'egresos'], true)) {
                 $parametros['lado'] = $_GET['lado'];
             }
+            // El Comparativo es subsección de Programación presupuestal: va sangrado debajo de ella.
+            $estiloSubseccion = $clavePestana === 'comparativo' ? ' style="padding-left: 1.6rem; font-size: 0.92em;"' : '';
             ?>
-            <li><a href="index.php?<?= htmlspecialchars(http_build_query($parametros)) ?>" class="<?= $tabActual === $clavePestana ? 'activo' : '' ?>"><?= htmlspecialchars($etiquetaPestana) ?></a></li>
+            <li<?= $estiloSubseccion ?>><a href="index.php?<?= htmlspecialchars(http_build_query($parametros)) ?>" class="<?= $tabActual === $clavePestana ? 'activo' : '' ?>"><?= htmlspecialchars($etiquetaPestana) ?></a></li>
             <?php endforeach; ?>
         </ul>
     </div>

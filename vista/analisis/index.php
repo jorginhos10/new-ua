@@ -29,7 +29,7 @@ $cuadreProyectos = $cuadreProyectos ?? [];
 $bloque = $bloque ?? 'gastos';
 $datos = $datos ?? ['nodos' => [], 'totales' => [], 'serie' => []];
 $paramsTab = match ($tab) {
-    'programacion' => ['lado' => $lado],
+    'programacion', 'comparativo' => ['lado' => $lado],
     'techos' => ['bloque' => $bloque],
     default => [],
 };
@@ -138,7 +138,7 @@ ob_start();
                 <svg class="svg-exportar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
             </a>
         </div>
-        <?php elseif (in_array($tab, ['pdi', 'programacion', 'proyectos'], true)): ?>
+        <?php elseif (in_array($tab, ['pdi', 'programacion', 'comparativo', 'proyectos'], true)): ?>
         <div class="analisis-grupo-datos" title="Exportar">
             <a class="analisis-icono-boton analisis-icono-exportar" href="<?= htmlspecialchars($urlExportarArbol) ?>" title="Exportar a Excel">
                 <svg class="svg-exportar" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
@@ -168,14 +168,14 @@ ob_start();
         <?php endif; ?>
 
         <?php $esSuperadminAnalisis = AccesoAnalisis::actual()['clase'] === 'superadmin'; ?>
-        <?php if ($esSuperadminAnalisis && $vista === 'repositorio' && in_array($tab, ['pdi', 'programacion', 'proyectos', 'techos', 'presentacion'], true)): ?>
+        <?php if ($esSuperadminAnalisis && $vista === 'repositorio' && in_array($tab, ['pdi', 'programacion', 'comparativo', 'proyectos', 'techos', 'presentacion'], true)): ?>
         <select class="analisis-selector-modo" onchange="if(this.value){window.location.href=this.value;}">
             <?php if (empty($versiones)): ?>
             <option value="">Sin versiones guardadas</option>
             <?php endif; ?>
             <?php
             $extraSelectorVersion = match ($tab) {
-                'programacion' => ['lado' => $lado],
+                'programacion', 'comparativo' => ['lado' => $lado],
                 'techos' => ['bloque' => $bloque] + ($dependenciaFiltroActual !== null ? ['dependencia' => $dependenciaFiltroActual] : []),
                 default => [],
             };
@@ -352,7 +352,7 @@ require __DIR__ . '/../parciales/encabezado.php';
 <?php endif; ?>
 
 <div class="analisis-contenido">
-    <?php if ($tab === 'pdi' || $tab === 'programacion' || $tab === 'proyectos'): ?>
+    <?php if (in_array($tab, ['pdi', 'programacion', 'comparativo', 'proyectos'], true)): ?>
         <?php if ($tab === 'proyectos'): ?>
             <?php require __DIR__ . '/parciales/proyectos-cuadre.php'; ?>
         <?php endif; ?>
