@@ -348,8 +348,11 @@ class PresupuestoInstitucional
         $marcadoresIds = implode(',', array_fill(0, count($ids), '?'));
         $marcadoresAnios = implode(',', array_fill(0, count($anios), '?'));
 
+        // Una sola cadena (no 'SELECT…' . … . "FROM…"): el detector de instalar.php arma cada consulta
+        // con sus partes literales y, partida así, la evaluaba sin FROM (falso "Unknown column").
+        $columnaInicial = $this->conValorInicial() ? ', valor_inicial' : '';
         $consulta = $this->db->prepare(
-            'SELECT linea_id, anio, valor_final, valor_corte' . ($this->conValorInicial() ? ', valor_inicial' : '') . "
+            "SELECT linea_id, anio, valor_final, valor_corte$columnaInicial
              FROM presupuesto_institucional_valores
              WHERE linea_id IN ($marcadoresIds) AND anio IN ($marcadoresAnios)"
         );
@@ -830,9 +833,9 @@ class PresupuestoInstitucional
             $idsHijos = array_map(static fn (string $c): int => $idsPorCodigo[$c], $hijos);
             $marcadores = implode(',', array_fill(0, count($idsHijos), '?'));
 
+            $sumaInicial = $conInicial ? ', SUM(valor_inicial) AS suma_inicial' : '';
             $consulta = $this->db->prepare(
-                'SELECT anio, SUM(valor_final) AS suma_final, SUM(valor_corte) AS suma_corte'
-                . ($conInicial ? ', SUM(valor_inicial) AS suma_inicial' : '') . "
+                "SELECT anio, SUM(valor_final) AS suma_final, SUM(valor_corte) AS suma_corte$sumaInicial
                  FROM presupuesto_institucional_valores
                  WHERE linea_id IN ($marcadores)
                  GROUP BY anio"
